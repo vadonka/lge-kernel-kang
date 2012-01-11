@@ -1,0 +1,448 @@
+/*
+ * drivers/spi/tegra_spi.c
+ *
+ * SPI bus driver for NVIDIA Tegra SoCs, based on NvRm APIs
+ *
+ * Copyright (c) 2009-2010, NVIDIA Corporation.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+#define NV_DEBUG 0
+
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/module.h>
+#include <linux/device.h>
+#include <linux/platform_device.h>
+#include <linux/spi/spi.h>
+#include <linux/err.h>
+#include <linux/workqueue.h>
+#include <linux/mutex.h>
+#include <linux/delay.h>
+
+#include <mach/spi.h>
+#include <mach/nvrm_linux.h>
+
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+#include <mach/io.h>
+#include <nvrm_spi.h>
+#include <nvrm_power.h>
+#include <nvrm_power_private.h>
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+
+
+#include <nvodm_query.h>
+
+#include <rm_spi_slink.h>
+
+#define ENABLE_TX_RX_DUMP		0
+//#define CONFIG_SPI_DEBUG
+#ifdef CONFIG_SPI_DEBUG
+#define SPI_DEBUG_PRINT(format, args...) printk(format , ## args)
+#else
+#include <mach/lprintk.h>
+#define SPI_DEBUG_PRINT(format, args...) lprintk(D_SPI, format , ## args)
+#endif
+
+/* Cannot use spinlocks as the NvRm SPI apis uses mutextes and one cannot use
+ * mutextes inside a spinlock.
+ */
+#define USE_SPINLOCK 0
+#if USE_SPINLOCK
+#define LOCK_T          spinlock_t
+#define CREATELOCK(_l)  spin_lock_init(&(_l))
+#define DELETELOCK(_l)
+#define LOCK(_l)        spin_lock(&(_l))
+#define UNLOCK(_l)      spin_unlock(&(_l))
+#define ATOMIC(_l,_f)   spin_lock_irqsave(&(_l),(_f))
+#define UNATOMIC(_l,_f) spin_unlock_irqrestore(&(_l),(_f))
+#else
+#define LOCK_T          struct mutex
+#define CREATELOCK(_l)  mutex_init(&(_l))
+#define DELETELOCK(_l) 
+#define LOCK(_l)        mutex_lock(&(_l))
+#define UNLOCK(_l)      mutex_unlock(&(_l))
+#define ATOMIC(_l,_f)   local_irq_save((_f))
+#define UNATOMIC(_l,_f) local_irq_restore((_f))
+#endif
+
+
+struct tegra_spi {
+	NvRmSpiHandle		rm_spi;
+	NvU32			pinmux;
+	NvU32			Mode;
+	struct list_head	msg_queue;
+	LOCK_T		lock;
+	struct work_struct	work;
+	struct workqueue_struct	*queue;
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+
+	NvU32			RmPowerClientId;
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+}; 
+
+/* Only these signaling mode are supported */
+#define NV_SUPPORTED_MODE_BITS (SPI_CPOL | SPI_CPHA)
+
+static int tegra_spi_setup(struct spi_device *device)
+{
+	struct tegra_spi *spi;
+
+	spi = spi_master_get_devdata(device->master);
+
+	SPI_DEBUG_PRINT("tegra_spi_setup : device->mode(%d)\n", device->mode);
+
+	if (device->mode & ~NV_SUPPORTED_MODE_BITS) {
+		dev_dbg(&device->dev, "setup: unsupported mode bits 0x%x\n",
+			device->mode & ~NV_SUPPORTED_MODE_BITS);
+	}
+
+	spi->Mode = device->mode & NV_SUPPORTED_MODE_BITS;
+	switch (spi->Mode) {
+	case SPI_MODE_0:
+		spi->Mode = NvOdmQuerySpiSignalMode_0;
+		break;
+	case SPI_MODE_1:
+		spi->Mode = NvOdmQuerySpiSignalMode_1;
+		break;
+	case SPI_MODE_2:
+		spi->Mode = NvOdmQuerySpiSignalMode_2;
+		break;
+	case SPI_MODE_3:
+		spi->Mode = NvOdmQuerySpiSignalMode_3;
+		break;
+	}
+
+	if (device->bits_per_word == 0)
+		device->bits_per_word = 8;
+
+	NvRmSpiSetSignalMode(spi->rm_spi, device->chip_select, spi->Mode);
+	return 0;
+}
+
+static int tegra_spi_transfer(struct spi_device *device,
+	struct spi_message *msg)
+{
+	struct tegra_spi *spi;
+
+	if (unlikely(list_empty(&msg->transfers) || !device->max_speed_hz))
+		return -EINVAL;
+
+	/* FIXME validate the msg */
+
+	spi = spi_master_get_devdata(device->master);
+
+	SPI_DEBUG_PRINT("tegra_spi_transfer\n");
+
+	/* Add the message to the queue and signal the worker thread */
+	LOCK(spi->lock);		//spin_lock(&spi->lock);
+	list_add_tail(&msg->queue, &spi->msg_queue);
+	queue_work(spi->queue, &spi->work);
+	UNLOCK(spi->lock);		//spin_unlock(&spi->lock);
+
+	return 0;
+}
+
+static void tegra_spi_cleanup(struct spi_device *device)
+{
+	return;
+}
+
+static int tegra_spi_do_message(struct tegra_spi *spi, struct spi_message *m)
+{
+	NvRmSpiTransactionInfo trans[64];
+	struct spi_transfer *t;
+	unsigned int len = 0;
+	int i = 0;
+
+	list_for_each_entry(t, &m->transfers, transfer_list) {
+		if (i==ARRAY_SIZE(trans))
+			return -EIO;
+
+		if (t->len && !t->tx_buf && !t->rx_buf)
+			return -EINVAL;
+
+		if (t->cs_change) {
+			WARN_ON_ONCE(1);
+			return -EIO;
+		}
+
+		if (t->len) {
+			trans[i].rxBuffer = t->rx_buf;
+			trans[i].txBuffer = (NvU8*)t->tx_buf;
+			trans[i].len = t->len;
+			len += t->len;
+#if 1			
+			NvRmSpiTransaction(spi->rm_spi, 
+				spi->pinmux, 
+				m->spi->chip_select, 
+				m->spi->max_speed_hz/1000,
+				(NvU8*)t->rx_buf,
+				(NvU8*)t->tx_buf,
+				t->len,
+				m->spi->bits_per_word);
+#endif
+		}
+
+		i++;
+	}
+
+	if (!i)
+		return 0;
+	m->actual_length += len;
+#if 0	
+	NvRmSpiMultipleTransactions(spi->rm_spi, spi->pinmux,
+		m->spi->chip_select, m->spi->max_speed_hz / 1000,
+		m->spi->bits_per_word, trans, i);
+#endif
+	return 0;
+}
+
+static void tegra_spi_workerthread(struct work_struct *w)
+{
+	struct tegra_spi *spi;
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+	NvRmDfsBusyHint BusyHints[4];
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+	spi = container_of(w, struct tegra_spi, work);
+
+	SPI_DEBUG_PRINT("tegra_spi_transfer start\n");
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+
+	BusyHints[0].ClockId = NvRmDfsClockId_Emc;
+	BusyHints[0].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[0].BusyAttribute = NV_TRUE;
+	BusyHints[0].BoostKHz = 150000; // Emc
+#if 0
+	BusyHints[1].ClockId = NvRmDfsClockId_Ahb;
+	BusyHints[1].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[1].BusyAttribute = NV_TRUE;
+	BusyHints[1].BoostKHz = 150000; // AHB
+
+	BusyHints[2].ClockId = NvRmDfsClockId_Apb;
+	BusyHints[2].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[2].BusyAttribute = NV_TRUE;
+	BusyHints[2].BoostKHz = 150000; // APB
+#else
+
+	BusyHints[1].ClockId = NvRmDfsClockId_Ahb;
+	BusyHints[1].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[1].BusyAttribute = NV_TRUE;
+	BusyHints[1].BoostKHz = 120000; // AHB
+
+	BusyHints[2].ClockId = NvRmDfsClockId_Apb;
+	BusyHints[2].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[2].BusyAttribute = NV_TRUE;
+	BusyHints[2].BoostKHz = 120000; // APB
+
+
+#endif
+	BusyHints[3].ClockId = NvRmDfsClockId_Cpu;
+	BusyHints[3].BoostDurationMs = NV_WAIT_INFINITE;
+	BusyHints[3].BusyAttribute = NV_TRUE;
+	BusyHints[3].BoostKHz = 800000; // CPU
+
+	NvRmPowerBusyHintMulti(s_hRmGlobal, spi->RmPowerClientId,
+		BusyHints, 4, NvRmDfsBusyHintSyncMode_Async);
+
+    if (NvRmDfsRunState_ClosedLoop == NvRmDfsGetState(s_hRmGlobal))
+	{
+		int wait_count = 500;
+		/* Wait for the clcok to stabilize */
+		while ((NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Emc) < 150000)	&& wait_count--)
+			msleep(1);
+		
+		BUG_ON(wait_count <= 0);
+	}
+ // LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+	LOCK(spi->lock);
+
+	while (!list_empty(&spi->msg_queue))
+	{
+		struct spi_message *m;
+
+		m = container_of(spi->msg_queue.next, struct spi_message, queue);
+		list_del_init(&m->queue);
+		UNLOCK(spi->lock);
+
+		if (!m->spi) {
+			WARN_ON(1);
+			return;
+		}
+		m->status = tegra_spi_do_message(spi, m);
+		m->complete(m->context);
+
+		LOCK(spi->lock);
+	}
+
+	UNLOCK(spi->lock);
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+// ebs 0707
+	/* Set the clocks to the low corner */
+	BusyHints[0].BoostKHz = 0; // Emc
+	BusyHints[1].BoostKHz = 0; // Ahb
+	BusyHints[2].BoostKHz = 0; // Apb
+	BusyHints[3].BoostKHz = 0; // Cpu
+
+	NvRmPowerBusyHintMulti(s_hRmGlobal, spi->RmPowerClientId, BusyHints, 4, NvRmDfsBusyHintSyncMode_Async);
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+
+	SPI_DEBUG_PRINT("tegra_spi_transfer end\n");
+}
+
+static int __init tegra_spi_probe(struct platform_device *pdev)
+{
+	struct spi_master *master;
+	struct tegra_spi *spi;
+	struct tegra_spi_platform_data *plat = pdev->dev.platform_data;
+	int status= 0;
+	NvError e;
+
+	SPI_DEBUG_PRINT("tegra_spi_probe\n");
+
+	master = spi_alloc_master(&pdev->dev, sizeof(*spi));
+	if (IS_ERR_OR_NULL(master)) {
+		dev_err(&pdev->dev, "master allocation failed\n");
+		return -ENOMEM;
+	}
+
+//20100711-1, syblue.lee@lge.com, add mode_bits [START]
+	/* the spi->mode bits understood by this driver: */
+	master->mode_bits = NV_SUPPORTED_MODE_BITS;
+//20100711, syblue.lee@lge.com, add mode_bits [END]
+
+	master->setup = tegra_spi_setup;
+	master->transfer = tegra_spi_transfer;
+	master->cleanup = tegra_spi_cleanup;
+	master->num_chipselect = 4;
+	master->bus_num = pdev->id;
+	master->mode_bits = NV_SUPPORTED_MODE_BITS;
+
+	dev_set_drvdata(&pdev->dev, master);
+	spi = spi_master_get_devdata(master);
+
+	spi->pinmux = plat->pinmux;
+
+	SPI_DEBUG_PRINT("tegra_spi_probe : NvRmSpiOpen\n");
+	if (plat->is_slink) { 
+		e = NvRmSpiOpen(s_hRmGlobal, NvOdmIoModule_Spi,
+				pdev->id, NV_TRUE, &spi->rm_spi);
+	} else {
+		e = NvRmSpiOpen(s_hRmGlobal, NvOdmIoModule_Sflash,
+				0, NV_TRUE, &spi->rm_spi);
+	}
+	if (e != NvSuccess) {
+		dev_err(&pdev->dev, "NvRmSpiOpen returned 0x%x\n", e);
+		status = -ENODEV;
+		goto spi_open_failed;
+	}
+
+	SPI_DEBUG_PRINT("tegra_spi_probe : Create work queue\n");
+	spi->queue = create_singlethread_workqueue(dev_name(&pdev->dev));
+	if (!spi->queue) {
+		dev_err(&pdev->dev, "Failed to create work queue\n");
+		goto workQueueCreate_failed;
+	}
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
+
+// ebs 0707
+	spi->RmPowerClientId = NVRM_POWER_CLIENT_TAG('S','P','I','S');
+	if (NvRmPowerRegister(s_hRmGlobal, NULL, &spi->RmPowerClientId)) 
+	{
+		dev_err(&pdev->dev, "Failed to create power client ID\n");
+		goto workQueueCreate_failed;
+	}
+	
+// ebs 0707 
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+	INIT_WORK(&spi->work, tegra_spi_workerthread);
+
+	CREATELOCK(spi->lock);		//(&spi->lock);
+	INIT_LIST_HEAD(&spi->msg_queue);
+
+	SPI_DEBUG_PRINT("tegra_spi_probe : spi register master(bus num = %d)\n", master->bus_num);
+	status = spi_register_master(master);
+	SPI_DEBUG_PRINT("tegra_spi_probe : spi register master(%d)\n", status);
+	if (status < 0) {
+		dev_err(&pdev->dev, "spi_register_master failed %d\n", status);
+		goto spi_register_failed;
+	}
+
+	return status;
+	
+spi_register_failed:
+	destroy_workqueue(spi->queue);
+workQueueCreate_failed:
+	NvRmSpiClose(spi->rm_spi);
+spi_open_failed:
+	spi_master_put(master);
+	return status;
+}
+	
+static int tegra_spi_remove(struct platform_device *pdev)
+{
+	struct spi_master *master;
+	struct tegra_spi *spi;
+
+	master = dev_get_drvdata(&pdev->dev);
+	spi = spi_master_get_devdata(master);
+
+	spi_unregister_master(master);
+
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+	NvRmPowerUnRegister(s_hRmGlobal, spi->RmPowerClientId);
+// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+
+	
+	NvRmSpiClose(spi->rm_spi);
+	destroy_workqueue(spi->queue);
+
+	return 0;
+}
+
+static struct platform_driver tegra_spi_driver = {
+	.probe = tegra_spi_probe,
+	.remove = tegra_spi_remove,
+	.driver	= {
+		.name	= "tegra_spi",
+		.owner	= THIS_MODULE,
+	},
+};
+
+static int __init tegra_spi_init(void)
+{
+	int status;
+	status =platform_driver_register(&tegra_spi_driver); 
+	SPI_DEBUG_PRINT("tegra_spi_init : %d\n", status);
+	return status;
+}
+module_init(tegra_spi_init);
+
+static void __exit tegra_spi_exit(void)
+{
+	platform_driver_unregister(&tegra_spi_driver);
+}
+module_exit(tegra_spi_exit);

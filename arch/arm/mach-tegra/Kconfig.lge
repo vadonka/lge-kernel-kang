@@ -1,0 +1,337 @@
+choice
+       prompt "HW Revision"
+       config MACH_STAR_TMUS
+       bool "STAR TMUS (p999)"
+       depends on MACH_STAR
+       config MACH_STAR_REV_F
+       bool "STAR Rev.F (p990)"
+       depends on MACH_STAR
+endchoice
+
+menu "Tegra2 OC specific settings"
+
+config FAKE_SHMOO
+	bool "Tegra2 Overclocking Enable"
+	depends on MACH_STAR
+	default y
+
+config BOOST_PERIPHERALS
+	bool "Tegra2 Overclocking Peripheral Enable"
+	depends on MACH_STAR
+	default y
+
+menu "CPU second core management"
+
+config NVRM_CPU1_CORE_BOOST
+	bool "Boost CPU second core"
+	default y
+	
+if NVRM_CPU1_CORE_BOOST
+
+config CPU1_ON_MIN_KHZ_BOOSTED
+	int "CPU1 is turned Off when cpu clock is below this freq"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 503000
+	
+config CPU1_ON_PENDING_MS_BOOSTED
+	int "CPU1 off pending time"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 1500
+	
+config CPU1_OFF_MAX_KHZ_BOOSTED
+	int "CPU1 is turned On when cpu clock is above this freq"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 655000
+	
+config CPU1_OFF_PENDING_MS_BOOSTED
+	int "CPU1 on pending time"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 200
+
+endif # NVRM_CPU1_CORE_BOOST
+
+if !NVRM_CPU1_CORE_BOOST
+
+config CPU1_ON_MIN_KHZ
+	int "CPU1 is turned Off when cpu clock is below this freq"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 655000
+	
+config CPU1_ON_PENDING_MS
+	int "CPU1 off pending time"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 1000
+	
+config CPU1_OFF_MAX_KHZ
+	int "CPU1 is turned On when cpu clock is above this freq"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 655000
+	
+config CPU1_OFF_PENDING_MS
+	int "CPU1 on pending time"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 300
+
+endif # !NVRM_CPU1_CORE_BOOST
+
+endmenu	
+	
+config MAX_AVP_OC_FREQ_BOOST
+	bool "Boost AVP Freq"
+	default y
+
+if !MAX_AVP_OC_FREQ_BOOST
+
+config MAX_AVP_OC_FREQ_LOW
+	int "AVP Overclock Low Frequency"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 240000
+
+endif # MAX_AVP_OC_FREQ_BOOST
+
+if MAX_AVP_OC_FREQ_BOOST
+	
+config MAX_AVP_OC_FREQ_HIGH
+	int "AVP Overclock High Frequency"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 280000
+
+endif # MAX_AVP_OC_FREQ_BOOST
+
+config MAX_3D_OC_FREQ_BOOST
+	bool "Boost 3D Freq"
+	default y
+
+if !MAX_3D_OC_FREQ_BOOST
+
+config MAX_3D_OC_FREQ_LOW
+	int "3D Overclock Low Frequency"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 350000
+
+endif # MAX_3D_OC_FREQ_BOOST
+
+if MAX_3D_OC_FREQ_BOOST
+	
+config MAX_3D_OC_FREQ_HIGH
+	int "3D Overclock High Frequency"
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+	default 400000
+
+endif # MAX_3D_OC_FREQ_BOOST
+	
+config DDR2_SDRAM_FREQ
+	int "DDR2 SDRAM Frequency"
+	default 300000
+
+config GPU_MEM_CARVEOUT_SZ
+	int "GPU Memory Carveout Size"
+	default 128
+
+menu "LGE Processor Voltage Table"
+
+config LOWER_CPU_FREQ
+	bool "Lowered CPU freq's"
+	depends on MACH_STAR
+	default n
+
+config CPU_UNDERVOLT
+	bool "Undervolt CPU voltages"
+	default n
+
+if !CPU_UNDERVOLT
+	config VOLTAGE_DEF_216
+		int "216 Mhz"
+		default 770
+
+	config VOLTAGE_DEF_503
+		int "503 Mhz"
+		default 800
+
+	config VOLTAGE_DEF_655
+		int "655 Mhz"
+		depends on LOWER_CPU_FREQ
+		default 820
+
+	config VOLTAGE_DEF_816
+		int "816 Mhz"
+		default 850
+
+	config VOLTAGE_DEF_1015
+		int "1015 Mhz"
+		default 950
+
+	config VOLTAGE_DEF_1100
+		int "1100 Mhz"
+		default 1000
+
+	config VOLTAGE_DEF_1216
+		int "1216 Mhz"
+		default 1050
+
+	config VOLTAGE_DEF_1312
+		int "1312 Mhz"
+		default 1100
+
+	config VOLTAGE_DEF_1408
+		int "1408 Mhz"
+		default 1200
+
+	config VOLTAGE_DEF_1504
+		int "1504 Mhz"
+		depends on !LOWER_CPU_FREQ
+		default 1300
+
+endif # CPU_UNDERVOLT
+
+if CPU_UNDERVOLT
+
+	config VOLTAGE_UV_216
+		int "216 Mhz"
+		default 770
+
+	config VOLTAGE_UV_503
+		int "503 Mhz"
+		default 790
+
+	config VOLTAGE_UV_655
+		int "655 Mhz"
+		depends on LOWER_CPU_FREQ
+		default 800
+
+	config VOLTAGE_UV_816
+		int "816 Mhz"
+		default 850
+
+	config VOLTAGE_UV_1015
+		int "1015 Mhz"
+		default 930
+
+	config VOLTAGE_UV_1100
+		int "1100 Mhz"
+		default 980
+
+	config VOLTAGE_UV_1216
+		int "1216 Mhz"
+		default 1030
+
+	config VOLTAGE_UV_1312
+		int "1312 Mhz"
+		default 1075
+
+	config VOLTAGE_UV_1408
+		int "1408 Mhz"
+		default 1175
+
+	config VOLTAGE_UV_1504
+		int "1504 Mhz"
+		depends on !LOWER_CPU_FREQ
+		default 1275
+
+endif # CPU_UNDERVOLT
+
+endmenu
+
+config FAN5355_UNDERVOLT
+	bool "FAN5355 Undervolting"
+	default n
+
+config RAMHACK
+	int "Extra system memory (needed by the compiler)"
+	default 0
+
+endmenu
+
+config STAR_PMIC
+	bool "star pmic test"
+	depends on MACH_STAR
+	default y
+
+config STAR_HIDDEN_RESET
+	bool "star hidden reset"
+	depends on MACH_STAR
+	default n
+
+menuconfig LPRINTK
+        bool "LGE Debugging Message"
+        depends on MACH_STAR && DEBUG_FS
+
+if LPRINTK
+config  LPRINTK_ALL
+        bool "Select All Devices"
+        select LPRINTK_KERNEL
+        select LPRINTK_SD
+        select LPRINTK_KEY
+        select LPRINTK_FS
+        select LPRINTK_LCD
+        select LPRINTK_CAMERA
+        select LPRINTK_AUDIO
+        select LPRINTK_TOUCH
+        select LPRINTK_USB
+        select LPRINTK_BATT
+        select LPRINTK_CHARGER
+        select LPRINTK_POWER
+        select LPRINTK_WIFI
+        select LPRINTK_SENSOR
+        select LPRINTK_BT
+        select LPRINTK_FM
+        select LPRINTK_GPIO
+        select LPRINTK_MUIC
+        select LPRINTK_MES
+        select LPRINTK_SPI
+        select LPRINTK_MUX
+        select LPRINTK_RIL
+        select LPRINTK_PROXI
+
+        comment "Select individual device for debugging"
+        depends on !LPRINTK_ALL
+
+        config LPRINTK_KERNEL
+        bool "Kernel"
+        config LPRINTK_SD
+        bool "SD"
+        config LPRINTK_KEY
+        bool "Keypad"
+        config LPRINTK_FS
+        bool "File System"
+        config LPRINTK_LCD
+        bool "Display"
+        config LPRINTK_CAMERA
+        bool "Camera"
+        config LPRINTK_AUDIO
+        bool "Audio"
+        config LPRINTK_TOUCH
+        bool "Touch Screen"
+        config LPRINTK_USB
+        bool "USB"
+        config LPRINTK_BATT
+        bool "Battery"
+        config LPRINTK_CHARGER
+        bool "Charger"
+        config LPRINTK_POWER
+        bool "Power"
+        config LPRINTK_WIFI
+        bool "WIFI"
+        config LPRINTK_SENSOR
+        bool "Sensor"
+        config LPRINTK_BT
+        bool "Bluetooth"
+        config LPRINTK_FM
+        bool "FM Radio"
+        config LPRINTK_GPIO
+        bool "GPIO"
+        config LPRINTK_MUIC
+        bool "MUIC"
+        config LPRINTK_MES
+        bool "MES"
+        config LPRINTK_SPI
+        bool "SPI"
+        config LPRINTK_MUX
+        bool "MUX"
+        config LPRINTK_RIL
+        bool "RIL"
+        config LPRINTK_PROXI
+        bool "PROXI"
+
+endif # LPRINTK
+source "drivers/star/Kconfig"
