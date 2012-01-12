@@ -55,7 +55,7 @@ if !NVRM_CPU1_CORE_BOOST
 config CPU1_ON_MIN_KHZ
 	int "CPU1 is turned Off when cpu clock is below this freq"
 	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 655000
+	default 816000
 	
 config CPU1_ON_PENDING_MS
 	int "CPU1 off pending time"
@@ -142,11 +142,11 @@ config CPU_UNDERVOLT
 if !CPU_UNDERVOLT
 	config VOLTAGE_DEF_216
 		int "216 Mhz"
-		default 800
+		default 790
 
 	config VOLTAGE_DEF_503
 		int "503 Mhz"
-		default 810
+		default 800
 
 	config VOLTAGE_DEF_655
 		int "655 Mhz"
@@ -167,11 +167,11 @@ if !CPU_UNDERVOLT
 
 	config VOLTAGE_DEF_1216
 		int "1216 Mhz"
-		default 1050
+		default 1100
 
 	config VOLTAGE_DEF_1312
 		int "1312 Mhz"
-		default 1100
+		default 1150
 
 	config VOLTAGE_DEF_1408
 		int "1408 Mhz"
@@ -213,11 +213,11 @@ if CPU_UNDERVOLT
 
 	config VOLTAGE_UV_1216
 		int "1216 Mhz"
-		default 1030
+		default 1075
 
 	config VOLTAGE_UV_1312
 		int "1312 Mhz"
-		default 1075
+		default 1125
 
 	config VOLTAGE_UV_1408
 		int "1408 Mhz"
