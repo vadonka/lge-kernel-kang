@@ -30,14 +30,13 @@
 /*
  * Error-checking SWP macros implemented using ldrex{b}/strex{b}
  */
-#define __user_swpX_asm(data, addr, res, temp, B)		\
+#define __user_swpX_asm(data, addr, res, B)			\
 	__asm__ __volatile__(					\
-	"	mov		%2, %1\n"			\
-	"0:	ldrex"B"	%1, [%3]\n"			\
-	"1:	strex"B"	%0, %2, [%3]\n"			\
-	"	dmb\n"						\
-	"	teq             %0, #0\n"			\
-	"	bne		0b\n"				\
+	"	mov		r3, %1\n"			\
+	"0:	ldrex"B"	%1, [%2]\n"			\
+	"1:	strex"B"	%0, r3, [%2]\n"			\
+	"	cmp		%0, #0\n"			\
+	"	movne		%0, %3\n"			\
 	"2:\n"							\
 	"	.section	 .fixup,\"ax\"\n"		\
 	"	.align		2\n"				\
@@ -49,20 +48,18 @@
 	"	.long		0b, 3b\n"			\
 	"	.long		1b, 3b\n"			\
 	"	.previous"					\
-	: "=&r" (res), "+r" (data), "=&r" (temp)		\
-	: "r" (addr), "i" (-EFAULT)				\
-	: "cc", "memory")
+	: "=&r" (res), "+r" (data)				\
+	: "r" (addr), "i" (-EAGAIN), "i" (-EFAULT)		\
+	: "cc", "r3")
 
-#define __user_swp_asm(data, addr, res, temp) \
-	__user_swpX_asm(data, addr, res, temp, "")
-#define __user_swpb_asm(data, addr, res, temp) \
-	__user_swpX_asm(data, addr, res, temp, "b")
+#define __user_swp_asm(data, addr, res) __user_swpX_asm(data, addr, res, "")
+#define __user_swpb_asm(data, addr, res) __user_swpX_asm(data, addr, res, "b")
 
 /*
  * Macros/defines for extracting register numbers from instruction.
  */
 #define EXTRACT_REG_NUM(instruction, offset) \
-	(((instruction) & (0xf << (offset))) >> (offset))
+  (((instruction) & (0xf << (offset))) >> (offset))
 #define RN_OFFSET  16
 #define RT_OFFSET  12
 #define RT2_OFFSET  0
@@ -72,10 +69,10 @@
  */
 #define TYPE_SWPB (1 << 22)
 
-static unsigned long swpcounter;
-static unsigned long swpbcounter;
-static unsigned long abtcounter;
-static pid_t         previous_pid;
+static unsigned long long swpcounter;
+static unsigned long long swpbcounter;
+static unsigned long long abtcounter;
+static long		  previous_pid;
 
 #ifdef CONFIG_PROC_FS
 static int proc_read_status(char *page, char **start, off_t off, int count,
@@ -84,11 +81,11 @@ static int proc_read_status(char *page, char **start, off_t off, int count,
 	char *p = page;
 	int len;
 
-	p += sprintf(p, "Emulated SWP:\t\t%lu\n", swpcounter);
-	p += sprintf(p, "Emulated SWPB:\t\t%lu\n", swpbcounter);
-	p += sprintf(p, "Aborted SWP{B}:\t\t%lu\n", abtcounter);
+	p += sprintf(p, "Emulated SWP:\t\t%llu\n", swpcounter);
+	p += sprintf(p, "Emulated SWPB:\t\t%llu\n", swpbcounter);
+	p += sprintf(p, "Aborted SWP{B}:\t\t%llu\n", abtcounter);
 	if (previous_pid != 0)
-		p += sprintf(p, "Last process:\t\t%d\n", previous_pid);
+		p += sprintf(p, "Last process:\t\t%ld\n", previous_pid);
 
 	len = (p - page) - off;
 	if (len < 0)
@@ -127,7 +124,6 @@ static int emulate_swpX(unsigned int address, unsigned int *data,
 			unsigned int type)
 {
 	unsigned int res = 0;
-	unsigned long temp;
 
 	if ((type != TYPE_SWPB) && (address & 0x3)) {
 		/* SWP to unaligned address not permitted */
@@ -135,20 +131,34 @@ static int emulate_swpX(unsigned int address, unsigned int *data,
 		return -EFAULT;
 	}
 
-	/*
-	 * Barrier required between accessing protected resource and
-	 * releasing a lock for it. Legacy code might not have done
-	 * this, and we cannot determine that this is not the case
-	 * being emulated, so insert always.
-	 */
-	smp_mb();
+	while (1) {
+		/*
+		 * Barrier required between accessing protected resource and
+		 * releasing a lock for it. Legacy code might not have done
+		 * this, and we cannot determine that this is not the case
+		 * being emulated, so insert always.
+		 */
+		smp_mb();
 
-	if (type == TYPE_SWPB)
-		__user_swpb_asm(*data, address, res, temp);
-	else
-		__user_swp_asm(*data, address, res, temp);
+		if (type == TYPE_SWPB)
+			__user_swpb_asm(*data, address, res);
+		else
+			__user_swp_asm(*data, address, res);
+
+		if (likely(res != -EAGAIN) || signal_pending(current))
+			break;
+
+		cond_resched();
+	}
 
 	if (res == 0) {
+		/*
+		 * Barrier also required between aquiring a lock for a
+		 * protected resource and accessing the resource. Inserted for
+		 * same reason as above.
+		 */
+		smp_mb();
+
 		if (type == TYPE_SWPB)
 			swpbcounter++;
 		else

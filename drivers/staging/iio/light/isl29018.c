@@ -26,7 +26,6 @@
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/delay.h>
-#include <linux/regulator/consumer.h>
 #include "../iio.h"
 
 /*#define DEBUG			1*/
@@ -60,7 +59,6 @@ struct isl29018_chip {
 	struct iio_dev		*indio_dev;
 	struct i2c_client	*client;
 	struct mutex		lock;
-	struct regulator 	*regulator;
 	unsigned int		range;
 	unsigned int		adc_bit;
 	int			prox_scheme;
@@ -419,38 +417,6 @@ static const struct attribute_group isl29108_group = {
 	.attrs = isl29018_attributes,
 };
 
-static void isl29018_regulator_enable(struct i2c_client *client)
-{
-	struct isl29018_chip *chip = i2c_get_clientdata(client);
-
-	chip->regulator = regulator_get(NULL, "vcore_phtn");
-	if (IS_ERR_OR_NULL(chip->regulator)) {
-		dev_err(&client->dev, "Couldn't get regulator vcore_phtn\n");
-		chip->regulator = NULL;
-	}
-	else {
-		regulator_enable(chip->regulator);
-		/* Optimal time to get the regulator turned on
-		 * before initializing isl29018 chip */
-		mdelay(5);
-	}
-}
-
-static void isl29018_regulator_disable(struct i2c_client *client)
-{
-	struct isl29018_chip *chip = i2c_get_clientdata(client);
-	struct regulator *isl29018_reg = chip->regulator;
-	int ret;
-
-	if (isl29018_reg) {
-		ret = regulator_is_enabled(isl29018_reg);
-		if (ret > 0)
-			regulator_disable(isl29018_reg);
-		regulator_put(isl29018_reg);
-	}
-	chip->regulator = NULL;
-}
-
 static int isl29018_chip_init(struct i2c_client *client)
 {
 	struct isl29018_chip *chip = i2c_get_clientdata(client);
@@ -458,8 +424,6 @@ static int isl29018_chip_init(struct i2c_client *client)
 	int i;
 	int new_adc_bit;
 	unsigned int new_range;
-
-	isl29018_regulator_enable(client);
 
 	for (i = 0; i < ARRAY_SIZE(chip->reg_cache); i++) {
 		chip->reg_cache[i] = 0;
@@ -531,7 +495,6 @@ static int __devexit isl29018_remove(struct i2c_client *client)
 	struct isl29018_chip *chip = i2c_get_clientdata(client);
 
 	dev_dbg(&client->dev, "%s()\n", __func__);
-	isl29018_regulator_disable(client);
 	iio_device_unregister(chip->indio_dev);
 	kfree(chip);
 	return 0;

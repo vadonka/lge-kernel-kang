@@ -142,11 +142,11 @@ config CPU_UNDERVOLT
 if !CPU_UNDERVOLT
 	config VOLTAGE_DEF_216
 		int "216 Mhz"
-		default 770
+		default 800
 
 	config VOLTAGE_DEF_503
 		int "503 Mhz"
-		default 800
+		default 810
 
 	config VOLTAGE_DEF_655
 		int "655 Mhz"
@@ -197,7 +197,7 @@ if CPU_UNDERVOLT
 	config VOLTAGE_UV_655
 		int "655 Mhz"
 		depends on LOWER_CPU_FREQ
-		default 800
+		default 810
 
 	config VOLTAGE_UV_816
 		int "816 Mhz"

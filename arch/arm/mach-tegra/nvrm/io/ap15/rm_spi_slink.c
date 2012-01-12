@@ -55,12 +55,6 @@
 #include "nvrm_priv_ap_general.h"
 #include "ap15/ap15rm_private.h"
 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-#include "nvrm_clocks.h"
-#include "mach/iomap.h" //EBS 0707
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
 #include "linux/module.h"
 #include "mach/dma.h"
 
@@ -72,25 +66,6 @@
 #define SPI_DEBUG_PRINT(format, args...)
 #endif
 #include "linux/err.h"
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-#include "linux/delay.h"
-
-#include "linux/io.h"
-
-
-
-static unsigned int enable_synch_boost = 0;
-
-module_param(enable_synch_boost, uint, 0644);
-
-#define DEBUG_SHOW_CLK_BOOST 0
-
-//#define ENABLE_SYNCH_BOOST 1
-//#define EBS_TEST_NVIDIA_SPI
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
-
 
 // Combined maximum spi/slink controllers
 #define MAX_SPI_SLINK_INSTANCE (MAX_SLINK_CONTROLLERS + MAX_SPI_CONTROLLERS)
@@ -355,20 +330,13 @@ SpiSlinkGetDeviceInfo(
         pDeviceInfo->CanUseHwBasedCs = NV_FALSE;
         pDeviceInfo->CsHoldTimeInClock = 0;
         pDeviceInfo->CsSetupTimeInClock = 0;
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-        pDeviceInfo->bIgnoreClockBoost = 0;
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-		return NV_FALSE;
+        return NV_FALSE;
     }
     pDeviceInfo->SignalMode = pSpiDevInfo->SignalMode;
     pDeviceInfo->ChipSelectActiveLow = pSpiDevInfo->ChipSelectActiveLow;
     pDeviceInfo->CanUseHwBasedCs = pSpiDevInfo->CanUseHwBasedCs;
     pDeviceInfo->CsHoldTimeInClock = pSpiDevInfo->CsHoldTimeInClock;
     pDeviceInfo->CsSetupTimeInClock = pSpiDevInfo->CsSetupTimeInClock;
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-	pDeviceInfo->bIgnoreClockBoost = pSpiDevInfo->bIgnoreClockBoost; // EBS 0707
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
     return NV_TRUE;
 }
 
@@ -772,23 +740,22 @@ WaitForTransferCompletion(
         Error = NvOsSemaphoreWaitTimeout(hRmSpiSlink->hSynchSema, WaitTimeOutMS);
     }
 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
- // If timeout happen then stop all transfer and exit.
- 
-   if ((Error != NvSuccess) && (Error != NvError_Timeout))
-            pr_err("%s(): The sema wait return unexpected error 0x%08X\n",__func__, Error);
-
-    // If non success happen then stop all transfer and exit.
-    if (Error != NvSuccess)
+    // If timeout happen then stop all transfer and exit.
+    if (Error == NvError_Timeout)
     {
-        pr_info("%s(): handling transfer timeout\n", __func__);
-
-        // Return timeout only.
-    	 Error = NvError_Timeout;
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
 	pr_err("Spi%d: %dms Timeout Error\n", hRmSpiSlink->InstanceId, WaitTimeOutMS);
-    	//hRmSpiSlink->IsIntDoneDue = NV_TRUE;
+//20101221-1, , Workaround code to recover repeated spi transaction timeout error [START]
+/**
+<Only for AP20(NVIDIA BSP)>
+5. Restart rm_spi handle if rm_spi error happens
+       - android/kernel/arch/arm/mach-tegra/include/rm_spi.h
+       - android/kernel/arch/arm/mach-tegra/nvrm/io/ap15/rm_spi_slink.c
+       - android/kernel/drivers/spi/tegra_spi.c
+               : Modify rm_spi API function to return error of Master SPI transaction
+               : This recovers repeated spi timeout error
+**/
+               //hRmSpiSlink->IsIntDoneDue = NV_TRUE;
+//20101221-1, , Workaround code to recover repeated spi transaction timeout error [END]
         // Disable the data flow first.
         hHwInt->HwSetDataFlowFxn(&hRmSpiSlink->HwRegs,
                                     hRmSpiSlink->CurrentDirection, NV_FALSE);
@@ -829,7 +796,7 @@ WaitForTransferCompletion(
             // All requested transfer has been done.
             CurrentSlinkPacketTransfer = hRmSpiSlink->CurrTransInfo.CurrPacketCount;
 		pr_err("Spi%d: CurrentSlinkPacketTransfer = %d, IsReady = %d\n", hRmSpiSlink->InstanceId, CurrentSlinkPacketTransfer, IsReady);
-            //Error = NvSuccess;
+                //Error = NvSuccess;
         }
         else
         {
@@ -974,42 +941,6 @@ WaitForTransferCompletion(
     return Error;
 }
 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-
-#if 1//def EBS_TEST_NVIDIA_SPI
-// LGE_UPDATE_S eungbo.shim@lge.com -- ebs spi patch 20110706
-
-// return TRUE if the clocks are right = no boost requested, OR
-//                 the requested boost is implemented  OR
-//                 dfs is not running closed loop
-//     cannot check all clocks, since computed busy hints may be out of system range
-//     so just check EMC for now.
-//
-//
-static NvBool IsRequestedBoostInEffect(NvRmSpiHandle hRmSpiSlink)
-{
-    int i;
-    NvRmDfsRunState DfsState=NvRmDfsGetState(hRmSpiSlink->hDevice);
-
-    if((DfsState!=NvRmDfsRunState_ClosedLoop) || (hRmSpiSlink->IsFreqBoosted == NV_FALSE))
-        return NV_TRUE;
-
-    for(i=0;i<sizeof(hRmSpiSlink->BusyHints)/sizeof(hRmSpiSlink->BusyHints[0]);i++)
-    {
-         if(hRmSpiSlink->BusyHints[i].ClockId != NvRmDfsClockId_Emc)
-            continue;
-
-         if( (hRmSpiSlink->BusyHints[i].BusyAttribute == NV_TRUE) && (NvRmPrivDfsGetCurrentKHz(hRmSpiSlink->BusyHints[i].ClockId) < hRmSpiSlink->BusyHints[i].BoostKHz) )
-            return(NV_FALSE);
-    }
-
-    return(NV_TRUE);
-}
-#endif
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
-
-
 /**
  * Register the spi interrupt.
  * Thread safety: Caller responsibity.
@@ -1031,114 +962,31 @@ RegisterSpiSlinkInterrupt(
     return(NvRmInterruptRegister(hDevice, 1, &IrqList,
             &hIntHandlers, hRmSpiSlink, &hRmSpiSlink->SpiInterruptHandle, NV_TRUE));
 }
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-
 // Boosting the Emc/Ahb/Apb/Cpu frequency
-static void
-BoostFrequency(
-    NvRmSpiHandle hRmSpiSlink,
-    NvU32 ChipSelectId,
-    NvBool IsBoost,
-    NvU32 TransactionSize,
-    NvU32 ClockSpeedInKHz)
-
+static void BoostFrequency(NvRmSpiHandle hRmSpiSlink, NvBool IsBoost, NvU32 TransactionSize, NvU32 ClockSpeedInKHz)
 {
-// EBS START 20110707
-	 if (hRmSpiSlink->DeviceInfo[ChipSelectId].bIgnoreClockBoost == NV_TRUE)
-		  return;
-
     if (IsBoost)
     {
         if (TransactionSize > hRmSpiSlink->HwRegs.MaxWordTransfer)
         {
             if (!(hRmSpiSlink->IsPmuInterface))
             {
-
-		        NvU32 Timeout = 10;
-
                 hRmSpiSlink->BusyHints[0].BoostKHz = 150000; // Emc
-                hRmSpiSlink->BusyHints[0].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-#if 0
+                hRmSpiSlink->BusyHints[0].BoostDurationMs
+                    = 1000;	//20101218-1, , NVIDIA patch for RxTransfer error	: 10 + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
                 hRmSpiSlink->BusyHints[1].BoostKHz = 150000; // Ahb
-                hRmSpiSlink->BusyHints[1].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-
+                hRmSpiSlink->BusyHints[1].BoostDurationMs
+                    = 1000;	//20101218-1, , NVIDIA patch for RxTransfer error	: 10 + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
                 hRmSpiSlink->BusyHints[2].BoostKHz = 150000; // Apb
-                hRmSpiSlink->BusyHints[2].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-#else
-				hRmSpiSlink->BusyHints[1].BoostKHz = 120000; // Ahb
-		   	    hRmSpiSlink->BusyHints[1].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-
-			    hRmSpiSlink->BusyHints[2].BoostKHz = 120000; // Apb
-			    hRmSpiSlink->BusyHints[2].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-
-#endif
+                hRmSpiSlink->BusyHints[2].BoostDurationMs
+                    = 1000;	//20101218-1, , NVIDIA patch for RxTransfer error	: 10 + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
                 hRmSpiSlink->BusyHints[3].BoostKHz = 600000; // Cpu
-                hRmSpiSlink->BusyHints[3].BoostDurationMs = Timeout + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
-
-#if DEBUG_SHOW_CLK_BOOST
-                pr_info("Boost size=%lu EMC(%lu, %lu, %lu) AHB(%lu, %lu, %lu) APB(%lu, %lu, %lu) CPU(%lu, %lu %lu) \n",
-                                   TransactionSize,
-                                   hRmSpiSlink->BusyHints[0].BoostDurationMs,   // EMC
-                                   NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Emc),
-                                   hRmSpiSlink->BusyHints[0].BoostKHz,
-
-                                   hRmSpiSlink->BusyHints[1].BoostDurationMs,   // AHB
-                                   NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Ahb),
-                                   hRmSpiSlink->BusyHints[1].BoostKHz,
-
-                                   hRmSpiSlink->BusyHints[2].BoostDurationMs,   // APB
-                                   NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Apb),
-                                   hRmSpiSlink->BusyHints[2].BoostKHz,
-
-                                   hRmSpiSlink->BusyHints[3].BoostDurationMs,   // CPU
-                                   NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Cpu),
-                                   hRmSpiSlink->BusyHints[3].BoostKHz
-                               );
-#endif
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+                hRmSpiSlink->BusyHints[3].BoostDurationMs
+                    = 1000;	//20101218-1, , NVIDIA patch for RxTransfer error	: 10 + ((4 * (TransactionSize * 8))) / ClockSpeedInKHz;
                 NvRmPowerBusyHintMulti(hRmSpiSlink->hDevice, hRmSpiSlink->RmPowerClientId,
                                        hRmSpiSlink->BusyHints, 4,
                                        NvRmDfsBusyHintSyncMode_Async);
                 hRmSpiSlink->IsFreqBoosted = NV_TRUE;
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-                if( enable_synch_boost )
-                {
-                   // now, block waiting for the clocks to come up
-                   int wait_count = 500;
-#if DEBUG_SHOW_CLK_BOOST
-                   static NvU32 tMax=0;
-                   NvU64 tNow,tStart;
-                   tStart=NvOsGetTimeUS();
-#endif
-
-				while((IsRequestedBoostInEffect(hRmSpiSlink)==NV_FALSE) && wait_count--)
-				{
-					 msleep(1);
-				}
-
-#if DEBUG_SHOW_CLK_BOOST
-                   if(!wait_count)
-                      NvOsDebugPrintf(" Hint Wait Timeout: NvRm Reports: EMC(%lu)  AHB(%lu)  APB(%lu)  CPU(%lu) \n",
-                                               NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Emc),
-                                               NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Ahb),
-                                               NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Apb),
-                                               NvRmPrivDfsGetCurrentKHz(NvRmDfsClockId_Cpu));
-
-                    // show the time spent waiting for the EMC clock to come up, and the max wait time
-                    // note that the overall boost time does not need to be increased for the wait time
-                    // since the expiry of the boost time will not start until the hint is processed
-                    tNow=NvOsGetTimeUS();
-                    tMax=NV_MAX((NvU32)(tNow-tStart), tMax);
-                    NvOsDebugPrintf(" %s Hint Wait Time tMax=%lu  tElapsed=%lu\n", __func__,
-                                                                    tMax,(NvU32)(tNow-tStart));
-#endif
-                 }
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
-					
             }
         }
     }
@@ -1149,13 +997,9 @@ BoostFrequency(
             if (!(hRmSpiSlink->IsPmuInterface))
             {
                 hRmSpiSlink->BusyHints[0].BoostKHz = 0; // Emc
-                hRmSpiSlink->BusyHints[0].BoostDurationMs = 0;
                 hRmSpiSlink->BusyHints[1].BoostKHz = 0; // Ahb
-                hRmSpiSlink->BusyHints[1].BoostDurationMs = 0;
                 hRmSpiSlink->BusyHints[2].BoostKHz = 0; // Apb
-                hRmSpiSlink->BusyHints[2].BoostDurationMs = 0;
                 hRmSpiSlink->BusyHints[3].BoostKHz = 0; // Cpu
-                hRmSpiSlink->BusyHints[3].BoostDurationMs = 0;
                 NvRmPowerBusyHintMulti(hRmSpiSlink->hDevice, hRmSpiSlink->RmPowerClientId,
                                        hRmSpiSlink->BusyHints, 4,
                                        NvRmDfsBusyHintSyncMode_Async);
@@ -2157,6 +2001,7 @@ static NvError MasterModeReadWriteDma(
     NvU32 PacketBitLength)
 {
     NvError Error = NvSuccess;
+    NvError nvError = NvSuccess;
     NvU32 CurrentTransWord;
     NvU32 BufferOffset = 0;
     NvU32 BytesPerPacket = (PacketBitLength +7)/8;
@@ -2270,12 +2115,12 @@ static NvError MasterModeReadWriteDma(
             if (CurrentTransWord >= hRmSpiSlink->HwRegs.MaxWordTransfer)
             {
                 wmb();
-		  rmb();		//20101204-2, syblue.lee@lge.com, NVIDIA's patch for syncing dma buffer copy.
+		  rmb();		//20101204-2, , NVIDIA's patch for syncing dma buffer copy.
                 dsb();
                 outer_sync();
-//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
+//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
 		  NvOsWaitUS(50);
-//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
+//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
                 Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
 		SPI_DEBUG_PRINT("%s-%d\n", __FUNCTION__, __LINE__);
                 // Wait till fifo full if the transfer size is more than fifo size
@@ -2319,7 +2164,11 @@ static NvError MasterModeReadWriteDma(
             hRmSpiSlink->hHwInterface->HwStartTransferFxn(&hRmSpiSlink->HwRegs, NV_TRUE);
 
         if (!Error)
-            WaitForTransferCompletion(hRmSpiSlink, 1000, NV_FALSE);	////20101218-3, syblue.lee@lge.com, NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
+#ifdef CONFIG_MACH_STAR_TMUS
+            nvError = WaitForTransferCompletion(hRmSpiSlink, 1000, NV_FALSE);	////20101218-3, , NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
+#else
+            nvError = WaitForTransferCompletion(hRmSpiSlink, 500, NV_FALSE);	////20101218-3, , NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
+#endif
 
         Error = (hRmSpiSlink->RxTransferStatus)? hRmSpiSlink->RxTransferStatus:
                                     hRmSpiSlink->TxTransferStatus;
@@ -2346,6 +2195,10 @@ static NvError MasterModeReadWriteDma(
                                     hRmSpiSlink->CurrentDirection, NV_FALSE);
 
     *pPacketsTransferred = PacketsRequested - PacketsRemaining;
+
+    if(nvError!=NvSuccess)
+        Error = nvError;
+
     return Error;
 }
 static NvError SlaveModeSpiStartReadWriteCpu(
@@ -2521,12 +2374,12 @@ static NvError SlaveModeSpiStartReadWriteDma(
         hRmSpiSlink->CurrTransInfo.pTxBuff = hRmSpiSlink->pTxDmaBuffer;
         hRmSpiSlink->TxDmaReq.size = CurrentTransWord *4;
         wmb();
-	 rmb();		//20101204-2, syblue.lee@lge.com, NVIDIA's patch for syncing dma buffer copy.
-	 dsb();
-	 outer_sync();
-//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
+	 rmb();		//20101204-2, , NVIDIA's patch for syncing dma buffer copy.
+        dsb();
+        outer_sync();
+//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
 	 NvOsWaitUS(50);
-//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
+//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
         Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
         do
         {
@@ -2836,9 +2689,7 @@ void NvRmSpiMultipleTransactions(
         TotalTransByte += pTrans->len;
     }
 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-    BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, TotalTransByte, ClockSpeedInKHz);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+    BoostFrequency(hRmSpi, NV_TRUE, TotalTransByte, ClockSpeedInKHz);
 
     hRmSpi->CurrTransInfo.PacketsPerWord = PacketsPerWord;
     if (SpiPinMap)
@@ -2928,11 +2779,7 @@ void NvRmSpiMultipleTransactions(
 
 cleanup:
 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-    BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, TotalTransByte, ClockSpeedInKHz);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
-
-	//  Re-tristate multi-plexed controllers, and re-multiplex the controller.
+    //  Re-tristate multi-plexed controllers, and re-multiplex the controller.
     if (SpiPinMap)
     {
         NvRmPinMuxConfigSetTristate(hRmSpi->hDevice,hRmSpi->RmIoModuleId,
@@ -2959,7 +2806,7 @@ cleanup:
 /**
  * Perform the data transfer.
  */
-void NvRmSpiTransaction(
+NvError NvRmSpiTransaction(
     NvRmSpiHandle hRmSpi,
     NvU32 SpiPinMap,
     NvU32 ChipSelectId,
@@ -3011,10 +2858,7 @@ void NvRmSpiTransaction(
     Error = SetPowerControl(hRmSpi, NV_TRUE);
     if (Error != NvSuccess)
         goto cleanup;
-	
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-    BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, BytesRequested, ClockSpeedInKHz);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+    BoostFrequency(hRmSpi, NV_TRUE, BytesRequested, ClockSpeedInKHz);
 
     hRmSpi->CurrTransInfo.PacketsPerWord = PacketsPerWord;
 
@@ -3097,9 +2941,6 @@ void NvRmSpiTransaction(
                                    NV_FALSE, NV_FALSE);
 
 cleanup:
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-    BoostFrequency(hRmSpi, ChipSelectId, NV_FALSE, BytesRequested, 0);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
 
     //  Re-tristate multi-plexed controllers, and re-multiplex the controller.
     if (SpiPinMap)
@@ -3125,6 +2966,8 @@ cleanup:
     NvOsMutexUnlock(hRmSpi->hChannelAccessMutex);
 
     NV_ASSERT(Error == NvSuccess);
+
+    return Error;
 
 }
 
@@ -3208,11 +3051,8 @@ NvError NvRmSpiStartTransaction(
 
     // Enable Power/Clock.
     Error = SetPowerControl(hRmSpi, NV_TRUE);
-
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-	if (!Error)
-        BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, BytesRequested, ClockSpeedInKHz); //EBS 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
+    if (!Error)
+        BoostFrequency(hRmSpi, NV_TRUE, BytesRequested, ClockSpeedInKHz);
 
     if (!Error)
         Error = SetChipSelectSignalLevel(hRmSpi, ChipSelectId, ClockSpeedInKHz,
@@ -3260,9 +3100,6 @@ NvError NvRmSpiStartTransaction(
 cleanup:
 
     (void)SetChipSelectSignalLevel(hRmSpi, ChipSelectId, ClockSpeedInKHz, NV_FALSE, NV_TRUE);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-	  BoostFrequency(hRmSpi, ChipSelectId, NV_FALSE, BytesRequested, 0); //EBS 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
 
     if (hRmSpi->IsIdleSignalTristate)
         NvRmPinMuxConfigSetTristate(hRmSpi->hDevice,hRmSpi->RmIoModuleId,
@@ -3301,9 +3138,6 @@ NvRmSpiGetTransactionData(
 
     // Disable Power/Clock.
     SetPowerControl(hRmSpiSlink, NV_FALSE);
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [START]
-     BoostFrequency(hRmSpiSlink, hRmSpiSlink->CurrTransferChipSelId, NV_FALSE, BytesRequested, 0); // EBS 
-// LGE_UPDATE_S syblue.lee@lge.com 20110714, nVidia SPI patch for the SPI transaction stability [END]
     NvOsMutexUnlock(hRmSpiSlink->hChannelAccessMutex);
     return Error;
 }

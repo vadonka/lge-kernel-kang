@@ -637,6 +637,19 @@ void __lock_page_nosync(struct page *page)
 							TASK_UNINTERRUPTIBLE);
 }
 
+int __lock_page_or_retry(struct page *page, struct mm_struct *mm,
+			 unsigned int flags)
+{
+	if (!(flags & FAULT_FLAG_ALLOW_RETRY)) {
+		__lock_page(page);
+		return 1;
+	} else {
+		up_read(&mm->mmap_sem);
+		wait_on_page_locked(page);
+		return 0;
+	}
+}
+
 /**
  * find_get_page - find and get a page reference
  * @mapping: the address_space to search
@@ -1541,7 +1554,8 @@ int filemap_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 		 * waiting for the lock.
 		 */
 		do_async_mmap_readahead(vma, ra, file, page, offset);
-		lock_page(page);
+		if (!lock_page_or_retry(page, vma->vm_mm, vmf->flags))
+			return ret | VM_FAULT_RETRY;
 
 		/* Did it get truncated? */
 		if (unlikely(page->mapping != mapping)) {
@@ -1686,7 +1700,7 @@ repeat:
 		page = __page_cache_alloc(gfp | __GFP_COLD);
 		if (!page)
 			return ERR_PTR(-ENOMEM);
-		err = add_to_page_cache_lru(page, mapping, index, GFP_KERNEL);
+		err = add_to_page_cache_lru(page, mapping, index, gfp);
 		if (unlikely(err)) {
 			page_cache_release(page);
 			if (err == -EEXIST)
@@ -1783,10 +1797,7 @@ static struct page *wait_on_page_read(struct page *page)
  * @gfp:	the page allocator flags to use if allocating
  *
  * This is the same as "read_mapping_page(mapping, index, NULL)", but with
- * any new page allocations done using the specified allocation flags. Note
- * that the Radix tree operations will still use GFP_KERNEL, so you can't
- * expect to do this atomically or anything like that - but you can pass in
- * other page requirements.
+ * any new page allocations done using the specified allocation flags.
  *
  * If the page does not get brought uptodate, return -EIO.
  */
@@ -1900,7 +1911,7 @@ static size_t __iovec_copy_from_user_inatomic(char *vaddr,
 
 /*
  * Copy as much as we can into the page and return the number of bytes which
- * were sucessfully copied.  If a fault is encountered then return the number of
+ * were successfully copied.  If a fault is encountered then return the number of
  * bytes which were copied.
  */
 size_t iov_iter_copy_from_user_atomic(struct page *page,

@@ -84,7 +84,7 @@ __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
 extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
-extern void read_cmd_reserved_buffer(unsigned char * buf,size_t len);
+
 void arm_machine_restart(char mode, const char *cmd)
 {
 	/*
@@ -92,10 +92,10 @@ void arm_machine_restart(char mode, const char *cmd)
 	 */
 
 #if defined (CONFIG_MACH_STAR)
-	unsigned char tmpbuf[3] = { NULL, };
+	unsigned char tmpbuf[2];
         if (cmd)
         {
-         strncpy(tmpbuf, cmd, 3);
+         strncpy(tmpbuf, cmd, 1);
         }
         else
         {
@@ -104,29 +104,31 @@ void arm_machine_restart(char mode, const char *cmd)
 
 	switch (tmpbuf[0])
 	{
-	    case 'z':
+		case 'w':
 		break;
-	    case 'i': //imediately -> wm
-		case 'p': // panic -> wa
+#if defined (CONFIG_STAR_HIDDEN_RESET)
+		case 'h':
+		break;
+#endif
+		case 'p':
+		break;
 		default:
 		tmpbuf[0] ='w';
 		break;
 	}
-	write_cmd_reserved_buffer(tmpbuf,3);
-	read_cmd_reserved_buffer(tmpbuf,3);
-	printk("arm_machine_restart : tmpbuf = %s\n", (unsigned char *)tmpbuf);
+	write_cmd_reserved_buffer(tmpbuf,1);
 #endif
 
-//20110124, byoungwoo.yoon@lge.com, fix lockup during reset [START]
+//20110124, , fix lockup during reset [START]
 #if defined(CONFIG_MACH_STAR)
     if ( cmd == NULL )
 	    cpu_proc_fin();
     else if ( *cmd != 'p' )
-	    cpu_proc_fin();		
+	cpu_proc_fin();
 #else
 	cpu_proc_fin();
 #endif
-//20110124, byoungwoo.yoon@lge.com, fix lockup during reset [END]
+//20110124, , fix lockup during reset [END]
 
 	/*
 	 * Tell the mm system that we are going to reboot -
