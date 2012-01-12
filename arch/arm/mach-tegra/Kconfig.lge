@@ -192,16 +192,16 @@ if CPU_UNDERVOLT
 
 	config VOLTAGE_UV_503
 		int "503 Mhz"
-		default 790
+		default 770
 
 	config VOLTAGE_UV_655
 		int "655 Mhz"
 		depends on LOWER_CPU_FREQ
-		default 810
+		default 780
 
 	config VOLTAGE_UV_816
 		int "816 Mhz"
-		default 850
+		default 830
 
 	config VOLTAGE_UV_1015
 		int "1015 Mhz"
@@ -209,24 +209,24 @@ if CPU_UNDERVOLT
 
 	config VOLTAGE_UV_1100
 		int "1100 Mhz"
-		default 980
+		default 970
 
 	config VOLTAGE_UV_1216
 		int "1216 Mhz"
-		default 1075
+		default 1070
 
 	config VOLTAGE_UV_1312
 		int "1312 Mhz"
-		default 1125
+		default 1120
 
 	config VOLTAGE_UV_1408
 		int "1408 Mhz"
-		default 1175
+		default 1170
 
 	config VOLTAGE_UV_1504
 		int "1504 Mhz"
 		depends on !LOWER_CPU_FREQ
-		default 1275
+		default 1270
 
 endif # CPU_UNDERVOLT
 
