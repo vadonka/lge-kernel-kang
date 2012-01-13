@@ -1,5 +1,5 @@
 config XVMALLOC
-	bool
+	bool "xVMalloc Memory allocator support"
 	default n
 
 config ZRAM
