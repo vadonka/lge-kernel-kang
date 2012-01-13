@@ -169,10 +169,6 @@ if !CPU_UNDERVOLT
 		int "1216 Mhz"
 		default 1100
 
-	config VOLTAGE_DEF_1312
-		int "1312 Mhz"
-		default 1150
-
 	config VOLTAGE_DEF_1408
 		int "1408 Mhz"
 		default 1200
@@ -214,10 +210,6 @@ if CPU_UNDERVOLT
 	config VOLTAGE_UV_1216
 		int "1216 Mhz"
 		default 1070
-
-	config VOLTAGE_UV_1312
-		int "1312 Mhz"
-		default 1120
 
 	config VOLTAGE_UV_1408
 		int "1408 Mhz"
