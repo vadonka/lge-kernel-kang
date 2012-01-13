@@ -14,9 +14,10 @@
 
 #include <linux/device.h>
 #include <linux/genhd.h>
-#include <linux/mm.h>
 
 #include "zram_drv.h"
+
+#ifdef CONFIG_SYSFS
 
 static u64 zram_stat64_read(struct zram *zram, u64 *v)
 {
@@ -34,8 +35,8 @@ static struct zram *dev_to_zram(struct device *dev)
 	int i;
 	struct zram *zram = NULL;
 
-	for (i = 0; i < zram_num_devices; i++) {
-		zram = &zram_devices[i];
+	for (i = 0; i < num_devices; i++) {
+		zram = &devices[i];
 		if (disk_to_dev(zram->disk) == dev)
 			break;
 	}
@@ -55,23 +56,19 @@ static ssize_t disksize_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	int ret;
-	u64 disksize;
 	struct zram *zram = dev_to_zram(dev);
 
-	ret = strict_strtoull(buf, 10, &disksize);
-	if (ret)
-		return ret;
-
-	down_write(&zram->init_lock);
 	if (zram->init_done) {
-		up_write(&zram->init_lock);
 		pr_info("Cannot change disksize for initialized device\n");
 		return -EBUSY;
 	}
 
-	zram->disksize = PAGE_ALIGN(disksize);
+	ret = strict_strtoull(buf, 10, &zram->disksize);
+	if (ret)
+		return ret;
+
+	zram->disksize &= PAGE_MASK;
 	set_capacity(zram->disk, zram->disksize >> SECTOR_SHIFT);
-	up_write(&zram->init_lock);
 
 	return len;
 }
@@ -110,10 +107,8 @@ static ssize_t reset_store(struct device *dev,
 	if (bdev)
 		fsync_bdev(bdev);
 
-	down_write(&zram->init_lock);
 	if (zram->init_done)
-		__zram_reset_device(zram);
-	up_write(&zram->init_lock);
+		zram_reset_device(zram);
 
 	return len;
 }
@@ -225,3 +220,5 @@ static struct attribute *zram_disk_attrs[] = {
 struct attribute_group zram_disk_attr_group = {
 	.attrs = zram_disk_attrs,
 };
+
+#endif	/* CONFIG_SYSFS */
