@@ -20,10 +20,10 @@ config ARM
 	select HAVE_GENERIC_DMA_COHERENT
 	select HAVE_KERNEL_GZIP
 	select HAVE_KERNEL_BZIP2
-	select HAVE_KERNEL_GZIP
 	select HAVE_KERNEL_LZO
 	select HAVE_KERNEL_LZMA
 	select HAVE_KERNEL_XZ
+	select HAVE_BPF_JIT
 	help
 	  The ARM series is a line of low-power-consumption RISC chip designs
 	  licensed by ARM Ltd and targeted at embedded applications and
@@ -1118,7 +1118,7 @@ config LOCAL_TIMERS
 source kernel/Kconfig.preempt
 
 config HZ
-	int
+	int "Timer frequency in HZ"
 	default 128 if ARCH_L7200
 	default 200 if ARCH_EBSA110 || ARCH_S3C2410
 	default OMAP_32K_TIMER_HZ if ARCH_OMAP && OMAP_32K_TIMER

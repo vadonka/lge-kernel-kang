@@ -242,17 +242,11 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
-#ifdef CONFIG_NVRM_CPU1_CORE_BOOST
-#define NVRM_CPU1_ON_MIN_KHZ (CONFIG_CPU1_ON_MIN_KHZ_BOOSTED)
-#define NVRM_CPU1_OFF_MAX_KHZ (CONFIG_CPU1_OFF_MAX_KHZ_BOOSTED)
-#define NVRM_CPU1_ON_PENDING_MS (CONFIG_CPU1_ON_PENDING_MS_BOOSTED)
-#define NVRM_CPU1_OFF_PENDING_MS (CONFIG_CPU1_OFF_PENDING_MS_BOOSTED) 
-#else
-#define NVRM_CPU1_ON_MIN_KHZ (CONFIG_CPU1_ON_MIN_KHZ)
-#define NVRM_CPU1_OFF_MAX_KHZ (CONFIG_CPU1_OFF_MAX_KHZ)
-#define NVRM_CPU1_ON_PENDING_MS (CONFIG_CPU1_ON_PENDING_MS)
-#define NVRM_CPU1_OFF_PENDING_MS (CONFIG_CPU1_OFF_PENDING_MS)
-#endif
+#define NVRM_CPU1_ON_MIN_KHZ (810000)
+#define NVRM_CPU1_OFF_MAX_KHZ (850000)
+
+#define NVRM_CPU1_ON_PENDING_MS (2500)
+#define NVRM_CPU1_OFF_PENDING_MS (600)
 
 /**
  * Defines AP20 Thermal policy parameters.
@@ -273,9 +267,9 @@ extern "C"
  * ODM should also set a critical threshold to trigger h/w shutdown
  * mechanism.
  */
-#define NVRM_DTT_DEGREES_HIGH           (90L)
-#define NVRM_DTT_DEGREES_LOW            (60L)
-#define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
+#define NVRM_DTT_DEGREES_HIGH           (95L)
+#define NVRM_DTT_DEGREES_LOW            (65L)
+#define NVRM_DTT_DEGREES_HYSTERESIS     (8L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
 #define NVRM_DTT_CPU_DELTA_KHZ          (100000UL)
@@ -286,7 +280,7 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
-#define NVRM_AP20_LOW_CORE_MV (950)
+#define NVRM_AP20_LOW_CORE_MV (850)
 #define NVRM_AP20_LOW_CPU_MV (750)
 /// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)

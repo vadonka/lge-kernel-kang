@@ -251,7 +251,7 @@ static ssize_t fota_test_proc_write(struct file *filp, const char *buf, size_t l
         case '5':
 	    ifx_fota_reset();
             break;	    
-        case '6':
+			case '6':
         	mdm_reset();
         	break;
         case '7':

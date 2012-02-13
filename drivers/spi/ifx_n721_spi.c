@@ -162,7 +162,7 @@ struct ifx_spi_data {
 #ifdef WAKE_LOCK_RESUME
 	struct wake_lock wake_lock;
 	unsigned int		wake_lock_flag;
-	unsigned int            srdy_high_counter;
+	unsigned int		srdy_high_counter;
 #endif
 //20100927, , Hold wake-lock for cp interrupt [END]
 };
@@ -313,8 +313,8 @@ ifx_spi_write(struct tty_struct *tty, const unsigned char *buf, int count)
 	ifx_spi_set_mrdy_signal(1);  
 	wait_for_completion_timeout(&spi_data->ifx_read_write_completion, 2*HZ);	
 	if(ifx_ret_count==0)
-	{
-		ifx_spi_set_mrdy_signal(0);	
+	{	
+		ifx_spi_set_mrdy_signal(0);  
 		u32register = readl(IO_ADDRESS(0x6000d1b8));
 		//lge_debug[D_SPI].enable = 1;
 		printk("%s -u32register = %08X, SRDY = %d\n", __FUNCTION__, u32register, ((u32register>>5)&0x00000001)); 
@@ -448,7 +448,7 @@ ifx_spi_probe(struct spi_device *spi)
 //20100607, , add MRDY pin setup[END] 
 
 	status = request_irq(spi->irq, ifx_spi_handle_srdy_irq,  IRQF_TRIGGER_RISING, spi->dev.driver->name, spi_data);
-	if (status != 0){
+	if (status != 0){	
 		printk(KERN_ERR "Failed to request IRQ for SRDY\n");
 		printk(KERN_ERR "IFX SPI Probe Failed\n");
 		if(ifx_tx_buffer){
@@ -459,12 +459,13 @@ ifx_spi_probe(struct spi_device *spi)
 		}
 		if(spi_data){
 			kfree(spi_data);
-		}          
+		}
 	}
 	else{
 		gspi_data = spi_data;
 		SPI_DEBUG_PRINT("ifx_spi_probe ; spi_data is %x \n", (int)spi_data);
 	}
+	
 	return status;
 }
 
@@ -486,9 +487,10 @@ ifx_spi_remove(struct spi_device *spi)
 	}
         if(spi_data){
 		kfree(spi_data);
-        }
+        }          
 	NvOdmGpioReleasePinHandle(hGpio, hPin);
 	NvOdmGpioClose(hGpio);
+	
         return 0;
 }
 

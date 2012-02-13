@@ -264,21 +264,28 @@ typedef struct dhd_info {
 	/* Thread based operation */
 	bool threads_only;
 	struct semaphore sdsem;
-	long watchdog_pid;
-	struct semaphore watchdog_sem;
-	struct completion watchdog_exited;
-	long dpc_pid;
-	struct semaphore dpc_sem;
-	struct completion dpc_exited;
+//	long watchdog_pid;
+//	struct semaphore watchdog_sem;
+//	struct completion watchdog_exited;
+//	long dpc_pid;
+//	struct semaphore dpc_sem;
+//	struct completion dpc_exited;
 
-	int hang_was_sent; /* flag that message was send at least once */
+/* XXXX andrey: new dhd thread controls */
+        tsk_ctl_t       thr_dpc_ctl;
+        tsk_ctl_t       thr_wdt_ctl;
+        tsk_ctl_t       thr_sysioc_ctl;
+/*      --------------------------  */
+
+
+    int hang_was_sent; /* flag that message was send at least once */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) && 1
 	struct mutex wl_start_lock; /* mutex when START called to prevent any other Linux calls */
-#endif
+#endif 
 	/* Thread to issue ioctl for multicast */
-	long sysioc_pid;
-	struct semaphore sysioc_sem;
-	struct completion sysioc_exited;
+//	long sysioc_pid;
+//	struct semaphore sysioc_sem;
+//	struct completion sysioc_exited;
 	bool set_multicast;
 	bool set_macaddress;
 	struct ether_addr macvalue;
@@ -493,16 +500,16 @@ static int dhd_sleep_pm_callback(struct notifier_block *nfb, unsigned long actio
 	int ret = NOTIFY_DONE;
 
 	switch (action) {
-		case PM_HIBERNATION_PREPARE:
-		case PM_SUSPEND_PREPARE:
-			dhd_mmc_suspend = TRUE;
-			ret = NOTIFY_OK;
-			break;
-		case PM_POST_HIBERNATION:
-		case PM_POST_SUSPEND:
-			dhd_mmc_suspend = FALSE;
-			ret = NOTIFY_OK;
-			break;
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		dhd_mmc_suspend = TRUE;
+		ret = NOTIFY_OK;
+		break;
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		dhd_mmc_suspend = FALSE;
+		ret = NOTIFY_OK;
+		break;
 	}
 	smp_mb();
 	return ret;
@@ -592,9 +599,9 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				bcn_li_dtim = wl_dtim_val;
 				printk("%s:%d wl_dtim_val = %d\n",__func__,__LINE__,wl_dtim_val);
 				if(bcn_li_dtim > 0){
-				bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
-					4, iovbuf, sizeof(iovbuf));
-				dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
+					bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
+							4, iovbuf, sizeof(iovbuf));
+					dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 				}
 #endif
 #ifdef CUSTOMER_HW2
@@ -603,6 +610,7 @@ static int dhd_set_suspend(int value, dhd_pub_t *dhd)
 					iovbuf, sizeof(iovbuf));
 				dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 #endif /* CUSTOMER_HW2 */
+
 			} else {
 
 				/* Kernel resumed  */
@@ -958,7 +966,8 @@ _dhd_set_mac_address(dhd_info_t *dhd, int ifidx, struct ether_addr *addr)
 
 #ifdef SOFTAP
 extern struct net_device *ap_net_dev;
-extern struct semaphore ap_eth_sema;
+extern tsk_ctl_t ap_eth_ctl; /* ap netdev heper thread ctl */
+//extern struct semaphore ap_eth_sema;
 #endif
 
 static void
@@ -1012,7 +1021,8 @@ dhd_op_if(dhd_if_t *ifp)
 #if defined(CONFIG_LGE_BCM432X_PATCH)	//20110121
 				if(ap_priv_running == TRUE)
 #endif
-				up(&ap_eth_sema);
+				//up(&ap_eth_sema);
+                                up(&ap_eth_ctl.sema);
 				dhd_os_spin_unlock(&dhd->pub, flags);
 #endif
 				DHD_TRACE(("\n ==== pid:%x, net_device for if:%s created ===\n\n",
@@ -1053,7 +1063,10 @@ dhd_op_if(dhd_if_t *ifp)
 static int
 _dhd_sysioc_thread(void *data)
 {
-	dhd_info_t *dhd = (dhd_info_t *)data;
+	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
+	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
+
+//	dhd_info_t *dhd = (dhd_info_t *)data;
 	int i;
 #ifdef SOFTAP
 	bool in_ap = FALSE;
@@ -1062,7 +1075,16 @@ _dhd_sysioc_thread(void *data)
 
 	DAEMONIZE("dhd_sysioc");
 
-	while (down_interruptible(&dhd->sysioc_sem) == 0) {
+	complete(&tsk->completed);
+
+	while (down_interruptible(&tsk->sema) == 0) {
+
+		SMP_RD_BARRIER_DEPENDS();
+		if (tsk->terminated) {
+			break;
+		}
+		
+//	while (down_interruptible(&dhd->sysioc_sem) == 0) {
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) && 1
 		dhd_os_start_lock(&dhd->pub);
 #endif 
@@ -1112,7 +1134,8 @@ _dhd_sysioc_thread(void *data)
 #endif 
 	}
 	DHD_TRACE(("%s: stopped\n", __FUNCTION__));
-	complete_and_exit(&dhd->sysioc_exited, 0);
+//	complete_and_exit(&dhd->sysioc_exited, 0);
+	complete_and_exit(&tsk->completed, 0);
 }
 
 static int
@@ -1128,11 +1151,12 @@ dhd_set_mac_address(struct net_device *dev, void *addr)
 	if (ifidx == DHD_BAD_IF)
 		return -1;
 
-	ASSERT(dhd->sysioc_pid >= 0);
+//	ASSERT(dhd->sysioc_pid >= 0);
+        ASSERT(&dhd->thr_sysioc_ctl.thr_pid >= 0);
 	memcpy(&dhd->macvalue, sa->sa_data, ETHER_ADDR_LEN);
 	dhd->set_macaddress = TRUE;
-	up(&dhd->sysioc_sem);
-
+//	up(&dhd->sysioc_sem);
+        up(&dhd->thr_sysioc_ctl.sema);
 	return ret;
 }
 
@@ -1146,9 +1170,12 @@ dhd_set_multicast_list(struct net_device *dev)
 	if (ifidx == DHD_BAD_IF)
 		return;
 
-	ASSERT(dhd->sysioc_pid >= 0);
+//	ASSERT(dhd->sysioc_pid >= 0);
+        ASSERT(&dhd->thr_sysioc_ctl.thr_pid >= 0);
+
 	dhd->set_multicast = TRUE;
-	up(&dhd->sysioc_sem);
+        up(&dhd->thr_sysioc_ctl.sema);
+//	up(&dhd->sysioc_sem);
 }
 
 int
@@ -1437,7 +1464,10 @@ dhd_get_stats(struct net_device *net)
 static int
 dhd_watchdog_thread(void *data)
 {
-	dhd_info_t *dhd = (dhd_info_t *)data;
+
+	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
+	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
+//	dhd_info_t *dhd = (dhd_info_t *)data;
 	WAKE_LOCK_INIT(&dhd->pub, WAKE_LOCK_WATCHDOG, "dhd_watchdog_thread");
 
 	/* This thread doesn't need any user-level access,
@@ -1455,8 +1485,17 @@ dhd_watchdog_thread(void *data)
 	DAEMONIZE("dhd_watchdog");
 
 	/* Run until signal received */
+	complete(&tsk->completed);
+
 	while (1) {
-		if (down_interruptible (&dhd->watchdog_sem) == 0) {
+//		if (down_interruptible (&dhd->watchdog_sem) == 0) {
+		if (down_interruptible (&tsk->sema) == 0) {
+
+			SMP_RD_BARRIER_DEPENDS();
+			if (tsk->terminated) {
+				break;
+			}
+
 			dhd_os_sdlock(&dhd->pub);
 			if (dhd->pub.dongle_reset == FALSE) {
 				DHD_TIMER(("%s:\n", __FUNCTION__));
@@ -1464,22 +1503,23 @@ dhd_watchdog_thread(void *data)
 				/* Call the bus module watchdog */
 				dhd_bus_watchdog(&dhd->pub);
 
-			/* Count the tick for reference */
-			dhd->pub.tickcnt++;
-			/* Reschedule the watchdog */
+				/* Count the tick for reference */
+				dhd->pub.tickcnt++;
+				/* Reschedule the watchdog */
 				if (dhd->wd_timer_valid)
 					mod_timer(&dhd->timer, \
 							  jiffies + dhd_watchdog_ms * HZ / 1000);
 				WAKE_UNLOCK(&dhd->pub, WAKE_LOCK_WATCHDOG);
-		}
+			}
 			dhd_os_sdunlock(&dhd->pub);
 		} else {
 			break;
-	}
+		}
 	}
 
 	WAKE_LOCK_DESTROY(&dhd->pub, WAKE_LOCK_WATCHDOG);
-	complete_and_exit(&dhd->watchdog_exited, 0);
+		complete_and_exit(&tsk->completed, 0);
+//	complete_and_exit(&dhd->watchdog_exited, 0);
 }
 
 static void
@@ -1490,10 +1530,17 @@ dhd_watchdog(ulong data)
 	if (dhd->pub.dongle_reset) {
 		return;
 	}
+#if 0
 	if (dhd->watchdog_pid >= 0) {
 		up(&dhd->watchdog_sem);
 		return;
 	}
+#else
+        if (dhd->thr_wdt_ctl.thr_pid >= 0) {
+                up(&dhd->thr_wdt_ctl.sema);
+                return;
+        }
+#endif
 	dhd_os_sdlock(&dhd->pub);
 	/* Call the bus module watchdog */
 	dhd_bus_watchdog(&dhd->pub);
@@ -1514,7 +1561,9 @@ void htclk_fail_reset(void *bus);
 static int
 dhd_dpc_thread(void *data)
 {
-	dhd_info_t *dhd = (dhd_info_t *)data;
+	tsk_ctl_t *tsk = (tsk_ctl_t *)data;
+	dhd_info_t *dhd = (dhd_info_t *)tsk->parent;
+//	dhd_info_t *dhd = (dhd_info_t *)data;
 #if defined(CONFIG_LGE_BCM432X_PATCH)	//htclk fail patch
 	int reset_flag = FALSE;
 
@@ -1536,14 +1585,24 @@ reset:
 
 	DAEMONIZE("dhd_dpc");
 
+	/*  signal: thread has started */
+	complete(&tsk->completed);
 	/* Run until signal received */
 	while (1) {
-		if (down_interruptible(&dhd->dpc_sem) == 0) {
+//		if (down_interruptible(&dhd->dpc_sem) == 0) {
+		if (down_interruptible(&tsk->sema) == 0) {
+
+			SMP_RD_BARRIER_DEPENDS();
+			if (tsk->terminated) {
+				break;
+			}
+
 			/* Call bus dpc unless it indicated down (then clean stop) */
 			if (dhd->pub.busstate != DHD_BUS_DOWN) {
 				WAKE_LOCK(&dhd->pub, WAKE_LOCK_DPC);
 				if (dhd_bus_dpc(dhd->pub.bus)) {
-					up(&dhd->dpc_sem);
+//					up(&dhd->dpc_sem);
+					up(&dhd->thr_dpc_ctl.sema);
 					WAKE_LOCK_TIMEOUT(&dhd->pub, WAKE_LOCK_TMOUT, 25);
 				}
 				WAKE_UNLOCK(&dhd->pub, WAKE_LOCK_DPC);
@@ -1580,7 +1639,8 @@ reset:
 		goto reset;
 	}
 #endif
-	complete_and_exit(&dhd->dpc_exited, 0);
+//	complete_and_exit(&dhd->dpc_exited, 0);
+	complete_and_exit(&tsk->completed, 0);
 }
 
 static void
@@ -1603,11 +1663,19 @@ void
 dhd_sched_dpc(dhd_pub_t *dhdp)
 {
 	dhd_info_t *dhd = (dhd_info_t *)dhdp->info;
-
+#if 0
 	if (dhd->dpc_pid >= 0) {
 		up(&dhd->dpc_sem);
 		return;
 	}
+#else
+
+        if (dhd->thr_dpc_ctl.thr_pid >= 0) {
+                up(&dhd->thr_dpc_ctl.sema);
+                return;
+        }
+
+#endif
 
 	tasklet_schedule(&dhd->tasklet);
 }
@@ -2057,8 +2125,10 @@ dhd_add_if(dhd_info_t *dhd, int ifidx, void *handle, char *name,
 	if (handle == NULL) {
 		ifp->state = WLC_E_IF_ADD;
 		ifp->idx = ifidx;
-		ASSERT(dhd->sysioc_pid >= 0);
-		up(&dhd->sysioc_sem);
+//		ASSERT(dhd->sysioc_pid >= 0);
+//		up(&dhd->sysioc_sem);
+                ASSERT(&dhd->thr_sysioc_ctl.thr_pid >= 0);
+                up(&dhd->thr_sysioc_ctl.sema);
 	} else
 		ifp->net = (struct net_device *)handle;
 
@@ -2081,8 +2151,10 @@ dhd_del_if(dhd_info_t *dhd, int ifidx)
 
 	ifp->state = WLC_E_IF_DEL;
 	ifp->idx = ifidx;
-	ASSERT(dhd->sysioc_pid >= 0);
-	up(&dhd->sysioc_sem);
+//	ASSERT(dhd->sysioc_pid >= 0);
+//	up(&dhd->sysioc_sem);
+        ASSERT(&dhd->thr_sysioc_ctl.thr_pid >= 0);
+	up(&dhd->thr_sysioc_ctl.sema);
 }
 
 #if defined(CONFIG_LGE_BCM432X_PATCH)		//by sjpark 11-02-01
@@ -2203,30 +2275,46 @@ dhd_attach(osl_t *osh, struct dhd_bus *bus, uint bus_hdrlen)
 
 	if (dhd_dpc_prio >= 0) {
 		/* Initialize watchdog thread */
+#if 0	//hyeok-test
 		sema_init(&dhd->watchdog_sem, 0);
 		init_completion(&dhd->watchdog_exited);
 		dhd->watchdog_pid = kernel_thread(dhd_watchdog_thread, dhd, 0);
+#else
+		PROC_START(dhd_watchdog_thread, dhd, &dhd->thr_wdt_ctl, 0);
+#endif
 	} else {
-		dhd->watchdog_pid = -1;
+	//	dhd->watchdog_pid = -1;
+		dhd->thr_wdt_ctl.thr_pid = -1;
 	}
 
 	/* Set up the bottom half handler */
 	if (dhd_dpc_prio >= 0) {
 		/* Initialize DPC thread */
+#if 0
 		sema_init(&dhd->dpc_sem, 0);
 		init_completion(&dhd->dpc_exited);
 		dhd->dpc_pid = kernel_thread(dhd_dpc_thread, dhd, 0);
+#else
+		PROC_START(dhd_dpc_thread, dhd, &dhd->thr_dpc_ctl, 0);
+#endif
 	} else {
 		tasklet_init(&dhd->tasklet, dhd_dpc, (ulong)dhd);
-		dhd->dpc_pid = -1;
+//		dhd->dpc_pid = -1;
+                dhd->thr_dpc_ctl.thr_pid = -1;
+
 	}
 
 	if (dhd_sysioc) {
+#if 0
 		sema_init(&dhd->sysioc_sem, 0);
 		init_completion(&dhd->sysioc_exited);
 		dhd->sysioc_pid = kernel_thread(_dhd_sysioc_thread, dhd, 0);
+#else
+		PROC_START(_dhd_sysioc_thread, dhd, &dhd->thr_sysioc_ctl, 0);
+#endif
 	} else {
-		dhd->sysioc_pid = -1;
+		//dhd->sysioc_pid = -1;
+		dhd->thr_sysioc_ctl.thr_pid = -1;
 	}
 
 	/*
@@ -2580,9 +2668,14 @@ dhd_detach(dhd_pub_t *dhdp)
 #endif     /* (CONFIG_WIRELESS_EXT) */
 
 
-			if (dhd->sysioc_pid >= 0) {
+//			if (dhd->sysioc_pid >= 0) {
+                if(&dhd->thr_sysioc_ctl.thr_pid >= 0){ 
+#if 0
 				KILL_PROC(dhd->sysioc_pid, SIGTERM);
 				wait_for_completion(&dhd->sysioc_exited);
+#else
+				PROC_STOP(&dhd->thr_sysioc_ctl); 
+#endif
 			}
 
 			for (i = 1; i < DHD_MAX_IFS; i++)
@@ -2605,6 +2698,7 @@ dhd_detach(dhd_pub_t *dhdp)
 			}
 
 
+#if 0
 		if (dhd->watchdog_pid >= 0)
 		{
 			KILL_PROC(dhd->watchdog_pid, SIGTERM);
@@ -2618,6 +2712,21 @@ dhd_detach(dhd_pub_t *dhdp)
 		}
 		else
 		tasklet_kill(&dhd->tasklet);
+#else
+
+                if (dhd->thr_wdt_ctl.thr_pid >= 0)
+                {
+                        PROC_STOP(&dhd->thr_wdt_ctl);
+                }
+
+                if (dhd->thr_dpc_ctl.thr_pid >= 0)
+                {
+                        PROC_STOP(&dhd->thr_dpc_ctl);
+                }
+                else
+                tasklet_kill(&dhd->tasklet);
+#endif
+
 
 
 		dhd_bus_detach(dhdp);
@@ -2744,6 +2853,7 @@ dhd_module_init(void)
 		error = -EINVAL;
 		DHD_ERROR(("%s: sdio_register_driver timeout\n", __FUNCTION__));
 		dhd_bus_unregister();
+		goto faild;
 	}
 #endif
 	return error;
@@ -2811,12 +2921,10 @@ dhd_os_ioctl_resp_wait(dhd_pub_t *pub, uint *condition, bool *pending)
 	add_wait_queue(&dhd->ioctl_resp_wait, &wait);
 	set_current_state(TASK_INTERRUPTIBLE);
 	smp_mb();
-
 	while (!(*condition) && (!signal_pending(current) && timeout)) {
 		timeout = schedule_timeout(timeout);
 		smp_mb();
 	}
-
 	if (signal_pending(current))
 		*pending = TRUE;
 
@@ -2851,7 +2959,7 @@ dhd_os_wd_timer(void *bus, uint wdtick)
 
 	/* don't start the wd until fw is loaded */
 	if (pub->busstate != DHD_BUS_DOWN) {
-	if (wdtick) {
+		if (wdtick) {
 			dhd_watchdog_ms = (uint)wdtick;
 			dhd->wd_timer_valid = TRUE;
 			/* Re arm the timer, at last watchdog period */
@@ -3167,6 +3275,7 @@ int net_os_set_packet_filter(struct net_device *dev, int val)
 	return ret;
 }
 
+
 void
 dhd_dev_init_ioctl(struct net_device *dev)
 {
@@ -3260,7 +3369,7 @@ void dhd_os_start_unlock(dhd_pub_t *pub)
 		mutex_unlock(&dhd->wl_start_lock);
 }
 
-#endif
+#endif 
 
 #ifdef SOFTAP
 unsigned long dhd_os_spin_lock(dhd_pub_t *pub)

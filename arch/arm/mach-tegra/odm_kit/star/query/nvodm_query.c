@@ -347,8 +347,8 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-                300000,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
+CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
+                  1150,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
             0x00000012,   /* RC */
@@ -676,7 +676,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     {
                   0x20,   /* Rev 2.0 */
 CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
+                  1150,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
 					  0x00000012,	/* RC */
@@ -1254,7 +1254,7 @@ NvBool NvOdmQueryGetPmuProperty(NvOdmPmuProperty* pPmuProperty)
 
     pPmuProperty->IrqConnected = NV_TRUE; // 20100928, , RTC alarm enable 
 
-    pPmuProperty->PowerGoodCount = 0x7E;
+    pPmuProperty->PowerGoodCount = 0x7E7E;
     pPmuProperty->IrqPolarity = NvOdmInterruptPolarity_Low;
     
     // Not there yet, add it later ...

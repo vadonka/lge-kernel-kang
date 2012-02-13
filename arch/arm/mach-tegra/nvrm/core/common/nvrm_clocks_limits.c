@@ -44,6 +44,11 @@
 #ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
 
+/* 
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+*  Cleaned up and re-organized for P999/G2x by Faux123 @ https://github.com/faux123
+*/
+
 /* DEFAULT LG P990 VALUES */
 
 // Maximum recommanded voltage increment per step (by nvidia) -> 100mV 
@@ -77,77 +82,18 @@ NvRmCpuShmoo fake_CpuShmoo;
 // Total of 7 available spots for P999
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
-#ifndef CONFIG_LOWER_CPU_FREQ
-
-#define MAX_CPU_OC_FREQ (1504000)
-
-#ifndef CONFIG_CPU_UNDERVOLT
-NvU32 FakeShmooVoltages[] = {
-   CONFIG_VOLTAGE_DEF_216,
-   CONFIG_VOLTAGE_DEF_503,
-   CONFIG_VOLTAGE_DEF_816,
-   CONFIG_VOLTAGE_DEF_1015,
-   CONFIG_VOLTAGE_DEF_1100,
-   CONFIG_VOLTAGE_DEF_1216,
-   CONFIG_VOLTAGE_DEF_1408,
-   CONFIG_VOLTAGE_DEF_1504,
-};
-#else
-NvU32 FakeShmooVoltages[] = {
-   CONFIG_VOLTAGE_UV_216,
-   CONFIG_VOLTAGE_UV_503,
-   CONFIG_VOLTAGE_UV_816,
-   CONFIG_VOLTAGE_UV_1015,
-   CONFIG_VOLTAGE_UV_1100,
-   CONFIG_VOLTAGE_UV_1216,
-   CONFIG_VOLTAGE_UV_1408,
-   CONFIG_VOLTAGE_UV_1504,
-};
-#endif
-
-NvRmScaledClkLimits FakepScaledCpuLimits = {
-    101, // FakepScaledCpuLimits.HwDeviceId
-    0, // FakepScaledCpuLimits.SubClockId
-    32, // FakepScaledCpuLimits.MinKHz
-    // Clock table
-    {
-   216000,
-   503000,
-   816000,
-   1015000,
-   1100000,
-   1216000,
-   1408000,
-   1504000,
-    }
-};
-
-#else	// LOWER_CPU_FREQ
 #define MAX_CPU_OC_FREQ (1408000)
 
-#ifndef CONFIG_CPU_UNDERVOLT
 NvU32 FakeShmooVoltages[] = {
-   CONFIG_VOLTAGE_DEF_216,
-   CONFIG_VOLTAGE_DEF_503,
-   CONFIG_VOLTAGE_DEF_655,
-   CONFIG_VOLTAGE_DEF_816,
-   CONFIG_VOLTAGE_DEF_1015,
-   CONFIG_VOLTAGE_DEF_1100,
-   CONFIG_VOLTAGE_DEF_1216,
-   CONFIG_VOLTAGE_DEF_1408,
+    790,
+    800,
+    850,
+    900,
+    1000,
+    1055,
+    1155,
+    1255
 };
-#else
-NvU32 FakeShmooVoltages[] = {
-   CONFIG_VOLTAGE_UV_216,
-   CONFIG_VOLTAGE_UV_503,
-   CONFIG_VOLTAGE_UV_655,
-   CONFIG_VOLTAGE_UV_816,
-   CONFIG_VOLTAGE_UV_1015,
-   CONFIG_VOLTAGE_UV_1100,
-   CONFIG_VOLTAGE_UV_1216,
-   CONFIG_VOLTAGE_UV_1408,
-};
-#endif
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
     101, // FakepScaledCpuLimits.HwDeviceId
@@ -155,18 +101,17 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     32, // FakepScaledCpuLimits.MinKHz
     // Clock table
     {
-   216000,
-   503000,
-   655000,
-   816000,
-   1015000,
-   1100000,
-   1216000,
-   1408000,
+    216000,
+    389000,
+    503000,
+    800000,
+    1015000,
+    1100000,
+    1216000,
+    1408000
     }
 };
 
-#endif // CONFIG_LOWER_CPU_FREQ
 #endif // CONFIG_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \
@@ -278,21 +223,12 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     pSKUedLimits->CpuMaxKHz = MAX_CPU_OC_FREQ;
 
 #ifdef CONFIG_BOOST_PERIPHERALS
-#ifndef CONFIG_MAX_AVP_OC_FREQ_BOOST
     // AVP clock
-    pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ_LOW;
-#else
-    // AVP clock
-    pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ_HIGH;
-#endif // CONFIG_MAX_AVP_OC_FREQ
-#ifndef CONFIG_MAX_3D_OC_FREQ_BOOST
-    //3D clock
-    pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ_LOW;
-#else
-    //3D clock
-    pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ_HIGH;
-#endif // MAX_3D_OC_FREQ
+    pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
+    // 3D clock
+    pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
 #endif // CONFIG_BOOST_PERIPHERALS
+
 #endif // CONFIG_FAKE_SHMOO
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
@@ -352,6 +288,12 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
             s_pClockScales[id] = pHwLimits[i].MaxKHzList;
         }
     }
+
+        s_ClockRangeLimits[2].MaxKHz = 240000;
+        s_ClockRangeLimits[7].MaxKHz = 300000;
+        s_ClockRangeLimits[8].MaxKHz = 345000;
+        s_ClockRangeLimits[10].MaxKHz = 300000;
+
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)

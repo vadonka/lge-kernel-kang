@@ -45,7 +45,7 @@
 #include <linux/kernel.h>
 
 #define NV_DEBOUNCE_TIME_MS 	0
-#define DEBUG_LOG             	1
+#define DEBUG_LOG             	0
 #define DEBUG_NV_ACCEL         	0
 
 // For interrupt handle, set GPIO when an interrupt happens.

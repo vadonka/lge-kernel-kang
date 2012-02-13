@@ -2360,8 +2360,8 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Voltage Status
-	vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-	vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
+		vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+		vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	// Temperatue Status
 	if ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp)-STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) < 100) // 10 degree
@@ -2376,8 +2376,8 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Gauge Status
-	gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-	gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
+			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	batt_dev->battery_poll_interval = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_data, vol_period_data), STAR_BAT_MIN(temp_period_data, gauge_period_data));
 	batt_dev->sleep_bat_check_period = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_wake, vol_period_wake), STAR_BAT_MIN(temp_period_wake, gauge_period_wake));

@@ -54,6 +54,8 @@
 
 #include <linux/debugfs.h>
 
+#endif//CONFIG_DEBUG_FS
+
 #define ENABLE_DEBUG_MESSAGE 0x01
 #define ENABLE_TEST_MODE 0x02
 
@@ -66,13 +68,12 @@ static int debug_enable_flag = 1;//Debug
 static int debug_enable_flag = 0;//Release
 #endif
 
-#endif//CONFIG_DEBUG_FS
 
 
 /*
  * Debug
  */
-#define DEBUG_CP
+// #define DEBUG_CP
 #ifdef DEBUG_CP
 #define DBG(x...) if (debug_enable_flag & ENABLE_DEBUG_MESSAGE) { \
 						printk(x); \
@@ -357,10 +358,10 @@ static void cpwatcher_HardReset_irq_handler(void *dev_id)
 	}
 
 	NvOdmGpioInterruptDone(cpwatcher->hGpioInterrupt_HardReset);
-}
+	}
 
 static int cpwatcher_probe(struct platform_device *pdev)
-{
+        {
 	struct cpwatcher_dev *dev; 
 	struct device *dev_sys = &pdev->dev;
 	int i, j;
@@ -385,15 +386,15 @@ static int cpwatcher_probe(struct platform_device *pdev)
     for (i = 0, j = 0 ; i < pConnectivity->NumAddress; i++) {
 
         switch (pConnectivity->AddressList[i].Interface)
-        {
+	{
             case NvOdmIoModule_Gpio:
 			dev->port = pConnectivity->AddressList[i].Instance;
 			dev->pin = pConnectivity->AddressList[i].Address;
 			j++;
                 break;
             default:
-                break;
-        }
+		break;              
+	}
     }
 	dev->port_HardReset = u32HardResetGpio;
 	dev->pin_HardReset = u32HardResetPin;
@@ -482,7 +483,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 	{
 		printk("[CPW] %s: Fail to register softreset interrupt Error\n", __FUNCTION__);
 		goto fail_gpio_int_register;
-	}
+}
 
 #ifdef CPW_CHECK_STATUS_AT_BEGINNING
 	/* Check the status at the beginning */
@@ -494,7 +495,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 		input_sync(dev->input);
 	}
 #endif
-	
+
 	if (sysfs_create_group(&dev_sys->kobj, &cpwatcher_group)) {
 
 		printk("[CPW] Failed to create sys filesystem\n");
@@ -511,7 +512,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 		goto fail_input_allocate; 
 	}
 	wake_up_process(dev->task);
-#endif 
+#endif
 
     printk("[CPW] CP Watcher Initialization completed\n");
 

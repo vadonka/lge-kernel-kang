@@ -6,6 +6,13 @@
  * Copyright (c) 2007 Nokia Siemens Networks
  * Copyright (c) 2008 Herbert Xu <herbert@gondor.apana.org.au>
  *
+ * Updated RFC4106 AES-GCM testing.
+ *    Authors: Aidan O'Mahony (aidan.o.mahony@intel.com)
+ *             Adrian Hoban <adrian.hoban@intel.com>
+ *             Gabriele Paoloni <gabriele.paoloni@intel.com>
+ *             Tadeusz Struk (tadeusz.struk@intel.com)
+ *    Copyright (c) 2010, Intel Corporation.
+ *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the Free
  * Software Foundation; either version 2 of the License, or (at your option)
@@ -153,8 +160,21 @@ static void testmgr_free_buf(char *buf[XBUFSIZE])
 		free_page((unsigned long)buf[i]);
 }
 
+static int do_one_async_hash_op(struct ahash_request *req,
+				struct tcrypt_result *tr,
+				int ret)
+{
+	if (ret == -EINPROGRESS || ret == -EBUSY) {
+		ret = wait_for_completion_interruptible(&tr->completion);
+		if (!ret)
+			ret = tr->err;
+		INIT_COMPLETION(tr->completion);
+	}
+	return ret;
+}
+
 static int test_hash(struct crypto_ahash *tfm, struct hash_testvec *template,
-		     unsigned int tcount)
+		     unsigned int tcount, bool use_digest)
 {
 	const char *algo = crypto_tfm_alg_driver_name(crypto_ahash_tfm(tfm));
 	unsigned int i, j, k, temp;
@@ -206,23 +226,36 @@ static int test_hash(struct crypto_ahash *tfm, struct hash_testvec *template,
 		}
 
 		ahash_request_set_crypt(req, sg, result, template[i].psize);
-		ret = crypto_ahash_digest(req);
-		switch (ret) {
-		case 0:
-			break;
-		case -EINPROGRESS:
-		case -EBUSY:
-			ret = wait_for_completion_interruptible(
-				&tresult.completion);
-			if (!ret && !(ret = tresult.err)) {
-				INIT_COMPLETION(tresult.completion);
-				break;
+		if (use_digest) {
+			ret = do_one_async_hash_op(req, &tresult,
+						   crypto_ahash_digest(req));
+			if (ret) {
+				pr_err("alg: hash: digest failed on test %d "
+				       "for %s: ret=%d\n", j, algo, -ret);
+				goto out;
 			}
-			/* fall through */
-		default:
-			printk(KERN_ERR "alg: hash: digest failed on test %d "
+		} else {
+			ret = do_one_async_hash_op(req, &tresult,
+						   crypto_ahash_init(req));
+			if (ret) {
+				pr_err("alt: hash: init failed on test %d "
+				       "for %s: ret=%d\n", j, algo, -ret);
+				goto out;
+			}
+			ret = do_one_async_hash_op(req, &tresult,
+						   crypto_ahash_update(req));
+			if (ret) {
+				pr_err("alt: hash: update failed on test %d "
+				       "for %s: ret=%d\n", j, algo, -ret);
+				goto out;
+			}
+			ret = do_one_async_hash_op(req, &tresult,
+						   crypto_ahash_final(req));
+			if (ret) {
+				pr_err("alt: hash: final failed on test %d "
 			       "for %s: ret=%d\n", j, algo, -ret);
 			goto out;
+		}
 		}
 
 		if (memcmp(result, template[i].digest,
@@ -1201,7 +1234,7 @@ static int test_cprng(struct crypto_rng *tfm, struct cprng_testvec *template,
 		      unsigned int tcount)
 {
 	const char *algo = crypto_tfm_alg_driver_name(crypto_rng_tfm(tfm));
-	int err, i, j, seedsize;
+	int err = 0, i, j, seedsize;
 	u8 *seed;
 	char result[32];
 
@@ -1402,7 +1435,11 @@ static int alg_test_hash(const struct alg_test_desc *desc, const char *driver,
 		return PTR_ERR(tfm);
 	}
 
-	err = test_hash(tfm, desc->suite.hash.vecs, desc->suite.hash.count);
+	err = test_hash(tfm, desc->suite.hash.vecs,
+			desc->suite.hash.count, true);
+	if (!err)
+		err = test_hash(tfm, desc->suite.hash.vecs,
+				desc->suite.hash.count, false);
 
 	crypto_free_ahash(tfm);
 	return err;
@@ -1486,6 +1523,21 @@ static int alg_test_null(const struct alg_test_desc *desc,
 /* Please keep this list sorted by algorithm name. */
 static const struct alg_test_desc alg_test_descs[] = {
 	{
+		.alg = "__cbc-serpent-sse2",
+		.test = alg_test_null,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = NULL,
+					.count = 0
+				},
+				.dec = {
+					.vecs = NULL,
+					.count = 0
+				}
+			}
+		}
+	}, {
 		.alg = "__driver-cbc-aes-aesni",
 		.test = alg_test_null,
 		.suite = {
@@ -1501,7 +1553,37 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "__driver-cbc-serpent-sse2",
+		.test = alg_test_null,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = NULL,
+					.count = 0
+				},
+				.dec = {
+					.vecs = NULL,
+					.count = 0
+				}
+			}
+		}
+	}, {
 		.alg = "__driver-ecb-aes-aesni",
+		.test = alg_test_null,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = NULL,
+					.count = 0
+				},
+				.dec = {
+					.vecs = NULL,
+					.count = 0
+				}
+			}
+		}
+	}, {
+		.alg = "__driver-ecb-serpent-sse2",
 		.test = alg_test_null,
 		.suite = {
 			.cipher = {
@@ -1627,6 +1709,21 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "cbc(serpent)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = serpent_cbc_enc_tv_template,
+					.count = SERPENT_CBC_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = serpent_cbc_dec_tv_template,
+					.count = SERPENT_CBC_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
 		.alg = "cbc(twofish)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -1683,6 +1780,21 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "cryptd(__driver-ecb-serpent-sse2)",
+		.test = alg_test_null,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = NULL,
+					.count = 0
+				},
+				.dec = {
+					.vecs = NULL,
+					.count = 0
+				}
+			}
+		}
+	}, {
 		.alg = "cryptd(__ghash-pclmulqdqni)",
 		.test = alg_test_null,
 		.suite = {
@@ -1704,6 +1816,51 @@ static const struct alg_test_desc alg_test_descs[] = {
 				.dec = {
 					.vecs = aes_ctr_dec_tv_template,
 					.count = AES_CTR_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "ctr(blowfish)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = bf_ctr_enc_tv_template,
+					.count = BF_CTR_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = bf_ctr_dec_tv_template,
+					.count = BF_CTR_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "ctr(serpent)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = serpent_ctr_enc_tv_template,
+					.count = SERPENT_CTR_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = serpent_ctr_dec_tv_template,
+					.count = SERPENT_CTR_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "ctr(twofish)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = tf_ctr_enc_tv_template,
+					.count = TF_CTR_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = tf_ctr_dec_tv_template,
+					.count = TF_CTR_DEC_TEST_VECTORS
 				}
 			}
 		}
@@ -2027,6 +2184,16 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "ghash",
+		.test = alg_test_hash,
+		.fips_allowed = 1,
+		.suite = {
+			.hash = {
+				.vecs = ghash_tv_template,
+				.count = GHASH_TEST_VECTORS
+			}
+		}
+	}, {
 		.alg = "hmac(md5)",
 		.test = alg_test_hash,
 		.suite = {
@@ -2119,6 +2286,36 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "lrw(serpent)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = serpent_lrw_enc_tv_template,
+					.count = SERPENT_LRW_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = serpent_lrw_dec_tv_template,
+					.count = SERPENT_LRW_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "lrw(twofish)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = tf_lrw_enc_tv_template,
+					.count = TF_LRW_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = tf_lrw_dec_tv_template,
+					.count = TF_LRW_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
 		.alg = "lzo",
 		.test = alg_test_comp,
 		.suite = {
@@ -2161,6 +2358,22 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "ofb(aes)",
+		.test = alg_test_skcipher,
+		.fips_allowed = 1,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = aes_ofb_enc_tv_template,
+					.count = AES_OFB_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = aes_ofb_dec_tv_template,
+					.count = AES_OFB_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
 		.alg = "pcbc(fcrypt)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -2192,6 +2405,23 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
+		.alg = "rfc4106(gcm(aes))",
+		.test = alg_test_aead,
+		.suite = {
+			.aead = {
+				.enc = {
+					.vecs = aes_gcm_rfc4106_enc_tv_template,
+					.count = AES_GCM_4106_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = aes_gcm_rfc4106_dec_tv_template,
+					.count = AES_GCM_4106_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+
+
 		.alg = "rfc4309(ccm(aes))",
 		.test = alg_test_aead,
 		.fips_allowed = 1,
@@ -2379,6 +2609,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 	}, {
 		.alg = "xts(aes)",
 		.test = alg_test_skcipher,
+		.fips_allowed = 1,
 		.suite = {
 			.cipher = {
 				.enc = {
@@ -2388,6 +2619,36 @@ static const struct alg_test_desc alg_test_descs[] = {
 				.dec = {
 					.vecs = aes_xts_dec_tv_template,
 					.count = AES_XTS_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "xts(serpent)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = serpent_xts_enc_tv_template,
+					.count = SERPENT_XTS_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = serpent_xts_dec_tv_template,
+					.count = SERPENT_XTS_DEC_TEST_VECTORS
+				}
+			}
+		}
+	}, {
+		.alg = "xts(twofish)",
+		.test = alg_test_skcipher,
+		.suite = {
+			.cipher = {
+				.enc = {
+					.vecs = tf_xts_enc_tv_template,
+					.count = TF_XTS_ENC_TEST_VECTORS
+				},
+				.dec = {
+					.vecs = tf_xts_dec_tv_template,
+					.count = TF_XTS_DEC_TEST_VECTORS
 				}
 			}
 		}

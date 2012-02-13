@@ -222,7 +222,7 @@ static void print_active_locks(int type)
 				pr_info("wake lock %s, expired\n", lock->name);
 		} else {
 			pr_info("active wake lock %s\n", lock->name);
-			if (!debug_mask & DEBUG_EXPIRE)
+			if (!debug_mask && DEBUG_EXPIRE)
 				print_expired = false;
 		}
 	}
@@ -253,7 +253,7 @@ long has_wake_lock(int type)
 	unsigned long irqflags;
 	spin_lock_irqsave(&list_lock, irqflags);
 	ret = has_wake_lock_locked(type);
-	if (ret && (debug_mask & DEBUG_SUSPEND) && type == WAKE_LOCK_SUSPEND)	//20110106  for log about active wakelocks
+	if (ret && (debug_mask & DEBUG_WAKEUP) && type == WAKE_LOCK_SUSPEND)
 		print_active_locks(type);
 	spin_unlock_irqrestore(&list_lock, irqflags);
 	return ret;
@@ -315,7 +315,7 @@ static int power_suspend_late(struct device *dev)
 {
 	int ret = has_wake_lock(WAKE_LOCK_SUSPEND) ? -EAGAIN : 0;
 #ifdef CONFIG_WAKELOCK_STAT
-	wait_for_wakeup = 1;
+	wait_for_wakeup = !ret;
 #endif
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("power_suspend_late return %d\n", ret);
@@ -558,7 +558,7 @@ static int active_wakelock_stats_show(struct seq_file *m, void *unused)
 				seq_printf(m, "wake lock %s, expired\n", lock->name);
 		} else {
 			seq_printf(m, "active wake lock %s\n", lock->name);
-			if (!debug_mask & DEBUG_EXPIRE)
+			if (!debug_mask && DEBUG_EXPIRE)
 				print_expired = false;
 		}
 	}

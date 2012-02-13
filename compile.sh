@@ -1,47 +1,100 @@
-#!/bin/sh
-# ANYKERNEL compiler script by vadonka v1.0.2
-# Date: 2012.01.04
+#!/bin/bash
+# ANYKERNEL compiler script by vadonka v1.1.3
+# Date: 2012.02.04
 #
 # You need to define this below:
 ######################################################
 # KERNEL home directory
-export krnlhome=/home/android/android/lge-kernel-kang
-# Compiled files home directory
-export comphome=/home/android/android/compiled
+export kh=`pwd`
+# Compiled CWM zip files home directory
+export ch=/home/android/android/compiled
 # CM7 original lge kernel boot.img location
-export cm7bootimg=/home/android/android/cm7orig_kernel
+export cm7b=/home/android/android/cm7orig_kernel
+# LOG file location
+export WARNLOG=`pwd`/warn.log
 ######################################################
 
-export CCOMPILER=arm-linux-gnueabi-
+# Check executables
+if [ -f /usr/bin/zip ]; then
+    if [ -f /usr/bin/unzip ]; then
+	if [ -f /usr/bin/abootimg ]; then
+	    echo "Required executables are found. OK!"
+	else
+	    echo "ERROR: abootimg not found! Please install"
+	    exit 0
+	fi
+    else
+	echo "ERROR: unzip not found! Please install"
+	exit 0
+    fi
+else
+    echo "ERROR: zip not found! Please install"
+    exit 0
+fi
+
+# Check variables
+if [ -z $1 ]; then
+    export rh="0"
+    echo "Ramhack: no ramhack defined"
+elif [[ $1 = [0-9]* ]]; then
+	let rh=$1
+	echo "Ramhack: ramhack is defined, size is: $(($1)) MB"
+else
+	echo "Invalid ramhack size, ramhack is not used"
+	export rh="0"
+fi
+
+if [ "$2" == "shared" ]; then
+	export csize="128"
+	echo "Using shared memory mode"
+else
+	let csize=$((128-$rh))
+	echo "Using traditional ramhack mode"
+fi
+
+# Carveout size tweak
+export cout=`grep "^CONFIG_GPU_MEM_CARVEOUT" $kh/.config`
+export cnew=`echo 'CONFIG_GPU_MEM_CARVEOUT_SZ='$(($csize))`
+sed -i "s/$cout/$cnew/g" $kh/.config
+
+# Read current kernel version
+export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
+
+if [[ $2 = "shared" ]]; then
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($rh))'S"'`
+	sed -i "s/$cver/$nver/g" $kh/.config
+else
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($rh))'"'`
+	sed -i "s/$cver/$nver/g" $kh/.config
+fi
+
+export cc=arm-linux-gnueabi-
 export USE_CCACHE=1
+export CCACHE_DIR=~/android/ccache
 make clean
-make ARCH=arm CROSS_COMPILE=$CCOMPILER clean
-make ARCH=arm CROSS_COMPILE=$CCOMPILER
+make ARCH=arm CROSS_COMPILE=$cc clean
+make ARCH=arm CROSS_COMPILE=$cc 2> $WARNLOG
 
-mem=383
-nvmem1=128
-nvmem2=384
-RAMHACK=`grep "^CONFIG_RAMHACK" $krnlhome/.config | awk 'BEGIN { FS = "=" } ; { print $2}'`
-let mem=$mem+$RAMHACK
-let nvmem1=$nvmem1-$RAMHACK
-let nvmem2=$nvmem2+$RAMHACK
-hmem="$mem""M@0M"
-hnvmem="$nvmem1""M@""$nvmem2""M"
+if [ -e $kh/arch/arm/boot/zImage ]; then
+export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 
-kver=`grep "^CONFIG_LOCALVERSION" $krnlhome/.config | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
-export COMPDIR=$comphome/`date +%Y%m%d-%H%M`$kver
-mkdir -p $COMPDIR/modules
-cp $krnlhome/arch/arm/boot/zImage $COMPDIR
+export cdir=`date +%y%m%d%H%M`$kver
+mkdir -p $ch/$cdir
+unzip -qq empty.zip -d $ch/$cdir
 
-for m in `find $krnlhome -name '*.ko'`; do
-    cp $m $COMPDIR/modules
+for m in `find $kh -name '*.ko'`; do
+    cp $m $ch/$cdir/system/lib/modules
 done
 
-cp $cm7bootimg/boot.img $COMPDIR
-abootimg -u $COMPDIR/boot.img -k $COMPDIR/zImage
-abootimg -u $COMPDIR/boot.img -c "cmdline = mem=$hmem nvmem=$hnvmem loglevel=0 muic_state=1 \
+cp $cm7b/boot.img $ch/$cdir/tmp
+abootimg -u $ch/$cdir/tmp/boot.img -k $kh/arch/arm/boot/zImage
+abootimg -u $ch/$cdir/tmp/boot.img -c "cmdline = mem=`echo $((383+$rh))'M@0M'` nvmem=`echo $((128-$rh))'M@'$((384+$rh))'M'` loglevel=0 muic_state=1 \
 lpj=9994240 CRC=3010002a8e458d7 vmalloc=256M brdrev=1.0 video=tegrafb console=ttyS0,115200n8 \
 usbcore.old_scheme_first=1 tegraboot=sdmmc tegrapart=recovery:35e00:2800:800,linux:34700:1000:800,\
 mbr:400:200:800,system:600:2bc00:800,cache:2c200:8000:800,misc:34200:400:800,\
 userdata:38700:c0000:800 androidboot.hardware=p990"
-abootimg -i $COMPDIR/boot.img > $COMPDIR/boot.img.info
+abootimg -i $ch/$cdir/tmp/boot.img > $ch/$cdir/tmp/bootimg.info
+cd $ch/$cdir && zip -rq9 $ch/$cdir.zip .
+cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
+
+fi

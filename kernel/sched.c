@@ -54,7 +54,6 @@
 #include <linux/rcupdate.h>
 #include <linux/cpu.h>
 #include <linux/cpuset.h>
-#include <linux/cpufreq.h>
 #include <linux/percpu.h>
 #include <linux/kthread.h>
 #include <linux/proc_fs.h>
@@ -268,6 +267,10 @@ struct task_group {
 	struct task_group *parent;
 	struct list_head siblings;
 	struct list_head children;
+
+#ifdef CONFIG_SCHED_AUTOGROUP
+	struct autogroup *autogroup;
+#endif
 };
 
 #define root_task_group init_task_group
@@ -5440,7 +5443,6 @@ void account_steal_ticks(unsigned long ticks)
  */
 void account_idle_ticks(unsigned long ticks)
 {
-	cpufreq_exit_idle(smp_processor_id(), ticks);
 	account_idle_time(jiffies_to_cputime(ticks));
 }
 
@@ -6400,12 +6402,12 @@ out_unlock:
 }
 EXPORT_SYMBOL(set_user_nice);
 
-#ifdef CFS_BOOST
+#ifdef CONFIG_CFS_BOOST
 /*
  * Nice level for privileged tasks. (can be set to 0 for this
  * to be turned off)
  */
-int sysctl_sched_privileged_nice_level __read_mostly = CFS_BOOST_NICE;
+int sysctl_sched_privileged_nice_level __read_mostly = CONFIG_CFS_NICE;
 
 static int __init privileged_nice_level_setup(char *str)
 {
@@ -9809,7 +9811,6 @@ void __init sched_init(void)
 #ifdef CONFIG_CGROUP_SCHED
 	list_add(&init_task_group.list, &task_groups);
 	INIT_LIST_HEAD(&init_task_group.children);
-
 	autogroup_init(&init_task);
 #endif /* CONFIG_CGROUP_SCHED */
 
@@ -10276,6 +10277,7 @@ static void free_sched_group(struct task_group *tg)
 {
 	free_fair_sched_group(tg);
 	free_rt_sched_group(tg);
+	autogroup_free(tg);
 	kfree(tg);
 }
 

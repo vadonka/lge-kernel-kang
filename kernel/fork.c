@@ -924,8 +924,9 @@ static int copy_signal(unsigned long clone_flags, struct task_struct *tsk)
 	acct_init_pacct(&sig->pacct);
 
 	tty_audit_fork(sig);
-
+#ifdef CONFIG_SCHED_AUTOGROUP
 	sched_autogroup_fork(sig);
+#endif
 
 	sig->oom_adj = current->signal->oom_adj;
 

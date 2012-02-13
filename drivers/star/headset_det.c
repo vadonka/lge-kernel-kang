@@ -122,7 +122,7 @@ int suspend_status = 0;
 
 
 extern void star_headsetdet_bias(int bias);	//20100421  for framwork function used in kernel ==> error [LGE]
-extern void star_Mic_bias(int bias); // 20110726 detecting headset when resuming
+extern void star_Mic_bias(int bias);  //20110726 detecting headset when resuming
 #define HEADSET_GUID                NV_ODM_GUID('h','e','a','d','s','e','t','_')
 typedef struct HeadsetDeviceRec
 {
@@ -873,8 +873,8 @@ static int headset_resume(struct platform_device *pdev)
 
 
 	// 20110726 detecting headset when resuming [START]
-     star_Mic_bias(1);
-     headset_det_work(&headset_sw_data->work);
+	 star_Mic_bias(1);
+	 headset_det_work(&headset_sw_data->work);
     // 20110726 detecting headset when resuming [END]
     
     if(core_lock_on){

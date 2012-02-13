@@ -507,8 +507,8 @@ int cp_emergency_download(void)
     if (!hMDMRest)
     {
         lprintk(D_MUIC, "%s:Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
-	    goto error_open_gpio_pin_acquire_fail;
-	}
+        goto error_open_gpio_pin_acquire_fail;
+    }
 
     //change TEST_GPIO state from high to low (GPIO_PH1)
     NvOdmGpioSetState(hCpEmergencgy, hTestGpio01, 0x0);
@@ -521,7 +521,7 @@ int cp_emergency_download(void)
     NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x0);
     msleep(3000);
     NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x1);
-
+ 
     //change USB path from AP to CP
     Set_MAX14526_CP_USB_Mode_PortSetting();
 
@@ -1459,7 +1459,7 @@ static int __init muic_probe(struct platform_device *pdev)
 
     muic_initialize_max(RESET);
 
-    //20100915, , move to late_initcall [START]     
+    //20100915, , move to late_initcall [START] 
 #if 0		
     NvOdmOsSleepMS(400) ;
     MAX14526_Device_Detection();

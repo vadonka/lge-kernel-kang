@@ -275,6 +275,7 @@ static bool star_accel_i2c_read_data( star_accel_device *accel, unsigned char re
     return true;
 }
 
+
 static void star_accel_set_sample_rate( star_accel_device *accel, unsigned int samplerate )
 {
 	unsigned int sampledata[7][2] =
@@ -443,9 +444,9 @@ static int kxtf9_get_acceleration_data_test(int *xyz_mg)
 	}
 #elif defined(STAR_COUNTRY_CA) && defined(STAR_OPERATOR_AVC)
 	if(!strncmp(brdrev,BD_REVB,1)){
-	xyz_mg[0] = hw_mg[0];
-	xyz_mg[1] = -hw_mg[1];
-	xyz_mg[2] = -hw_mg[2];
+		xyz_mg[0] = hw_mg[0];
+		xyz_mg[1] = -hw_mg[1];
+		xyz_mg[2] = -hw_mg[2];
 	} else { 
 		xyz_mg[0] = hw_mg[1];
 		xyz_mg[1] = -hw_mg[0];
@@ -457,11 +458,11 @@ static int kxtf9_get_acceleration_data_test(int *xyz_mg)
 		xyz_mg[1] = -hw_mg[1];
 		xyz_mg[2] = -hw_mg[2];
 	} else { 
-	xyz_mg[0] = hw_mg[1];
-	xyz_mg[1] = -hw_mg[0];
-	xyz_mg[2] = hw_mg[2];
+		xyz_mg[0] = hw_mg[1];
+		xyz_mg[1] = -hw_mg[0];
+		xyz_mg[2] = hw_mg[2];  
 	}
-#endif
+#endif 
 
 
 	//printk("YJ- CNT=[  %4d,  %4d,  %4d] , ACC=[  %4d,  %4d,  %4d] \n", hw_cnt[0], hw_cnt[1], hw_cnt[2], hw_mg[0], hw_mg[1] , hw_mg[2] );
@@ -1328,7 +1329,7 @@ int star_accel_suspend(struct platform_device *dev, pm_message_t state)
     if (!star_proxi_get_status())
         star_accel_disable_irq();
 
-    return 0;
+	return 0;
 }
 
 int star_accel_resume(struct platform_device *dev)
@@ -1336,7 +1337,7 @@ int star_accel_resume(struct platform_device *dev)
     if (!star_proxi_get_status())
         star_accel_enable_irq();
 
-    return 0;
+	return 0;
 }
 
 static struct platform_driver star_accel_driver = {

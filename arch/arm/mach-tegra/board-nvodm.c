@@ -145,6 +145,30 @@ static struct platform_device debug_uart = {
 	},
 };
 
+#define TEGRA_EMC_MRW          0x00e8
+static void __iomem *emc = IO_ADDRESS(TEGRA_EMC_BASE);
+static inline void emc_writel(u32 val, unsigned long addr)
+{
+	writel(val, emc + addr);
+}
+
+/* read LPDDR2 memory modes */
+void tegra_emc_write_mrw(unsigned long addr)
+{
+	emc_writel(0x90000, TEGRA_EMC_MRW);    
+	printk("Sending 0xB0 to TEGRA_EMC_MRW\n");
+	emc_writel(0x900B0, TEGRA_EMC_MRW);
+	printk("Sending 0xE0 to TEGRA_EMC_MRW\n");
+	emc_writel(0x900E0, TEGRA_EMC_MRW);
+	printk("Sending 0x90 to TEGRA_EMC_MRW\n");
+	emc_writel(0x90090, TEGRA_EMC_MRW);
+	/* Sending the test op code per Hynix FAE requested. 
+	   0xBD - reducing self-refresh rate from 30 us to 20 us.
+	   */
+	printk("Sending 0xBD to TEGRA_EMC_MRW\n");
+	emc_writel(0x900BD, TEGRA_EMC_MRW);
+}
+
 #if defined (CONFIG_MACH_STAR)
 extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
 #endif
@@ -1635,11 +1659,11 @@ static struct platform_device star_wm8994_pdevice =
 #endif
 //#define CARVEOUT_SIZE 64
 //#define STAR_RAM_CONSOLE_BASE 	((512-CARVEOUT_SIZE-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
-#define STAR_RAM_CONSOLE_BASE 	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
+#define STAR_RAM_CONSOLE_BASE	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
 #ifdef CONFIG_MACH_STAR_TMUS
-#define STAR_RAM_CONSOLE_SIZE	(128*SZ_1K) 	
+#define STAR_RAM_CONSOLE_SIZE	(128*SZ_1K)
 #else
-#define STAR_RAM_CONSOLE_SIZE	(512*SZ_1K) 	
+#define STAR_RAM_CONSOLE_SIZE	(512*SZ_1K)
 #endif
 static struct resource ram_console_resource[] = {
     {
@@ -2438,13 +2462,28 @@ static void sensor_workaround()
                  goto error_open_gpio_pin_acquire_fail;
          }  
 
-	NvOdmGpioSetState(hGpio,hSclGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hSclGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hSdaGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hSdaGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hHalGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hHalGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hComGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hComGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hGyrGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hGyrGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hMotGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hMotGpioPinHandle, 5 );
-	NvOdmGpioSetState(hGpio,hProGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hProGpioPinHandle, 5 );
+// LGE_CHANGE_S [dongjin73.kim@lge.com] 2011-05-27, [P999GB] Invalid GPIO configuration
+	NvOdmGpioConfig(hGpio, hSclGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hSclGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hSdaGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hSdaGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hHalGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hHalGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hComGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hComGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hGyrGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hGyrGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hMotGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hMotGpioPinHandle, 0);
+
+	NvOdmGpioConfig(hGpio, hProGpioPinHandle, NvOdmGpioPinMode_Output);
+	NvOdmGpioSetState(hGpio,hProGpioPinHandle, 0);
+// LGE_CHANGE_E [dongjin73.kim@lge.com] 2011-05-27, [P999GB] Invalid GPIO configuration
 
        if (!sensor_poweron())
        {
@@ -2916,7 +2955,7 @@ static void star_power_off_prepare()
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 
-}
+	}
 
 struct notifier_block star_panic_nb = {
 	.notifier_call = star_panic_event,
@@ -2998,6 +3037,7 @@ void __init tegra_setup_nvodm(bool standard_i2c, bool standard_spi)
 #ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
 	star_init_android_virtualkeys();
 #endif
+	tegra_emc_write_mrw(9);
 	tegra_setup_w1();
 #if defined (CONFIG_MACH_STAR)
 	pm_power_off_prepare = star_power_off_prepare;

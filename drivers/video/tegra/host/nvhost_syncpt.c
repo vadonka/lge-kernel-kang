@@ -207,7 +207,7 @@ int nvhost_syncpt_wait_timeout(struct nvhost_syncpt *sp, u32 id,
 			dev_warn(&syncpt_to_dev(sp)->pdev->dev,
 				"syncpoint id %d (%s) stuck waiting %d\n",
 				id, nvhost_syncpt_name(id), thresh);
-			nvhost_syncpt_debug(sp);
+			//nvhost_syncpt_debug(sp);
 		}
 	};
 	if (err > 0)

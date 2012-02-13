@@ -10,14 +10,7 @@ obj-y				+= lg_panel_gpio_set.o
 #20101119, , Camera Flash fast init
 obj-y				+= tegra_user_gpio.o
 #20101119, , Camera Flash fast init
-#obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
-
-ifeq ($(CONFIG_USE_DS_BATTERY_DRIVER),y)
-obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger_ds.o
-else
-obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger.o
-endif
-
+obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
 obj-$(CONFIG_STAR_MUIC_TI)	+= star_muic_TI.o
 obj-$(CONFIG_STAR_MUIC)	+= star_muic.o
 obj-$(CONFIG_STAR_PROXIMITY)	+= star_proximity.o
@@ -66,11 +59,7 @@ obj-$(CONFIG_STAR_COMPASS2)		+= sensor.module/
 
 obj-$(CONFIG_STAR_ERS_TEST)	+= star_ers.o
 #20100730, , CP Watcher
-ifeq ($(CONFIG_MACH_STAR_TMUS),y)
-obj-$(CONFIG_STAR_CPWATCHER) += cpwatcher_p999.o
-else
 obj-$(CONFIG_STAR_CPWATCHER) += cpwatcher.o
-endif
 
 obj-$(CONFIG_STAR_HALL)	+= star_hall.o
 obj-$(CONFIG_STAR_BL) += star_bl.o

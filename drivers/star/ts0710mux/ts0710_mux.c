@@ -811,11 +811,11 @@ static void ts0710_flow_on(u8 dlci, ts0710_con * ts0710)
            if (!((ts0710->dlci[dlci].state) & (CONNECTED | FLOW_STOPPED)))
                      return;
 #else
-	if (!(ts0710->dlci[0].state) & (CONNECTED | FLOW_STOPPED))
-		return;
+           if (!(ts0710->dlci[0].state) & (CONNECTED | FLOW_STOPPED))
+                     return;
 
-	if (!(ts0710->dlci[dlci].state) & (CONNECTED | FLOW_STOPPED))
-		return;
+           if (!(ts0710->dlci[dlci].state) & (CONNECTED | FLOW_STOPPED))
+                     return;
 #endif
 
 	if (!(ts0710->dlci[dlci].flow_control))
@@ -1528,42 +1528,68 @@ out:
 	return retval;
 }
 
-//#define LGE_DUMP_MUX_BIFFUER
-#ifdef LGE_DUMP_MUX_BIFFUER
-#define COL_SIZE 50
-static void dump_mux_buffer(const unsigned char *txt, const unsigned char *buf, int count)
+//LGE_TELECA_CR1317_DATA_THROUGHPUT START
+//#define LGE_DUMP_MUX_BUFFER
+#ifdef LGE_DUMP_MUX_BUFFER
+#define DUMP_MUX_BUFFER_SIZE 64
+static void DUMP_MUX_BUFFER(const unsigned char *txt, const unsigned char *buf, int count)
 {
-    char dump_buf_str[COL_SIZE+1];
+    char dump_buf_str[DUMP_MUX_BUFFER_SIZE];
 
     if (buf != NULL) 
     {
-        int j = 0;
+        int i = 0;
+        int str_len = 0;
+        int written_len = 0;
+        unsigned char cur_byte = 0;
         char *cur_str = dump_buf_str;
-        unsigned char ch;
-        while((j < COL_SIZE) && (j < count))
+        
+        while (i  < count)
         {
-            ch = buf[j];
-            if ((ch < 32) || (ch > 126))
+            cur_byte = buf[i];
+
+            if ((cur_byte < 32) || (cur_byte > 126))
+        {
+                // not a character
+                written_len = snprintf(cur_str, DUMP_MUX_BUFFER_SIZE - str_len, "%02X ", cur_byte);
+                if (written_len > 0 && written_len < (DUMP_MUX_BUFFER_SIZE - str_len))
             {
-                *cur_str = '.';
-            } else
-            {
-                *cur_str = ch;
+                    // written_len characters are successfully written
+                    str_len += written_len;
+                    cur_str += written_len;
+                }
+                else
+                {
+                    break;
+                }
             }
-            cur_str++;
-            j++;
+            else
+            {
+                // a character
+                *cur_str = cur_byte;
+                ++str_len;
+                ++cur_str;
+            }
+            
+            if ((str_len+1) >= DUMP_MUX_BUFFER_SIZE)
+            {
+                break;
+            }
+            
+            ++i;
         }
         *cur_str = 0;
-        printk("%s:count:%d [%s]\n", txt, count, dump_buf_str);                        
+        TS0710_LOG("%s:count:%d [ %s]", txt, count, dump_buf_str);
     }
     else
     {
-        printk("%s: buffer is NULL\n", txt);                 
+        TS0710_LOG("%s: buffer is NULL", txt);
     }
 }
 #else
-#define dump_mux_buffer(...)
-#endif
+#define DUMP_MUX_BUFFER(...)
+#endif //LGE_DUMP_MUX_BUFFER
+//LGE_TELECA_CR1317_DATA_THROUGHPUT END
 
 static int mux_write(struct tty_struct *tty,
 		     const unsigned char *buf, int count)

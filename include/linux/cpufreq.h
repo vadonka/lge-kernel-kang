@@ -255,11 +255,6 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver_data);
 
 void cpufreq_notify_transition(struct cpufreq_freqs *freqs, unsigned int state);
 
-#ifdef CONFIG_CPU_FREQ_STAT
-extern void cpufreq_exit_idle(int cpu, unsigned long ticks);
-#else
-#define cpufreq_exit_idle(int cpu, unsigned long ticks) do {} while (0)
-#endif
 
 static inline void cpufreq_verify_within_limits(struct cpufreq_policy *policy, unsigned int min, unsigned int max) 
 {
@@ -340,9 +335,6 @@ extern struct cpufreq_governor cpufreq_gov_userspace;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND)
 extern struct cpufreq_governor cpufreq_gov_ondemand;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_ondemand)
-#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_MINMAX)
-extern struct cpufreq_governor cpufreq_gov_minmax;
-#define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_minmax)
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_CONSERVATIVE)
 extern struct cpufreq_governor cpufreq_gov_conservative;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_conservative)

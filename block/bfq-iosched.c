@@ -2295,7 +2295,7 @@ static int bfq_may_queue(struct request_queue *q, int rw)
 	if (cic == NULL)
 		return ELV_MQUEUE_MAY;
 
-	bfqq = cic_to_bfqq(cic, rw_is_sync(rw));
+	bfqq = cic_to_bfqq(cic, rw & REQ_RW_SYNC);
 	if (bfqq != NULL) {
 		bfq_init_prio_data(bfqq, cic->ioc);
 		bfq_prio_boost(bfqq);
@@ -2443,10 +2443,11 @@ static void bfq_kick_queue(struct work_struct *work)
 	struct bfq_data *bfqd =
 		container_of(work, struct bfq_data, unplug_work);
 	struct request_queue *q = bfqd->queue;
+	unsigned long flags;
 
-	spin_lock_irq(q->queue_lock);
+	spin_lock_irqsave(q->queue_lock, flags);
 	__blk_run_queue(q);
-	spin_unlock_irq(q->queue_lock);
+	spin_unlock_irqrestore(q->queue_lock, flags);
 }
 
 /*

@@ -382,7 +382,7 @@ static const NvOdmIoAddress s_lge_GyroAddresses[] =
     { NvOdmIoModule_Vdd,  0x00, Max8907PmuSupply_LDO8 , 0 },  /* LDO8 1.8V VCC_SENSOR_1V8*/
 };
 
-//Proximity 
+//Proximity
 static const NvOdmIoAddress s_lge_ProximityAddresses[] =
 {
 	{ NvOdmIoModule_I2c,  0x01, 0x44, 0 }, /* I2C device address is 0x44 */

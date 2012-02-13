@@ -200,7 +200,7 @@ static int virtblk_ioctl(struct block_device *bdev, fmode_t mode,
 	if (!virtio_has_feature(vblk->vdev, VIRTIO_BLK_F_SCSI))
 		return -ENOTTY;
 
-	return scsi_cmd_ioctl(disk->queue, disk, mode, cmd,
+	return scsi_cmd_blk_ioctl(bdev, mode, cmd,
 			      (void __user *)data);
 }
 

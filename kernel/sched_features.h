@@ -3,9 +3,7 @@
  * considers the task to be running during that period. This gives it
  * a service deficit on wakeup, allowing it to run sooner.
  */
-SCHED_FEAT(FAIR_SLEEPERS, 1)		 /* Apply to all wakeups */
-SCHED_FEAT(FAIR_SLEEPERS_INTERACTIVE, 0) /* Selects interactive wakeups */
-SCHED_FEAT(FAIR_SLEEPERS_TIMER, 0)	 /* Selects timer-driven wakeups */
+SCHED_FEAT(FAIR_SLEEPERS, 1)
 
 /*
  * Only give sleepers 50% of their service deficit. This allows

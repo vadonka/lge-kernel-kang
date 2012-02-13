@@ -826,11 +826,7 @@ static void DfsParametersInit(NvRmDfs* pDfs)
 
 #ifdef CONFIG_FAKE_SHMOO
 	// Set maximum scaling frequency to 1100mhz at boot
-#ifndef CONFIG_LOWER_CPU_FREQ
-	pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1100000;
-#else
 	pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1015000;
-#endif // CONFIG_LOWER_CPU_FREQ
 #endif // FAKE_SHMOO
 
     pDfs->CpuCornersShadow.MinKHz =
@@ -1538,9 +1534,9 @@ static NvRmPmRequest DfsThread(NvRmDfs* pDfs)
         if (NeedClockUpdate || pDfs->VoltageScaler.UpdateFlag ||
             pDfs->ThermalThrottler.TcorePolicy.UpdateFlag)
         {
-            NvRmPrivLockSharedPll();
-            if (!pDfs->VoltageScaler.StopFlag)
+                       if (!pDfs->VoltageScaler.StopFlag)
             {
+                NvRmPrivLockSharedPll();
                 // Check temperature and throttle DFS clocks if necessry. Make
                 // sure V/F scaling is running while throttling is in progress.
                 pDfs->VoltageScaler.UpdateFlag =
@@ -1556,8 +1552,8 @@ static NvRmPmRequest DfsThread(NvRmDfs* pDfs)
                 NvOsIntrMutexLock(pDfs->hIntrMutex);
                 pDfs->CurrentKHz = DfsKHz;
                 NvOsIntrMutexUnlock(pDfs->hIntrMutex);
-            }
             NvRmPrivUnlockSharedPll();
+            }
 
             // Complete synchronous busy hint processing.
             if (pDfs->BusySyncState == NvRmDfsBusySyncState_Execute)

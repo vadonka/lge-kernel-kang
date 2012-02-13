@@ -427,14 +427,13 @@ config JRCU_LAZY
          If unsure, say N.
 
 config PREEMPT_COUNT_CPU
-       # bool "Let one CPU look at another CPUs preemption count"
-       bool
-       default n
-       help
-         If Y then the preempt_count_cpu() function will be compiled into
-         the kernel.  Its existance impacts kernel performance slightly,
-         so this option should be selected only if other kernel features
-         that use preempt_count_cpu() are also selected.
+	bool "Let one CPU look at another CPUs preemption count"
+	default n
+	help
+	  If Y then the preempt_count_cpu() function will be compiled into
+	  the kernel.  Its existance impacts kernel performance slightly,
+	  so this option should be selected only if other kernel features
+	  that use preempt_count_cpu() are also selected.
 
 config RCU_TRACE
 	bool "Enable tracing for RCU"
@@ -557,6 +556,16 @@ menuconfig CGROUPS
 	  Say N if unsure.
 
 if CGROUPS
+
+config CFS_BOOST
+	bool "Boost CFS"
+	depends on CGROUPS
+	default n
+
+config CFS_NICE
+	int "CFS Nice Value"
+	depends on CGROUPS
+	default -17
 
 config CGROUP_DEBUG
 	bool "Example debug cgroup subsystem"
@@ -695,16 +704,17 @@ endif #CGROUP_SCHED
 endif # CGROUPS
 
 config SCHED_AUTOGROUP
-    bool "Automatic process group scheduling"
-    select CGROUPS
-    select CGROUP_SCHED
-    select FAIR_GROUP_SCHED
-    help
-      This option optimizes the scheduler for common desktop workloads by
-      automatically creating and populating task groups.  This separation
-      of workloads isolates aggressive CPU burners (like build jobs) from
-      desktop applications.  Task group autogeneration is currently based
-      upon task tty association.
+	bool "Automatic process group scheduling"
+	select EVENTFD
+	select CGROUPS
+	select CGROUP_SCHED
+	select FAIR_GROUP_SCHED
+	help
+	  This option optimizes the scheduler for common desktop workloads by
+	  automatically creating and populating task groups.  This separation
+	  of workloads isolates aggressive CPU burners (like build jobs) from
+	  desktop applications.  Task group autogeneration is currently based
+	  upon task session.
 
 config MM_OWNER
 	bool

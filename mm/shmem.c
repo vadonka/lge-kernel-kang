@@ -2680,6 +2680,7 @@ void shmem_set_file(struct vm_area_struct *vma, struct file *file)
 		fput(vma->vm_file);
 	vma->vm_file = file;
 	vma->vm_ops = &shmem_vm_ops;
+	vma->vm_flags |= VM_CAN_NONLINEAR;
 }
 
 /**
@@ -2694,12 +2695,6 @@ int shmem_zero_setup(struct vm_area_struct *vma)
 	file = shmem_file_setup("dev/zero", size, vma->vm_flags);
 	if (IS_ERR(file))
 		return PTR_ERR(file);
-	//shmem_set_file(vma, file);
-	//let shared anonymous be nonlinear again
-	if (vma->vm_file)
-		fput(vma->vm_file);
-	vma->vm_file = file;
-	vma->vm_ops = &shmem_vm_ops;
-	vma->vm_flags |= VM_CAN_NONLINEAR;
+	shmem_set_file(vma, file);
 	return 0;
 }

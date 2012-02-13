@@ -23,8 +23,8 @@ struct device;
 
 enum led_brightness {
 	LED_OFF		= 0,
-	LED_HALF	= 127,
-	LED_FULL	= 255,
+	LED_HALF	= 100,
+	LED_FULL	= 200,
 };
 
 struct led_classdev {

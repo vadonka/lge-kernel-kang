@@ -595,7 +595,7 @@ static int loop_thread(void *data)
 	struct loop_device *lo = data;
 	struct bio *bio;
 
-#ifdef CFS_BOOST
+#ifdef CONFIG_CFS_BOOST
 	sched_privileged_task(current);
 #else
  	set_user_nice(current, -20);

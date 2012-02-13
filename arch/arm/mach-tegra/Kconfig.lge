@@ -8,8 +8,6 @@ choice
        depends on MACH_STAR
 endchoice
 
-menu "Tegra2 OC specific settings"
-
 config FAKE_SHMOO
 	bool "Tegra2 Overclocking Enable"
 	depends on MACH_STAR
@@ -20,106 +18,16 @@ config BOOST_PERIPHERALS
 	depends on MACH_STAR
 	default y
 
-menu "CPU second core management"
-
-config NVRM_CPU1_CORE_BOOST
-	bool "Boost CPU second core"
-	default y
-	
-if NVRM_CPU1_CORE_BOOST
-
-config CPU1_ON_MIN_KHZ_BOOSTED
-	int "CPU1 is turned Off when cpu clock is below this freq"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 503000
-	
-config CPU1_ON_PENDING_MS_BOOSTED
-	int "CPU1 off pending time"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 1500
-	
-config CPU1_OFF_MAX_KHZ_BOOSTED
-	int "CPU1 is turned On when cpu clock is above this freq"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 655000
-	
-config CPU1_OFF_PENDING_MS_BOOSTED
-	int "CPU1 on pending time"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 200
-
-endif # NVRM_CPU1_CORE_BOOST
-
-if !NVRM_CPU1_CORE_BOOST
-
-config CPU1_ON_MIN_KHZ
-	int "CPU1 is turned Off when cpu clock is below this freq"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 816000
-	
-config CPU1_ON_PENDING_MS
-	int "CPU1 off pending time"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 1000
-	
-config CPU1_OFF_MAX_KHZ
-	int "CPU1 is turned On when cpu clock is above this freq"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 655000
-	
-config CPU1_OFF_PENDING_MS
-	int "CPU1 on pending time"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 300
-
-endif # !NVRM_CPU1_CORE_BOOST
-
-endmenu	
-	
-config MAX_AVP_OC_FREQ_BOOST
-	bool "Boost AVP Freq"
-	default y
-
-if !MAX_AVP_OC_FREQ_BOOST
-
-config MAX_AVP_OC_FREQ_LOW
-	int "AVP Overclock Low Frequency"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+config MAX_AVP_OC_FREQ
+	int "AVP Overclock Frequency"
 	default 240000
+        depends on FAKE_SHMOO && BOOST_PERIPHERALS
 
-endif # MAX_AVP_OC_FREQ_BOOST
+config MAX_3D_OC_FREQ
+	int "3D Overclock Frequency"
+	default 340000
+        depends on FAKE_SHMOO && BOOST_PERIPHERALS
 
-if MAX_AVP_OC_FREQ_BOOST
-	
-config MAX_AVP_OC_FREQ_HIGH
-	int "AVP Overclock High Frequency"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 280000
-
-endif # MAX_AVP_OC_FREQ_BOOST
-
-config MAX_3D_OC_FREQ_BOOST
-	bool "Boost 3D Freq"
-	default y
-
-if !MAX_3D_OC_FREQ_BOOST
-
-config MAX_3D_OC_FREQ_LOW
-	int "3D Overclock Low Frequency"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 350000
-
-endif # MAX_3D_OC_FREQ_BOOST
-
-if MAX_3D_OC_FREQ_BOOST
-	
-config MAX_3D_OC_FREQ_HIGH
-	int "3D Overclock High Frequency"
-	depends on FAKE_SHMOO && BOOST_PERIPHERALS
-	default 400000
-
-endif # MAX_3D_OC_FREQ_BOOST
-	
 config DDR2_SDRAM_FREQ
 	int "DDR2 SDRAM Frequency"
 	default 300000
@@ -127,112 +35,6 @@ config DDR2_SDRAM_FREQ
 config GPU_MEM_CARVEOUT_SZ
 	int "GPU Memory Carveout Size"
 	default 128
-
-menu "LGE Processor Voltage Table"
-
-config LOWER_CPU_FREQ
-	bool "Lowered CPU freq's"
-	depends on MACH_STAR
-	default n
-
-config CPU_UNDERVOLT
-	bool "Undervolt CPU voltages"
-	default n
-
-if !CPU_UNDERVOLT
-	config VOLTAGE_DEF_216
-		int "216 Mhz"
-		default 790
-
-	config VOLTAGE_DEF_503
-		int "503 Mhz"
-		default 800
-
-	config VOLTAGE_DEF_655
-		int "655 Mhz"
-		depends on LOWER_CPU_FREQ
-		default 820
-
-	config VOLTAGE_DEF_816
-		int "816 Mhz"
-		default 850
-
-	config VOLTAGE_DEF_1015
-		int "1015 Mhz"
-		default 950
-
-	config VOLTAGE_DEF_1100
-		int "1100 Mhz"
-		default 1000
-
-	config VOLTAGE_DEF_1216
-		int "1216 Mhz"
-		default 1100
-
-	config VOLTAGE_DEF_1408
-		int "1408 Mhz"
-		default 1200
-
-	config VOLTAGE_DEF_1504
-		int "1504 Mhz"
-		depends on !LOWER_CPU_FREQ
-		default 1300
-
-endif # CPU_UNDERVOLT
-
-if CPU_UNDERVOLT
-
-	config VOLTAGE_UV_216
-		int "216 Mhz"
-		default 770
-
-	config VOLTAGE_UV_503
-		int "503 Mhz"
-		default 770
-
-	config VOLTAGE_UV_655
-		int "655 Mhz"
-		depends on LOWER_CPU_FREQ
-		default 780
-
-	config VOLTAGE_UV_816
-		int "816 Mhz"
-		default 830
-
-	config VOLTAGE_UV_1015
-		int "1015 Mhz"
-		default 930
-
-	config VOLTAGE_UV_1100
-		int "1100 Mhz"
-		default 970
-
-	config VOLTAGE_UV_1216
-		int "1216 Mhz"
-		default 1070
-
-	config VOLTAGE_UV_1408
-		int "1408 Mhz"
-		default 1170
-
-	config VOLTAGE_UV_1504
-		int "1504 Mhz"
-		depends on !LOWER_CPU_FREQ
-		default 1270
-
-endif # CPU_UNDERVOLT
-
-endmenu
-
-config FAN5355_UNDERVOLT
-	bool "FAN5355 Undervolting"
-	default n
-
-config RAMHACK
-	int "Extra system memory (needed by the compiler)"
-	default 0
-
-endmenu
 
 config STAR_PMIC
 	bool "star pmic test"

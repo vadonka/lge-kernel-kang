@@ -2,13 +2,6 @@
 
 menu "LGE STAR device driver"
 
-config USE_DS_BATTERY_DRIVER
-	bool "Star Battery Driver Select"
-	default y
-	depends on MACH_STAR
-	help
-	  Select Battery Driver type
-
 config STAR_BATTERY_CHARGER
 	bool "Star Battery & Charger Driver"
 	default y

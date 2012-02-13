@@ -347,9 +347,9 @@ static void __init register_spi_ipc_devices(void)
 
 	tegra_spi_ipc_devices[0].bus_num = instance;
 	tegra_spi_ipc_devices[0].chip_select = cs;
-	if (spi_register_board_info(tegra_spi_ipc_devices, ARRAY_SIZE(tegra_spi_ipc_devices)) != 0) {
+	/*if (spi_register_board_info(tegra_spi_ipc_devices, ARRAY_SIZE(tegra_spi_ipc_devices)) != 0) {
 		pr_err("%s: spi_register_board_info returned error\n", __func__);
-	}
+	}*/
 }
 
 
