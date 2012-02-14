@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
-# Linux kernel version: 2.6.32.56
-# Tue Feb  7 12:39:36 2012
+# Linux kernel version: 2.6.32.57
+# Tue Feb 14 08:59:02 2012
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1629,6 +1629,8 @@ CONFIG_ANDROID_LOW_MEMORY_KILLER=y
 #
 # CONFIG_RAR_REGISTER is not set
 # CONFIG_IIO is not set
+CONFIG_RAMZSWAP=m
+CONFIG_RAMZSWAP_STATS=y
 CONFIG_ZRAM=m
 CONFIG_ZRAM_NUM_DEVICES=1
 CONFIG_ZRAM_DEFAULT_PERCENTAGE=25
