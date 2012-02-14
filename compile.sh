@@ -12,6 +12,8 @@ export ch=/home/android/android/compiled
 export cm7b=/home/android/android/cm7orig_kernel
 # LOG file location
 export WARNLOG=`pwd`/warn.log
+# Kernel installer source
+export kinstsrc=/home/android/android/kernel-installer/source
 ######################################################
 
 # Check executables
@@ -80,7 +82,7 @@ export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'
 
 export cdir=`date +%y%m%d%H%M`$kver
 mkdir -p $ch/$cdir
-unzip -qq empty.zip -d $ch/$cdir
+cp -r $kinstsrc/* -d $ch/$cdir
 
 for m in `find $kh -name '*.ko'`; do
     cp $m $ch/$cdir/system/lib/modules
