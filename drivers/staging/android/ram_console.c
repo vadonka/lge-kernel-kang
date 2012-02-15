@@ -356,7 +356,9 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 #else
        #define RAM_RESERVED_SIZE 100*1024
 #endif
-       reserved_start = start+ buffer_size;
+       //RAMHACK reboot fix ported from the CM9 ICS kernel
+       //reserved_start = start+ buffer_size;
+       reserved_start = start+ buffer_size - ((128-CONFIG_GPU_MEM_CARVEOUT_SZ)*SZ_1M);
        reserved_buffer = ioremap(reserved_start, RAM_RESERVED_SIZE);
        //memset(reserved_buffer, 0x00, 100*1024);
        printk ("ram console : ram_console virtual addr = 0x%x \n", buffer);
