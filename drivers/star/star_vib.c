@@ -42,7 +42,7 @@ static volatile int vib_stay_time = 0;
 static atomic_t is_enable = ATOMIC_INIT(0);
 //static struct timer_list vib_timer;
 
-/*
+
 static NvU32 toggle = 0;
 static void star_vib_work_func(struct work_struct *work)
 {
@@ -70,7 +70,7 @@ static void star_vib_work_func(struct work_struct *work)
 	schedule_delayed_work(&g_vib->delayed_work_vib,150);
 	
 }
-*/
+
 
 // 20100903  Power control bug fix [START]
 static int star_vib_set_power_rail( NvU32 vdd_id, NvBool is_enable )
@@ -223,7 +223,7 @@ static ssize_t star_vib_stay_show(struct device *dev, struct device_attribute *a
 
 static ssize_t star_vib_stay_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
-	long int value;
+	int value;
 	unsigned long timeout;
 	sscanf(buf, "%ld", &value );
 	#if VIB_DEBUG
@@ -273,7 +273,7 @@ static ssize_t star_vib_onoff_show(struct device *dev, struct device_attribute *
 static ssize_t star_vib_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32 val = 0;
-//	unsigned int timeout = 0;
+	unsigned int timeout = 0;
 	val = simple_strtoul(buf, NULL, 10);
 	
 //	timeout = vib_stay_time;
@@ -468,19 +468,18 @@ int star_vib_resume(struct platform_device *dev)
 }
 
 
-static int __devexit star_vib_remove( struct platform_device *pdev)
+static int star_vib_remove( struct platform_device *pdev)
 {
 	return 0;
 }
 
 static struct platform_driver star_vib_driver = {
     .probe = star_vib_probe,
-    .remove = __devexit_p(star_vib_remove),
+    .remove = star_vib_remove,
     .suspend = star_vib_suspend,
     .resume = star_vib_resume,    
     .driver = {
         .name = "star_vib_name",
-        .owner = THIS_MODULE,
     },
 };
 
