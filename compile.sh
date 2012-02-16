@@ -14,6 +14,8 @@ export cm7b=/home/android/android/cm7orig_kernel
 export WARNLOG=`pwd`/warn.log
 # Kernel installer source
 export kinstsrc=/home/android/android/kernel-installer/source
+# Maximum thread number
+export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 ######################################################
 
 # Check executables
@@ -73,9 +75,9 @@ fi
 export cc=arm-linux-gnueabi-
 export USE_CCACHE=1
 export CCACHE_DIR=~/android/ccache
-make clean
-make ARCH=arm CROSS_COMPILE=$cc clean
-make ARCH=arm CROSS_COMPILE=$cc 2> $WARNLOG
+make clean -j $mthd
+make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
+make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
