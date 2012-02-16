@@ -70,23 +70,22 @@ struct cntry_locales_custom {
 #define SOFTAP 1
 
 
-#define	WL_IW_RSSI_MINVAL		-200 
-#define	WL_IW_RSSI_NO_SIGNAL	-91 
-#define	WL_IW_RSSI_VERY_LOW		-80	
-#define	WL_IW_RSSI_LOW			-70	
-#define	WL_IW_RSSI_GOOD			-68	
+#define	WL_IW_RSSI_MINVAL		-200	
+#define	WL_IW_RSSI_NO_SIGNAL	-91	
+#define	WL_IW_RSSI_VERY_LOW	-80	
+#define	WL_IW_RSSI_LOW		-70	
+#define	WL_IW_RSSI_GOOD		-68	
 #define	WL_IW_RSSI_VERY_GOOD	-58	
 #define	WL_IW_RSSI_EXCELLENT	-57	
-#define	WL_IW_RSSI_INVALID		0 
+#define	WL_IW_RSSI_INVALID	 0	
 #define MAX_WX_STRING 80
 #define isprintf(c) bcm_isprint(c)
-
 #define WL_IW_SET_ACTIVE_SCAN	(SIOCIWFIRSTPRIV+1)
 #define WL_IW_GET_RSSI			(SIOCIWFIRSTPRIV+3)
 #define WL_IW_SET_PASSIVE_SCAN	(SIOCIWFIRSTPRIV+5)
 #define WL_IW_GET_LINK_SPEED	(SIOCIWFIRSTPRIV+7)
 #define WL_IW_GET_CURR_MACADDR	(SIOCIWFIRSTPRIV+9)
-#define WL_IW_SET_STOP			(SIOCIWFIRSTPRIV+11)
+#define WL_IW_SET_STOP				(SIOCIWFIRSTPRIV+11)
 #define WL_IW_SET_START			(SIOCIWFIRSTPRIV+13)
 
 
@@ -108,7 +107,7 @@ struct cntry_locales_custom {
 #endif	/* defined(CONFIG_LGE_BCM432X_PATCH) && defined(SOFTAP) */
 
 
-#define			G_SCAN_RESULTS 8*1024
+#define 		G_SCAN_RESULTS 8*1024
 #define 		WE_ADD_EVENT_FIX	0x80
 #define          G_WLAN_SET_ON	0
 #define          G_WLAN_SET_OFF	1
