@@ -245,8 +245,8 @@ extern "C"
 #define NVRM_CPU1_ON_MIN_KHZ (810000)
 #define NVRM_CPU1_OFF_MAX_KHZ (850000)
 
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#define NVRM_CPU1_OFF_PENDING_MS (600)
+#define NVRM_CPU1_ON_PENDING_MS (1500)
+#define NVRM_CPU1_OFF_PENDING_MS (1000)
 
 /**
  * Defines AP20 Thermal policy parameters.
@@ -280,7 +280,7 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
-#define NVRM_AP20_LOW_CORE_MV (850)
+#define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
 /// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
