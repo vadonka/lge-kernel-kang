@@ -3,8 +3,6 @@
 #standard version
 ./initialize.sh
 ./compile.sh 0
-#32m shared
-./compile.sh 32 shared
 #32m
 ./compile.sh 32
 #48m
