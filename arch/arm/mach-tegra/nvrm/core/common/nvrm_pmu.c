@@ -527,6 +527,12 @@ NvRmPmuUpdateBatteryInfo(
 			pBatStatus,
 			&BatteryData))
 	{
+        pBatData->batteryAverageCurrent = BatteryData.batteryAverageCurrent;
+        pBatData->batteryAverageInterval = BatteryData.batteryAverageInterval;
+        pBatData->batteryCurrent = BatteryData.batteryCurrent;
+        pBatData->batteryLifePercent = BatteryData.batteryLifePercent;
+        pBatData->batteryLifeTime = BatteryData.batteryLifeTime;
+        pBatData->batteryMahConsumed = BatteryData.batteryMahConsumed;
         pBatData->batteryTemperature = BatteryData.batteryTemperature;
         pBatData->batteryVoltage = BatteryData.batteryVoltage;
         NvOsMutexUnlock(s_Pmu.hMutex);
