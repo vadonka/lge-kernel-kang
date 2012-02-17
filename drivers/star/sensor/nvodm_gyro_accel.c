@@ -157,9 +157,7 @@ void NvGyroAccelSetPowerRail(NvOdmServicesPmuHandle hPMUDevice, NvU32 Id, NvBool
 		if (settletime)
 			NvOdmOsWaitUS(settletime);  // wait to settle power
 	}
-	NvOdmServicesPmuClose(hPMUDevice);
 }
-
 
 /*
  * Get interrupt type and source.
