@@ -1656,12 +1656,6 @@ static int _nvmap_handle_unpin(struct nvmap_handle *h)
 {
 	int ret = 0;
 
-	if(!h || !h->alloc ) {
-		WARN_ON(1);
-		pr_err("%s invalid handle, returning -EINVAL\n",__func__);
-		return -EINVAL;
-	}
-
 	if (atomic_add_return(0, &h->pin)==0) {
 		pr_err("%s: %s attempting to unpin an unpinned handle\n",
 			__func__, current->comm);
@@ -1708,11 +1702,6 @@ static int _nvmap_handle_pin_fast(unsigned int nr, struct nvmap_handle **h)
 {
 	unsigned int i;
 	int ret = 0;
-
-	if ( !(h && *h && ((*h)->alloc)) ) {
-		pr_err("%s invalid handle, returning -EINVAL\n",__func__);
-		return -EINVAL;
-	}
 
 	mutex_lock(&nvmap_pin_lock);
 	for (i=0; i<nr && !ret; i++) {
@@ -1794,11 +1783,6 @@ static int _nvmap_do_pin(struct nvmap_file_priv *priv,
 	unsigned int i;
 	struct nvmap_handle **h = (struct nvmap_handle **)refs;
 	struct nvmap_handle_ref *r;
-
-	if ((*h==NULL) || ( !(*h)->alloc )) {
-		pr_err("%s invalid handle, returning -EINVAL\n",__func__);
-		return -EINVAL;
-	}
 
 	/* to optimize for the common case (client provided valid handle
 	 * references and the pin succeeds), increment the handle_ref pin
@@ -3291,10 +3275,7 @@ static ssize_t _nvmap_do_rw_handle(struct nvmap_handle *h, int is_read,
 	void *addr = NULL;
 
 	h = _nvmap_handle_get(h);
-	if ((!h)  || ( !h->alloc )) {
-		pr_err("%s invalid handle, returning -EINVAL\n",__func__);
-		return -EINVAL;
-	}
+	if (!h) return -EINVAL;
 
 	if (elem_size == h_stride &&
 	    elem_size == sys_stride) {
@@ -3848,12 +3829,6 @@ void NvRmMemPinMult(NvRmMemHandle *hMems, NvU32 *addrs, NvU32 Count)
 	struct nvmap_handle **h = (struct nvmap_handle **)hMems;
 	unsigned int i;
 	int ret;
-
-	if ( !(*h)->alloc ) {
-		pr_err("%s invalid handle\n",__func__);
-		*addrs=0;
-		return;
-	}
 
 	do {
 		ret = _nvmap_handle_pin_fast(Count, h);
