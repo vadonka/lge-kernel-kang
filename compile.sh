@@ -49,8 +49,13 @@ else
 fi
 
 if [ "$2" == "shared" ]; then
-	export csize="128"
-	echo "Using shared memory mode"
+    if [ -z $3 ]; then
+	export srh="0"
+    else
+	let srh=$3
+    fi
+	export csize=$((128-$rh+$srh))
+	echo "Using shared memory mode: $(($rh)) MB ramhack with $(($srh)) MB shared memory"
 else
 	let csize=$((128-$rh))
 	echo "Using traditional ramhack mode"
