@@ -14,8 +14,9 @@ export cm7b=/home/android/android/cm7orig_kernel
 export WARNLOG=`pwd`/warn.log
 # Kernel installer source
 export kinstsrc=/home/android/android/kernel-installer/source
-# Maximum thread number
+# Maximum thread number, multiplier
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
+export mthm=1
 ######################################################
 
 # Check executables
@@ -77,12 +78,14 @@ else
 	sed -i "s/$cver/$nver/g" $kh/.config
 fi
 
+export starttime=`date +%s`
 export cc=arm-linux-gnueabi-
 export USE_CCACHE=1
 export CCACHE_DIR=~/android/ccache
-make clean -j $mthd
+make clean -j $(($mthd*$mthm))
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
+export endtime=`date +%s`
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
@@ -107,3 +110,5 @@ cd $ch/$cdir && zip -rq9 $ch/$cdir.zip .
 cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
 
 fi
+
+echo "Building time: $(($endtime/60-$starttime/60)) minutes"
