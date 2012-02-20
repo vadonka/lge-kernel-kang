@@ -416,7 +416,7 @@ NvOdmGyroAccelOpen(NvOdmGyroAccelHandle* hDevice)
 	const NvOdmPeripheralConnectivity *pConnectivity;
 	NvOdmGyroAccelHandle  hGyro;
 	NvU32    reg_val = 0 ;
-#if 1
+#if DEBUG_LOG
 	printk(" ## MPU3050 : [NvOdmGyroOpen:%d] \n",__LINE__) ;
 #endif
 
@@ -453,7 +453,7 @@ NvOdmGyroAccelOpen(NvOdmGyroAccelHandle* hDevice)
 				hGyro->nDevAddr = (pConnectivity->AddressList[i].Address << 1);
 				foundI2cModule = NV_TRUE;
 				foundGpio = NV_TRUE; //test
-#if 1
+#if DEBUG_LOG
 				printk("## MPU3050 I2CChannelId = %x. ## \n", hGyro->I2CChannelId);
 				printk("## MPU3050 i2c address = %x. ## \n", hGyro->nDevAddr);
 #endif
@@ -470,7 +470,7 @@ printk("## MPU3050 GPIOPinINT = %x. ## \n", hGyro->GPIOPinINT);
 break;*/
 			case NvOdmIoModule_Vdd:
 				hGyro->VddId = pConnectivity->AddressList[i].Address;
-#if 1
+#if DEBUG_LOG
 				printk("## MPU3050 NvOdmIoModule_VddId = %x. ## \n", hGyro->VddId);
 #endif
 				// Power on accelerometer according to Vddid

@@ -15,6 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/lzo.h>
 #include <asm/unaligned.h>
+
 #include "lzodefs.h"
 
 static noinline size_t

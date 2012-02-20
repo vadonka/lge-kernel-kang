@@ -95,7 +95,7 @@ static int page_zero_filled(void *ptr)
 	for (pos = 0; pos != PAGE_SIZE / sizeof(*page); pos++) {
 		if (page[pos])
 			return 0;
-	}
+}
 
 	return 1;
 }
@@ -131,7 +131,7 @@ static void zram_free_page(struct zram *zram, size_t index)
 		if (zram_test_flag(zram, index, ZRAM_ZERO)) {
 			zram_clear_flag(zram, index, ZRAM_ZERO);
 			zram_stat_dec(&zram->stats.pages_zero);
-		}
+	}
 		return;
 	}
 

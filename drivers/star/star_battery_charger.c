@@ -2360,11 +2360,24 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Voltage Status
+	if (star_batt_dev->batt_vol == batt_dev->batt_vol)
+	{
+		vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+		vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
+	}
+	else /* Vol (4250 - 3250 = 1000) / 200 sec : 1000mV = 2 : 10 / 2000 sec : 1000mV = 2 : 1 */
+	{
+		//vol_period_data = (NvU32)(NVBATTERY_POLLING_INTERVAL*HZ
+			//- (NvU32)(2/10)*HZ*STAR_BAT_MIN(1000, (STAR_BAT_MAX(star_batt_dev->batt_vol, batt_dev->batt_vol)-STAR_BAT_MIN(star_batt_dev->batt_vol, batt_dev->batt_vol))));
+		//vol_period_wake = (NvU32)(SLEEP_BAT_CHECK_PERIOD
+			//- 2*STAR_BAT_MIN(1000, (STAR_BAT_MAX(star_batt_dev->batt_vol, batt_dev->batt_vol)-STAR_BAT_MIN(star_batt_dev->batt_vol, batt_dev->batt_vol))));
 		vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
 		vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
+	}
+
 	// Temperatue Status
-	if ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp)-STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) < 100) // 10 degree
+	if ((STAR_BAT_MAX(star_batt_dev->batt_vol, batt_dev->batt_vol)-STAR_BAT_MIN(star_batt_dev->batt_vol, batt_dev->batt_vol)) < 100) // 10 degree
 	{
 		temp_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
 		temp_period_wake = SLEEP_BAT_CHECK_PERIOD;
@@ -2375,18 +2388,59 @@ static void star_battery_data_poll_period_change(void)
 		temp_period_wake = CRITICAL_BAT_CHECK_PERIOD*2;
 	}
 
-	// Gauge Status
+	if (batt_dev->BatteryGauge_on == NV_FALSE)
+	{
+		if (batt_dev->BatteryLifePercent == batt_dev->Capacity_Voltage)
+		{
+			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
+		}
+		else /* gauge 100 / 200sec : 100% = 2 : 1 / 2000sec : 100% = 20 : 1 */
+		{
+			//gauge_period_data = (NvU32)(NVBATTERY_POLLING_INTERVAL*HZ
+				//- 10*HZ*STAR_BAT_MIN(20, (STAR_BAT_MAX(batt_dev->BatteryLifePercent, batt_dev->Capacity_Voltage)-STAR_BAT_MIN(batt_dev->BatteryLifePercent, batt_dev->Capacity_Voltage))));
+			//gauge_period_wake = (NvU32)(SLEEP_BAT_CHECK_PERIOD
+				//- 100*STAR_BAT_MIN(20, (STAR_BAT_MAX(batt_dev->BatteryLifePercent, batt_dev->Capacity_Voltage)-STAR_BAT_MIN(batt_dev->BatteryLifePercent, batt_dev->Capacity_Voltage))));
 			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
 			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
+		}
+	}
+	else // batt_dev->BatteryGauge_on == NV_TRUE
+	{
+		if (batt_dev->BatteryLifePercent <= batt_dev->BatteryGauge)
+		{
+			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
+		}
+		else /* gauge follower run rapidly with TA/USB */
+		{
+			gauge_period_data = GAUGE_FOLLOW_TIME*HZ;
+			gauge_period_wake = GAUGE_FOLLOW_TIME*2;
+		}
+	}
+
 	batt_dev->battery_poll_interval = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_data, vol_period_data), STAR_BAT_MIN(temp_period_data, gauge_period_data));
 	batt_dev->sleep_bat_check_period = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_wake, vol_period_wake), STAR_BAT_MIN(temp_period_wake, gauge_period_wake));
+	//batt_dev->sleep_bat_check_period = STAR_BAT_MAX(CRITICAL_BAT_CHECK_PERIOD, (100*(NvU32)((batt_dev->sleep_bat_check_period + 10)/100) - 10));
 
-	LDB("[bat_sysfs] polling_interval: poll/wake[%d, %d] : Cri[%d, %d]/Vol[%d, %d]/Tem[%d, %d]/Gau[%d, %d]"
-		, batt_dev->battery_poll_interval/HZ, batt_dev->sleep_bat_check_period
-		, critical_period_data/HZ, critical_period_wake, vol_period_data/HZ, vol_period_wake
-		, temp_period_data/HZ, temp_period_wake, gauge_period_data/HZ, gauge_period_wake
-		);
+	if (batt_dev->sleep_bat_check_period_to_cp != batt_dev->sleep_bat_check_period)
+	{
+		batt_dev->sleep_bat_check_period_to_cp = batt_dev->sleep_bat_check_period;
+#if 0
+#if defined (STAR_BATTERY_AT_COMMAND)
+			batt_dev->at_comm_want = AT_COMM_CBCDC;
+			batt_dev->at_comm_ready = NV_TRUE;
+#else // STAR_BATTERY_AT_COMMAND
+			AtComm->flag_at_comm_want = AT_COMM_CBCDC;
+			AtComm->flag_at_comm_ready = NV_TRUE;
+#endif // STAR_BATTERY_AT_COMMAND
+		star_cp_at_comm_request();
+#endif // #if 0 for CBC Test
+	}
+
+	LDB("[bat_sysfs] polling_interval: Critical(%d, %d), Vol(%d, %d), Tem(%d, %d), Gauge(%d, %d)", critical_period_data/HZ, critical_period_wake, vol_period_data/HZ, vol_period_wake, temp_period_data/HZ, temp_period_wake, gauge_period_data/HZ, gauge_period_wake);
+	LDB("[bat_sysfs] polling_interval Change : data(%d), wake(%d)", batt_dev->battery_poll_interval, batt_dev->sleep_bat_check_period);
 }
 
 static void star_gauge_follower_func(void)
@@ -2596,9 +2650,22 @@ static void star_battery_id_poll_work(struct work_struct *work)
 }
 //20100917, , Battery ID polling function [END]
 
+// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
+
+static int power_supply_change_notification_disabled = 0;
+
+// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
+
 static void star_battery_data_onetime_update(NvU8 update_option)
 {
 	//LDB("[bat_poll] OneTime_Update(%d)", update_option);
+
+// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
+	if (power_supply_change_notification_disabled) {
+		printk(KERN_INFO "[CHARGER] power supply change notification disabled\n");
+		return;
+	}
+// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
 
 	switch ((OneTime_Update)update_option)
 	{
@@ -2643,6 +2710,24 @@ static void star_battery_data_onetime_update(NvU8 update_option)
 	}
 	star_debug_show_battery_status();
 }
+	
+// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
+
+void disable_power_supply_change_notification(void)
+{
+	printk(KERN_INFO "[CHARGER] disabling power supply change notification\n");
+	power_supply_change_notification_disabled = 1;
+}
+EXPORT_SYMBOL(disable_power_supply_change_notification);
+
+void enable_power_supply_change_notification(void)
+{
+	printk(KERN_INFO "[CHARGER] enabling power supply change notification\n");
+	power_supply_change_notification_disabled = 0;
+}
+EXPORT_SYMBOL(enable_power_supply_change_notification);
+
+// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
 	
 /*
 static void star_battery_charge_done_work(struct work_struct *work)
