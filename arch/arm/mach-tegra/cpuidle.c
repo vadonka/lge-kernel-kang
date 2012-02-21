@@ -38,7 +38,7 @@
 #define LATENCY_FACTOR_SHIFT 8
 
 static unsigned int latency_factor __read_mostly = 80;	// factor ~ 0.3
-static unsigned int pwrgood_latency = 2000;
+static unsigned int pwrgood_latency = 1500;
 static unsigned int system_is_suspending = 0;
 module_param(latency_factor, uint, 0644);
 

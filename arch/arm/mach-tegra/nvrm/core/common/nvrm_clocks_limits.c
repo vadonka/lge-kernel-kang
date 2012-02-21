@@ -365,10 +365,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-    TDMaxKHz = pSKUedLimits->TDMaxKHz;
+    TDMaxKHz = 345000; // pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(
         TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = 345000; // TDMaxKHz;
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)
