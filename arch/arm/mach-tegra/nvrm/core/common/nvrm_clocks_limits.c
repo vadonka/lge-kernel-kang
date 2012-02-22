@@ -82,7 +82,40 @@ NvRmCpuShmoo fake_CpuShmoo;
 // Total of 7 available spots for P999
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
+#ifndef CONFIG_STOCK_VOLTAGE
+
 #define MAX_CPU_OC_FREQ (1408000)
+
+NvU32 FakeShmooVoltages[] = {
+    780,
+    790,
+    840,
+    900,
+    1000,
+    1050,
+    1150,
+    1250
+};
+
+NvRmScaledClkLimits FakepScaledCpuLimits = {
+    101, // FakepScaledCpuLimits.HwDeviceId
+    0, // FakepScaledCpuLimits.SubClockId
+    32, // FakepScaledCpuLimits.MinKHz
+    // Clock table
+    {
+    216000,
+    324000,
+    503000,
+    800000,
+    1015000,
+    1100000,
+    1216000,
+    1408000
+    }
+};
+
+#else // STOCK_VOLTAGE_VALUES
+#define MAX_CPU_OC_FREQ (1216000)
 
 NvU32 FakeShmooVoltages[] = {
     780,
@@ -112,6 +145,7 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     }
 };
 
+#endif // STOCK_VOLTAGE
 #endif // CONFIG_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \
@@ -288,12 +322,6 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
             s_pClockScales[id] = pHwLimits[i].MaxKHzList;
         }
     }
-
-        s_ClockRangeLimits[2].MaxKHz = 240000;
-        s_ClockRangeLimits[7].MaxKHz = 300000;
-        s_ClockRangeLimits[8].MaxKHz = 345000;
-        s_ClockRangeLimits[10].MaxKHz = 300000;
-
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)
@@ -365,10 +393,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-    TDMaxKHz = 345000; // pSKUedLimits->TDMaxKHz;
+    TDMaxKHz = pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(
         TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = 345000; // TDMaxKHz;
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)

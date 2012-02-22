@@ -1,6 +1,6 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.1.4
-# Date: 2012.02.16
+# ANYKERNEL compiler script by vadonka v1.1.5
+# Date: 2012.02.22
 #
 # You need to define this below:
 ######################################################
@@ -71,10 +71,10 @@ sed -i "s/$cout/$cnew/g" $kh/.config
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 
 if [[ $2 = "shared" ]]; then
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($rh))'S"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($ocver))'_'$(($rh))'M_S"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 else
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($rh))'"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($ocver))'_'$(($rh))'M"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 fi
 

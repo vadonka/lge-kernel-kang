@@ -36,6 +36,11 @@ config GPU_MEM_CARVEOUT_SZ
 	int "GPU Memory Carveout Size"
 	default 128
 
+config STOCK_VOLTAGE
+	bool "stock voltage values"
+	depends on MACH_STAR
+	default y
+
 config STAR_PMIC
 	bool "star pmic test"
 	depends on MACH_STAR
