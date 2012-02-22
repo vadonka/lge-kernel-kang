@@ -242,11 +242,11 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
-#define NVRM_CPU1_ON_MIN_KHZ (816000)
-#define NVRM_CPU1_OFF_MAX_KHZ (850000)
+#define NVRM_CPU1_ON_MIN_KHZ (655000)
+#define NVRM_CPU1_OFF_MAX_KHZ (610000)
 
-#define NVRM_CPU1_ON_PENDING_MS (1000)
-#define NVRM_CPU1_OFF_PENDING_MS (500)
+#define NVRM_CPU1_ON_PENDING_MS (800)
+#define NVRM_CPU1_OFF_PENDING_MS (400)
 
 /**
  * Defines AP20 Thermal policy parameters.

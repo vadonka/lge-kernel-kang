@@ -61,7 +61,7 @@ static struct task_struct *lowmem_deathpending;
 static unsigned long lowmem_deathpending_timeout;
 
 #ifdef CONFIG_SWAP
-static int fudgeswap = 512;
+static int fudgeswap = 768;
 #endif
 
 #define lowmem_print(level, x...)			\
@@ -190,6 +190,12 @@ static int lowmem_shrink(int nr_to_scan, gfp_t gfp_mask)
 			     p->pid, p->comm, oom_adj, tasksize);
 	}
 	if (selected) {
+		if (fatal_signal_pending(selected)) {
+		pr_warning("process %d is suffering a slow death\n",
+		selected->pid);
+		read_unlock(&tasklist_lock);
+		return rem;
+		}
 		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_adj, selected_tasksize);

@@ -414,7 +414,8 @@
 /*
  * The following syscalls are obsolete and no longer available for EABI.
  */
-#if defined(__ARM_EABI__) && !defined(__KERNEL__)
+#if !defined(__KERNEL__)
+#if defined(__ARM_EABI__)
 #undef __NR_time
 #undef __NR_umount
 #undef __NR_stime
@@ -427,6 +428,7 @@
 #undef __NR_socketcall
 #undef __NR_syscall
 #undef __NR_ipc
+#endif
 #endif
 
 #ifdef __KERNEL__
