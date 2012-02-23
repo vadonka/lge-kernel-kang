@@ -1,7 +1,6 @@
 #!/bin/sh
 
 #standard version
-export ocver="STOCK"
 ./initialize.sh vadonka_defconfig
 #noramhack
 ./compile.sh 0
@@ -17,7 +16,6 @@ export ocver="STOCK"
 ./compile.sh 96
 
 #low overclock version
-export ocver="LOC"
 ./initialize.sh vadonka_loc_defconfig
 #noramhack
 ./compile.sh 0
@@ -33,7 +31,6 @@ export ocver="LOC"
 ./compile.sh 96
 
 #high overclock version
-export ocver="HOC"
 ./initialize.sh vadonka_hoc_defconfig
 #noramhack
 ./compile.sh 0

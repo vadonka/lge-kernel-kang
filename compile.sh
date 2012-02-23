@@ -43,20 +43,20 @@ if [ -z $1 ]; then
     echo "Ramhack: no ramhack defined"
 elif [[ $1 = [0-9]* ]]; then
 	let rh=$1
-	echo "Ramhack: ramhack is defined, size is: $(($1)) MB"
+	echo "Ramhack: ramhack is defined, size is: $1MB"
 else
 	echo "Invalid ramhack size, ramhack is not used"
 	export rh="0"
 fi
 
-if [ "$2" == "shared" ]; then
+if [[ $2 == "shared" ]]; then
     if [ -z $3 ]; then
 	export srh="0"
     else
 	let srh=$3
     fi
 	export csize=$((128-$rh+$srh))
-	echo "Using shared memory mode: $(($rh)) MB ramhack with $(($srh)) MB shared memory"
+	echo "Using shared memory mode: $(($rh))MB ramhack with $(($srh))MB shared memory"
 else
 	let csize=$((128-$rh))
 	echo "Using traditional ramhack mode"
@@ -69,12 +69,24 @@ sed -i "s/$cout/$cnew/g" $kh/.config
 
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
+export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
+export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
+
+if [[ "$nooc" = "0" ]]; then
+    if [[ "$loc" = "1" ]]; then
+	export ocver="LOC"
+    else
+	export ocver="HOC"
+    fi
+else
+    export ocver="STOCK"
+fi
 
 if [[ $2 = "shared" ]]; then
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($ocver))'_'$(($rh))'M_S"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M_S"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 else
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$(($ocver))'_'$(($rh))'M"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 fi
 
