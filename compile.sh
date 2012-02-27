@@ -71,6 +71,7 @@ sed -i "s/$cout/$cnew/g" $kh/.config
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
 export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
+export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kg/.config`
 
 if [[ "$nooc" = "0" ]]; then
     if [[ "$loc" = "1" ]]; then
@@ -82,12 +83,22 @@ else
     export ocver="STOCK"
 fi
 
-if [[ $2 = "shared" ]]; then
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M_S"'`
-	sed -i "s/$cver/$nver/g" $kh/.config
+if [[ "$dsbatt" = "0" ]]; then
+    if [[ $2 = "shared" ]]; then
+	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M_S"'`
+	    sed -i "s/$cver/$nver/g" $kh/.config
+    else
+	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M"'`
+	    sed -i "s/$cver/$nver/g" $kh/.config
+    fi
 else
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M"'`
-	sed -i "s/$cver/$nver/g" $kh/.config
+    if [[ $2 = "shared" ]]; then
+	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_'$rh'M_S"'`
+	    sed -i "s/$cver/$nver/g" $kh/.config
+    else
+	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_'$rh'M"'`
+	    sed -i "s/$cver/$nver/g" $kh/.config
+    fi
 fi
 
 export starttime=`date +%s`
