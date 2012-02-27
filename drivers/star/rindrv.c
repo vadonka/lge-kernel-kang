@@ -929,7 +929,7 @@ static struct tty_ldisc_ops rin_ldisc = {
 	.name 		= "rin",
 	.open 		= rin_open,
 	.close	 	= rin_close,
-	.ioctl			= rin_ioctl,
+	.ioctl		= rin_ioctl,
 	.receive_buf	= rin_receive_buf,
 	.write_wakeup	= rin_write_wakeup,
 };
