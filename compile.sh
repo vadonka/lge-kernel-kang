@@ -71,7 +71,7 @@ sed -i "s/$cout/$cnew/g" $kh/.config
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
 export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
-export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kg/.config`
+export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
 
 if [[ "$nooc" = "0" ]]; then
     if [[ "$loc" = "1" ]]; then
