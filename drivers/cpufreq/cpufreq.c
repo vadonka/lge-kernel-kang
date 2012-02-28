@@ -1589,7 +1589,7 @@ static int cpufreq_suspend(struct sys_device *sysdev, pm_message_t pmsg)
 		goto out;
 
 		prevclockmax = cpu_policy->max;
-		oldminclock = cpu_policy->min;
+		prevclockmin = cpu_policy->min;
 		cpu_policy->max = MAXSCREENOFFCPUFREQ;
 		cpu_policy->min = cpu_policy->cpuinfo.min_freq;
 		cpu_policy->user_policy.policy = cpu_policy->policy;
@@ -1642,7 +1642,7 @@ static int cpufreq_resume(struct sys_device *sysdev)
 		goto fail;
 
 		cpu_policy->max = prevclockmax;
-		cpu_policy->min = oldminclock;
+		cpu_policy->min = prevclockmin;
 		cpu_policy->user_policy.policy = cpu_policy->policy;
 		cpu_policy->user_policy.governor = cpu_policy->governor;
 	if (cpufreq_driver->resume) {

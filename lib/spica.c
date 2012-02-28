@@ -34,7 +34,7 @@ unsigned int MAXSCREENOFFCPUFREQ = 525000;
 //}
 
 //const unsigned int STAR_RAM_CONSOLE_BASE = size1;
-unsigned int NVRM_AP20_SUSPEND_CORE_MV = 900;
+unsigned int NVRM_AP20_SUSPEND_CORE_MV = 1000;
 unsigned int NVRM_AP20_DDR2_MIN_KHZ = 50000;
 unsigned int NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 
