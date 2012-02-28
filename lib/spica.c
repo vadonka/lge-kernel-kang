@@ -42,7 +42,7 @@ unsigned int NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 
 static struct proc_dir_entry *spica_dir = NULL;
 
-void spica_init(void) {
+void spica_init() {
 spica_dir = proc_mkdir(PROC_DIR, NULL);
 }
 
