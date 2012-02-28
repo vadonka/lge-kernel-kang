@@ -115,10 +115,10 @@ printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 #ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
 
-/* 
+/*
  * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
-*  Cleaned up and re-organized for P999/G2x by Faux123 @ https://github.com/faux123
-*/
+ *  Cleaned up and re-organized for P999/G2x by Faux123 @ https://github.com/faux123
+ */
 
 /* DEFAULT LG P990 VALUES */
 
@@ -147,7 +147,7 @@ printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 // TEGRA_OC: MinKHz-> 32
 
 // Pointer to fake CpuShmoo values
-NvRmCpuShmoo fake_CpuShmoo; 
+NvRmCpuShmoo fake_CpuShmoo;
 
 // Max voltage index in the voltage tab (size-1)
 // Total of 7 available spots for P999
@@ -433,6 +433,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     CpuMaxKHz = pSKUedLimits->CpuMaxKHz;
     CpuMaxKHz = NV_MIN(
         CpuMaxKHz, s_ClockRangeLimits[NvRmModuleID_Cpu].MaxKHz);
+
     s_ClockRangeLimits[NvRmModuleID_Cpu].MaxKHz = CpuMaxKHz;
     if ((hRmDevice->ChipId.Id == 0x15) || (hRmDevice->ChipId.Id == 0x16))
     {
@@ -464,17 +465,17 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-	#ifdef CONFIG_SPICA_OTF
+#ifdef CONFIG_SPICA_OTF
     TDMaxKHz = GPUFREQ; // pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(
         TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUFREQ;
-	#else
+#else
     TDMaxKHz = pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(
         TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
-	#endif //CONFIG_SPICA_OTF
+#endif //CONFIG_SPICA_OTF
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)
@@ -1117,10 +1118,10 @@ static NvError NvRmBootArgChipShmooGet(
 
 #ifdef CONFIG_FAKE_SHMOO
         s_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
-	s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
         s_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
-	fake_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
-	fake_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        fake_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
+        fake_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
         fake_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
 #else
         offset = BootArgSh.CpuShmooVoltagesListOffset;

@@ -291,9 +291,9 @@ NVRM_CPU1_OFF_PENDING_MS = 900;
 #ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
 
-/* 
+/*
  * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
-*/
+ */
 
 extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
 extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
@@ -1770,7 +1770,7 @@ static NvRmPmRequest DfsThread(NvRmDfs* pDfs)
         if (NeedClockUpdate || pDfs->VoltageScaler.UpdateFlag ||
             pDfs->ThermalThrottler.TcorePolicy.UpdateFlag)
         {
-                       if (!pDfs->VoltageScaler.StopFlag)
+            if (!pDfs->VoltageScaler.StopFlag)
             {
                 NvRmPrivLockSharedPll();
                 // Check temperature and throttle DFS clocks if necessry. Make
@@ -2500,6 +2500,7 @@ DvsChangeCpuVoltage(
 		}
 	}
 #endif // CONFIG_FAKE_SHMOO
+
     NV_ASSERT(TargetMv >= pDvs->MinCpuMv);
     NV_ASSERT(TargetMv <= pDvs->NominalCpuMv);
 

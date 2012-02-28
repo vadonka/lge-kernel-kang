@@ -1286,23 +1286,23 @@ Ap20SystemClockSourceFind(
      */
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
-        #ifdef CONFIG_SPICA_OTF
-		C1KHz = M1KHz = DomainKHz;
+#ifdef CONFIG_SPICA_OTF
+                C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 VDEFREQ,
                 MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 VDEFREQ,
                 MaxKHz, &M1KHz);
-		#else
-        C1KHz = M1KHz = DomainKHz;
+#else
+                C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
                 MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
                 MaxKHz, &M1KHz);
-		#endif
+#endif
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);
         if ((DomainKHz <= P2KHz) && (P2KHz < SourceKHz))

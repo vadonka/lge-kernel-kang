@@ -673,11 +673,12 @@ NvRmPrivAp20GetPmRequest(
 {
     // Assume initial slave CPU1 On request
     static NvRmPmRequest s_LastPmRequest = (NvRmPmRequest_CpuOnFlag | 0x1);
-	#ifdef CONFIG_SPICA_OTF
+#ifdef CONFIG_SPICA_OTF
     int s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
-	#else
+#else
     static NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
-	#endif //CONFIG_SPICA_OTF
+#endif //CONFIG_SPICA_OTF
+
     static NvU32 s_Cpu1OnPendingCnt = 0, s_Cpu1OffPendingCnt = 0;
 
     NvU32 t;
@@ -708,6 +709,7 @@ NvRmPrivAp20GetPmRequest(
                           NVRM_CPU1_OFF_MAX_KHZ : (2 * MaxKHz / 3);
         NV_ASSERT(s_Cpu1OnMinKHz < s_Cpu1OffMaxKHz);
 #endif //CONFIG_SPICA_OTF
+
     }
 
     // Timestamp
