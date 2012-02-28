@@ -335,6 +335,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 #endif // CONFIG_BOOST_PERIPHERALS
 
 #endif // CONFIG_FAKE_SHMOO
+
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
 
