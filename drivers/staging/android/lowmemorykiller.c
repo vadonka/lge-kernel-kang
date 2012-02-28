@@ -215,6 +215,34 @@ static struct shrinker lowmem_shrinker = {
 	.seeks = DEFAULT_SEEKS * 16
 };
 
+/* This will provide a true status based off minfree calculation of free ram
+ * There are two numbers free_file and free_other as calculated above
+ */
+static int param_get_minfree_stat(char *buffer, struct kernel_param *kp)
+{
+  int other_free = global_page_state(NR_FREE_PAGES);
+  int other_file = global_page_state(NR_FILE_PAGES) -
+                   global_page_state(NR_SHMEM);
+  
+#ifdef CONFIG_SWAP
+  if(fudgeswap != 0){
+    struct sysinfo si;
+    si_swapinfo(&si);
+    
+    if(si.freeswap > 0){
+      if(fudgeswap > si.freeswap)
+        other_file += si.freeswap;
+      else
+        other_file += fudgeswap;
+    }
+  }
+#endif
+  return sprintf(buffer,"other_free:  %d kB\nother_file:  %d kB",
+                 other_free << (PAGE_SHIFT - 10),
+                 other_file << (PAGE_SHIFT - 10));
+}
+module_param_call(minfree_stat, NULL, param_get_minfree_stat, NULL, S_IRUGO);
+
 static int __init lowmem_init(void)
 {
 	task_free_register(&task_nb);
