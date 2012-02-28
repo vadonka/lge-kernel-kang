@@ -20,7 +20,8 @@
 #ifdef CONFIG_SPICA_OTF
 #include <linux/cpufreq.h>
 #include <linux/spica.h>
-extern unsigned int prevclockmin;
+extern unsigned long prevclockmax;
+extern unsigned long prevclockmin;
 extern void powersave_check(unsigned int check);
 extern void nitros_check(unsigned int check);
 #endif //CONFIG_SPICA_OTF
@@ -132,11 +133,6 @@ void __attribute__ ((weak)) arch_suspend_enable_irqs(void)
  *
  *	This function should be called after devices have been suspended.
  */
-
-#ifdef CONFIG_SPICA_OTF
-extern unsigned long prevclockmax;
-extern unsigned long prevclockmin;
-#endif //CONFIG_SPICA_OTF
 
 static int suspend_enter(suspend_state_t state)
 {
