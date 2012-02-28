@@ -30,6 +30,81 @@
 #include <linux/mutex.h>
 #include <linux/earlysuspend.h>
 
+//Spica OTF Start
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+
+#define MAXSPW_PROCFS_NAME "screenoff_maxcpufreq"
+#define MAXSPW_PROCFS_SIZE 7
+
+static struct proc_dir_entry *MAXSOC_Proc_File;
+static char procfs_buffer4[MAXSPW_PROCFS_SIZE];
+static unsigned long procfs_buffer_size400 = 0;
+extern unsigned int powersave;
+extern unsigned int nitro;
+extern void powersave_check(unsigned int check);
+extern void nitros_check(unsigned int check);
+int maxsoc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int ret;
+printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSPW_PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer4, procfs_buffer_size400);
+ret = procfs_buffer_size400;
+
+}
+return ret;
+}
+
+int maxsoc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp6;
+temp6=0;
+/* CAUTION:Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp6) < 1 ) return procfs_buffer_size400;
+if ( temp6 < 216 || temp6 > 999000 ) return procfs_buffer_size400;
+/* [End] */
+procfs_buffer_size400 = count;
+	if (procfs_buffer_size400 > MAXSPW_PROCFS_SIZE ) {
+		procfs_buffer_size400 = MAXSPW_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer4, buffer, procfs_buffer_size400) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer4,"%u",&MAXSCREENOFFCPUFREQ);
+return procfs_buffer_size400;
+}
+
+static int __init init_maxsoc_procsfs(void)
+{
+MAXSOC_Proc_File = spica_add(MAXSPW_PROCFS_NAME);
+if (MAXSOC_Proc_File == NULL) {
+spica_remove(MAXSPW_PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSPW_PROCFS_NAME);
+return -ENOMEM;
+} else {
+MAXSOC_Proc_File->read_proc  = maxsoc_procfile_read;
+MAXSOC_Proc_File->write_proc = maxsoc_procfile_write;
+MAXSOC_Proc_File->mode     = S_IFREG | S_IRUGO;
+MAXSOC_Proc_File->uid     = 0;
+MAXSOC_Proc_File->gid     = 0;
+MAXSOC_Proc_File->size     = 37;
+sprintf(procfs_buffer4,"%d",MAXSCREENOFFCPUFREQ);
+procfs_buffer_size400=strlen(procfs_buffer4);
+printk(KERN_INFO "/proc/spica/%s created\n", MAXSPW_PROCFS_NAME);
+}
+return 0;
+}
+
+static void __exit cleanup_maxsoc_procsfs(void) {
+spica_remove(MAXSPW_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", MAXSPW_PROCFS_NAME);
+}
+#endif //CONFIG_SPICA_OTF
+//Spica OTF End
+
 #define dprintk(msg...) cpufreq_debug_printk(CPUFREQ_DEBUG_CORE, \
 						"cpufreq-core", msg)
 
@@ -1486,6 +1561,8 @@ EXPORT_SYMBOL(cpufreq_get);
  *	cpufreq_suspend - let the low level driver prepare for suspend
  */
 
+unsigned int prevclockmax;
+unsigned int prevclockmin;
 static int cpufreq_suspend(struct sys_device *sysdev, pm_message_t pmsg)
 {
 	int ret = 0;
@@ -1511,6 +1588,12 @@ static int cpufreq_suspend(struct sys_device *sysdev, pm_message_t pmsg)
 	if (unlikely(cpu_policy->cpu != cpu))
 		goto out;
 
+		prevclockmax = cpu_policy->max;
+		oldminclock = cpu_policy->min;
+		cpu_policy->max = MAXSCREENOFFCPUFREQ;
+		cpu_policy->min = cpu_policy->cpuinfo.min_freq;
+		cpu_policy->user_policy.policy = cpu_policy->policy;
+		cpu_policy->user_policy.governor = cpu_policy->governor;
 	if (cpufreq_driver->suspend) {
 		ret = cpufreq_driver->suspend(cpu_policy, pmsg);
 		if (ret)
@@ -1558,6 +1641,10 @@ static int cpufreq_resume(struct sys_device *sysdev)
 	if (unlikely(cpu_policy->cpu != cpu))
 		goto fail;
 
+		cpu_policy->max = prevclockmax;
+		cpu_policy->min = oldminclock;
+		cpu_policy->user_policy.policy = cpu_policy->policy;
+		cpu_policy->user_policy.governor = cpu_policy->governor;
 	if (cpufreq_driver->resume) {
 		ret = cpufreq_driver->resume(cpu_policy);
 		if (ret) {
@@ -2136,71 +2223,6 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 }
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 
-#ifdef CONFIG_CPUFREQ_SCROFF_LIMIT
-
-unsigned int prev_max_freq;
-unsigned int prev_min_freq;
-
-static void powersave_early_suspend(struct early_suspend *handler)
-{
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		struct cpufreq_policy *cpu_policy, new_policy;
-
-		cpu_policy = cpufreq_cpu_get(cpu);
-		if (!cpu_policy)
-			continue;
-		if (cpufreq_get_policy(&new_policy, cpu))
-			goto out;
-		prev_max_freq = cpu_policy->max;
-		prev_min_freq = cpu_policy->min;
-		new_policy.max = CONFIG_CPUFREQ_SCROFF_LIMIT_VALUE;
-		new_policy.min = cpu_policy->cpuinfo.min_freq;
-		printk(KERN_INFO
-			"%s: set cpu%d freq in the %u-%u KHz range\n",
-			__func__, cpu, new_policy.min, new_policy.max);
-		__cpufreq_set_policy(cpu_policy, &new_policy);
-		cpu_policy->user_policy.policy = cpu_policy->policy;
-		cpu_policy->user_policy.governor = cpu_policy->governor;
-out:
-		cpufreq_cpu_put(cpu_policy);
-	}
-}
-
-static void powersave_late_resume(struct early_suspend *handler)
-{
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		struct cpufreq_policy *cpu_policy, new_policy;
-
-		cpu_policy = cpufreq_cpu_get(cpu);
-		if (!cpu_policy)
-			continue;
-		if (cpufreq_get_policy(&new_policy, cpu))
-			goto out;
-		new_policy.max = prev_max_freq;
-		new_policy.min = prev_min_freq;
-		printk(KERN_INFO
-			"%s: set cpu%d freq in the %u-%u KHz range\n",
-			__func__, cpu, new_policy.min, new_policy.max);
-		__cpufreq_set_policy(cpu_policy, &new_policy);
-		cpu_policy->user_policy.policy = cpu_policy->policy;
-		cpu_policy->user_policy.governor = cpu_policy->governor;
-out:
-		cpufreq_cpu_put(cpu_policy);
-	}
-}
-
-static struct early_suspend _powersave_early_suspend = {
-	.suspend = powersave_early_suspend,
-	.resume = powersave_late_resume,
-	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
-};
-
-#endif // CONFIG_CPUFREQ_SCROFF_LIMIT
-
 static int __init cpufreq_core_init(void)
 {
 	int cpu;
@@ -2218,12 +2240,6 @@ static int __init cpufreq_core_init(void)
 	cpufreq_global_kobject = kobject_create_and_add("cpufreq",
 						&cpu_sysdev_class.kset.kobj);
 	BUG_ON(!cpufreq_global_kobject);
-
-#ifdef CONFIG_CPUFREQ_SCROFF_LIMIT
-
-	register_early_suspend(&_powersave_early_suspend);
-
-#endif // CONFIG_CPUFREQ_SCROFF_LIMIT
 
 	return 0;
 }

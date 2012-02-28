@@ -52,6 +52,242 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
+//Spica OTF Start
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+#define USE_FAKE_SHMOO
+#define PW_PROCFS_NAME "powersave"
+#define PW_PROCFS_SIZE 2
+#define NITRO_PROCFS_NAME "nitros"
+#define NITRO_PROCFS_SIZE 2
+
+unsigned int powersave = 0;
+unsigned int nitro = 0;
+void nitros_check(unsigned int check);
+void powersave_check(unsigned int check);
+
+static struct proc_dir_entry *PW_Proc_File;
+static char procfs_buffer21[PW_PROCFS_SIZE];
+static unsigned long procfs_buffer_size210 = 0;
+static struct proc_dir_entry *NITRO_Proc_File;
+static char procfs_buffer11[NITRO_PROCFS_SIZE];
+static unsigned long procfs_buffer_size110 = 0;
+
+int pw_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int ret;
+printk(KERN_INFO "pw_procfile_read (/proc/spica/%s) called\n", PW_PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer21, procfs_buffer_size210);
+ret = procfs_buffer_size210;
+
+}
+return ret;
+}
+int nitro_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int ret;
+printk(KERN_INFO "nitro_procfile_read (/proc/spica/%s) called\n", NITRO_PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer11, procfs_buffer_size110);
+ret = procfs_buffer_size110;
+
+}
+return ret;
+}
+
+int pw_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp2;
+temp2=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp2) < 0 )  return procfs_buffer_size210;
+if ( temp2 < 0 || temp2 > 6 ) return procfs_buffer_size210;
+/* [End] */
+procfs_buffer_size210 = count;
+	if (procfs_buffer_size210 > PW_PROCFS_SIZE ) {
+		procfs_buffer_size210 = PW_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer21, buffer, procfs_buffer_size210) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer21,"%u",&PWONOFF);
+powersave_check(PWONOFF);
+return procfs_buffer_size210;
+}
+int nitro_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp8;
+temp8=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp8) < 0 )  return procfs_buffer_size110;
+if ( temp8 < 0 || temp8 > 1 ) return procfs_buffer_size110;
+/* [End] */
+
+procfs_buffer_size110 = count;
+	if (procfs_buffer_size110 > NITRO_PROCFS_SIZE ) {
+		procfs_buffer_size110 = NITRO_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer11, buffer, procfs_buffer_size110) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer11,"%u",&NITROONOFF);
+nitros_check(NITROONOFF);
+return procfs_buffer_size110;
+}
+
+static int __init init_ocuv_procsfs(void)
+{
+PW_Proc_File = spica_add(PW_PROCFS_NAME);
+if (PW_Proc_File == NULL) {
+spica_remove(PW_PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", PW_PROCFS_NAME);
+return -ENOMEM;
+} else {
+PW_Proc_File->read_proc  = pw_procfile_read;
+PW_Proc_File->write_proc = pw_procfile_write;
+PW_Proc_File->mode     = S_IFREG | S_IRUGO;
+PW_Proc_File->uid     = 0;
+PW_Proc_File->gid     = 0;
+PW_Proc_File->size     = 37;
+sprintf(procfs_buffer21,"%d",PWONOFF);
+procfs_buffer_size210=strlen(procfs_buffer21);
+printk(KERN_INFO "/proc/spica/%s created\n", PW_PROCFS_NAME);
+}
+	return 0;
+}
+static int __init init_nitro_procsfs(void)
+{
+NITRO_Proc_File = spica_add(NITRO_PROCFS_NAME);
+if (NITRO_Proc_File == NULL) {
+spica_remove(NITRO_PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", NITRO_PROCFS_NAME);
+return -ENOMEM;
+} else {
+NITRO_Proc_File->read_proc  = nitro_procfile_read;
+NITRO_Proc_File->write_proc = nitro_procfile_write;
+NITRO_Proc_File->mode     = S_IFREG | S_IRUGO;
+NITRO_Proc_File->uid     = 0;
+NITRO_Proc_File->gid     = 0;
+NITRO_Proc_File->size     = 37;
+sprintf(procfs_buffer11,"%d",NITROONOFF);
+procfs_buffer_size110=strlen(procfs_buffer11);
+printk(KERN_INFO "/proc/spica/%s created\n", NITRO_PROCFS_NAME);
+}
+	return 0;
+}
+
+static void __exit cleanup_ocuv_procsfs(void) {
+spica_remove(PW_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", PW_PROCFS_NAME);
+}
+
+static void __exit cleanup_nitro_procsfs(void) {
+spica_remove(NITRO_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", NITRO_PROCFS_NAME);
+}
+
+void powersave_check(unsigned int check) {
+powersave=check;
+if (powersave == 1)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 810000;
+VDEFREQ = 340000;
+GPUFREQ = 660000;
+NVRM_AP20_SUSPEND_CORE_MV = 900;
+NVRM_AP20_DDR2_MIN_KHZ = 40000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
+//NVRM_AP20_LOW_CORE_MV = 940;
+//NVRM_AP20_LOW_CPU_MV = 760;
+//NVRM_CPU1_OFF_PENDING_MS = 500;
+}
+else if (powersave == 2)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 810000;
+VDEFREQ = 340000;
+GPUFREQ = 650000;
+NVRM_AP20_SUSPEND_CORE_MV = 900;
+NVRM_AP20_DDR2_MIN_KHZ = 35000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
+//NVRM_AP20_LOW_CORE_MV = 930;
+//NVRM_AP20_LOW_CPU_MV = 750;
+//NVRM_CPU1_OFF_PENDING_MS = 400;
+} else if (powersave == 3)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 999000;
+VDEFREQ = 340000;
+GPUFREQ = 630000;
+NVRM_AP20_SUSPEND_CORE_MV = 890;
+NVRM_AP20_DDR2_MIN_KHZ = 28000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 14000;
+//NVRM_AP20_LOW_CORE_MV = 925;
+//NVRM_AP20_LOW_CPU_MV = 740;
+//NVRM_CPU1_OFF_PENDING_MS = 200;
+} else if (powersave == 4)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 999000;
+VDEFREQ = 320000;
+GPUFREQ = 620000;
+NVRM_AP20_SUSPEND_CORE_MV = 850;
+NVRM_AP20_DDR2_MIN_KHZ = 15000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
+//NVRM_AP20_LOW_CORE_MV = 925;
+//NVRM_AP20_LOW_CPU_MV = 740;
+//NVRM_CPU1_OFF_PENDING_MS = 200;
+} else if (powersave == 5)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 999000;
+VDEFREQ = 320000;
+GPUFREQ = 610000;
+NVRM_AP20_SUSPEND_CORE_MV = 830;
+NVRM_AP20_DDR2_MIN_KHZ = 13000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
+//NVRM_AP20_LOW_CORE_MV = 925;
+//NVRM_AP20_LOW_CPU_MV = 740;
+//NVRM_CPU1_OFF_PENDING_MS = 200;
+} else if (powersave == 6)
+{
+nitros_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 999000;
+VDEFREQ = 300000;
+GPUFREQ = 600000;
+NVRM_AP20_SUSPEND_CORE_MV = 830;
+NVRM_AP20_DDR2_MIN_KHZ = 14000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
+//NVRM_AP20_LOW_CORE_MV = 925;
+//NVRM_AP20_LOW_CPU_MV = 740;
+//NVRM_CPU1_OFF_PENDING_MS = 200;
+}
+
+}
+void nitros_check(unsigned int check) {
+nitro=check;
+if (nitro == 1)
+{
+powersave_check(0);
+NVRM_CPU1_ON_MIN_KHZ = 810000;
+VDEFREQ = 350000;
+GPUFREQ = 700000;
+NVRM_AP20_SUSPEND_CORE_MV = 1000;
+NVRM_AP20_DDR2_MIN_KHZ = 55000;
+NVRM_AP20_LPDDR2_MIN_KHZ = 20000;
+NVRM_AP20_LOW_CORE_MV = 950;
+NVRM_AP20_LOW_CPU_MV = 770;
+NVRM_CPU1_OFF_PENDING_MS = 900;
+}
+}
+#endif //CONFIG_SPICA_OTF
+//Spica_OTF_End
+
 #ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
 

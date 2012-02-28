@@ -45,6 +45,76 @@
 #include "ap20rm_clocks.h"
 #include "ap20/arfuse.h"
 
+//Spica OTF Start
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+#define CPU_PROCFS_NAME   "maxcpu1off"
+#define CPU1OFF_PROCFS_SIZE     8
+
+static struct proc_dir_entry *CPU_Proc_File;
+static char procfs_buffer22[CPU1OFF_PROCFS_SIZE];
+static unsigned long procfs_buffer_size2200 = 0;
+
+int cpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int ret;
+printk(KERN_INFO "cpu_procfile_read (/proc/spica/%s) called\n", CPU_PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer22, procfs_buffer_size2200);
+ret = procfs_buffer_size2200;
+
+}
+return ret;
+}
+
+int cpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp1;
+temp1=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp1) < 1 ) return procfs_buffer_size2200;
+if ( temp1 < 216000 || temp1 > 1100000 ) return procfs_buffer_size2200;
+/* [End] */
+procfs_buffer_size2200 = count;
+	if (procfs_buffer_size2200 > CPU1OFF_PROCFS_SIZE ) {
+		procfs_buffer_size2200 = CPU1OFF_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer22, buffer, procfs_buffer_size2200) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer22,"%u",&NVRM_CPU1_OFF_MAX_KHZ);
+return procfs_buffer_size2200;
+}
+
+static int __init cpu_cpu_procsfs(void)
+{
+CPU_Proc_File = spica_add(CPU_PROCFS_NAME);
+if (CPU_Proc_File == NULL) {
+spica_remove(CPU_PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", CPU_PROCFS_NAME);
+return -ENOMEM;
+} else {
+CPU_Proc_File->read_proc  = cpu_procfile_read;
+CPU_Proc_File->write_proc = cpu_procfile_write;
+CPU_Proc_File->mode     = S_IFREG | S_IRUGO;
+CPU_Proc_File->uid     = 0;
+CPU_Proc_File->gid     = 0;
+CPU_Proc_File->size     = 37;
+sprintf(procfs_buffer22,"%d",NVRM_CPU1_OFF_MAX_KHZ);
+procfs_buffer_size2200=strlen(procfs_buffer22);
+printk(KERN_INFO "/proc/spica/%s created\n", CPU_PROCFS_NAME);
+}
+return 0;
+}
+
+static void __exit cpu_cleanup_cpu_procsfs(void) {
+spica_remove(CPU_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", CPU_PROCFS_NAME);
+}
+#endif //CONFIG_SPICA_OTF
+//Spica OTF End
 
 // This list requires pre-sorted info in bond-out registers order and bond-out
 // register bit shift order (MSB-to-LSB).

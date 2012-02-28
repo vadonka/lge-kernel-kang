@@ -13,18 +13,6 @@ config CPU_FREQ
 
 	  If in doubt, say N.
 
-config CPUFREQ_SCROFF_LIMIT
-	bool "CPU Freq Force Screen off Limit"
-	default n
-
-if CPUFREQ_SCROFF_LIMIT
-
-config CPUFREQ_SCROFF_LIMIT_VALUE
-	int "CPU Max Freq while screen is off"
-	default "389000"
-
-endif # CPUFREQ_SCROFF_LIMIT_VALUE
-
 if CPU_FREQ
 
 config CPU_FREQ_TABLE

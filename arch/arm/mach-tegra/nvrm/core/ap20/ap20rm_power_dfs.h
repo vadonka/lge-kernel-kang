@@ -190,8 +190,10 @@ extern "C"
  */
 
 // Defines minimum scaling limit for each supported SDRAM type
+#ifndef CONFIG_SPICA_OTF
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
+#endif //CONFIG_SPICA_OTF
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
@@ -242,11 +244,16 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
+
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+#define NVRM_CPU1_ON_PENDING_MS (2500)
+#else
 #define NVRM_CPU1_ON_MIN_KHZ (655000)
 #define NVRM_CPU1_OFF_MAX_KHZ (610000)
-
 #define NVRM_CPU1_ON_PENDING_MS (800)
 #define NVRM_CPU1_OFF_PENDING_MS (400)
+#endif //CONFIG_SPICA_OTF
 
 /**
  * Defines AP20 Thermal policy parameters.
@@ -280,10 +287,12 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
+#ifndef CONFIG_SPICA_OTF
 #define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
 /// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
+#endif
 
 /// Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \

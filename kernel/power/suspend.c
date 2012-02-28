@@ -15,8 +15,15 @@
 #include <linux/console.h>
 #include <linux/cpu.h>
 #include <linux/syscalls.h>
-
 #include "power.h"
+
+#ifdef CONFIG_SPICA_OTF
+#include <linux/cpufreq.h>
+#include <linux/spica.h>
+extern unsigned int prevclockmin;
+extern void powersave_check(unsigned int check);
+extern void nitros_check(unsigned int check);
+#endif //CONFIG_SPICA_OTF
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
 #ifdef CONFIG_EARLYSUSPEND
@@ -125,6 +132,12 @@ void __attribute__ ((weak)) arch_suspend_enable_irqs(void)
  *
  *	This function should be called after devices have been suspended.
  */
+
+#ifdef CONFIG_SPICA_OTF
+extern unsigned long prevclockmax;
+extern unsigned long prevclockmin;
+#endif //CONFIG_SPICA_OTF
+
 static int suspend_enter(suspend_state_t state)
 {
 	int error;
@@ -166,6 +179,10 @@ static int suspend_enter(suspend_state_t state)
 
 	arch_suspend_enable_irqs();
 	BUG_ON(irqs_disabled());
+
+#ifdef CONFIG_SPICA_OTF
+ prevclockmin = prevclockmin + 100000;
+#endif
 
  Enable_cpus:
 	enable_nonboot_cpus();

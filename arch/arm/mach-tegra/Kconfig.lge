@@ -41,6 +41,11 @@ config STOCK_VOLTAGE
 	depends on MACH_STAR
 	default y
 
+config SPICA_OTF
+	bool "Spica OTF pack"
+	depends on FAKE_SHMOO
+	default n
+
 config STAR_PMIC
 	bool "star pmic test"
 	depends on MACH_STAR

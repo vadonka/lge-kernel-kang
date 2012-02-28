@@ -42,6 +42,80 @@
 #include "ap15/ap15rm_private.h"
 #include "nvodm_query.h"
 
+//Spica OTF start
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+#define PROCFS_NAME   "vdefreq"
+#define PROCFS_SIZE     8
+static struct proc_dir_entry *VDE_Proc_File;
+static struct proc_dir_entry *spica_dir;
+static char procfs_buffer61[PROCFS_SIZE];
+static unsigned long procfs_buffer_size610 = 0;
+
+int vde_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int ret;
+printk(KERN_INFO "vde_procfile_read (/proc/spica/%s) called\n", PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer61, procfs_buffer_size610);
+ret = procfs_buffer_size610;
+
+}
+return ret;
+}
+
+int vde_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp;
+temp=0;
+/* CAUTION: Don't change below lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size610;
+if ( temp < 500000 || temp > 700000 ) return procfs_buffer_size610;
+/* [End] */
+procfs_buffer_size610 = count;
+	if (procfs_buffer_size610 > PROCFS_SIZE ) {
+		procfs_buffer_size610 = PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer61, buffer, procfs_buffer_size610) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer61,"%u",&VDEFREQ);
+return procfs_buffer_size610;
+}
+
+
+static int __init init_gpu_procsfs(void)
+{
+VDE_Proc_File = spica_add(PROCFS_NAME);
+
+if (VDE_Proc_File == NULL) {
+spica_remove(PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", PROCFS_NAME);
+return -ENOMEM;
+} else {
+VDE_Proc_File->read_proc  = vde_procfile_read;
+VDE_Proc_File->write_proc = vde_procfile_write;
+VDE_Proc_File->mode     = S_IFREG | S_IRUGO;
+VDE_Proc_File->uid     = 0;
+VDE_Proc_File->gid     = 0;
+VDE_Proc_File->size     = 37;
+sprintf(procfs_buffer61,"%d",VDEFREQ);
+procfs_buffer_size610=strlen(procfs_buffer61);
+printk(KERN_INFO "/proc/spica/%s created\n", PROCFS_NAME);
+}
+return 0;
+}
+
+
+static void __exit cleanup_gpu_procsfs(void) {
+spica_remove(PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", PROCFS_NAME);
+}
+#endif //CONFIG_SPICA_OTF
+//Spica OTF End
+
 // Enable CPU/EMC ratio policy
 #define NVRM_LIMIT_CPU_EMC_RATIO (1)
 
@@ -1212,6 +1286,15 @@ Ap20SystemClockSourceFind(
      */
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
+        #ifdef CONFIG_SPICA_OTF
+		C1KHz = M1KHz = DomainKHz;
+        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                VDEFREQ,
+                MaxKHz, &C1KHz);
+        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                VDEFREQ,
+                MaxKHz, &M1KHz);
+		#else
         C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
@@ -1219,6 +1302,7 @@ Ap20SystemClockSourceFind(
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
                 MaxKHz, &M1KHz);
+		#endif
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);
         if ((DomainKHz <= P2KHz) && (P2KHz < SourceKHz))
