@@ -1561,8 +1561,11 @@ EXPORT_SYMBOL(cpufreq_get);
  *	cpufreq_suspend - let the low level driver prepare for suspend
  */
 
+#ifdef CONFIG_SPICA_OTF
 unsigned int prevclockmax;
 unsigned int prevclockmin;
+#endif
+
 static int cpufreq_suspend(struct sys_device *sysdev, pm_message_t pmsg)
 {
 	int ret = 0;
@@ -1588,12 +1591,15 @@ static int cpufreq_suspend(struct sys_device *sysdev, pm_message_t pmsg)
 	if (unlikely(cpu_policy->cpu != cpu))
 		goto out;
 
+#ifdef CONFIG_SPICA_OTF
 		prevclockmax = cpu_policy->max;
 		prevclockmin = cpu_policy->min;
 		cpu_policy->max = MAXSCREENOFFCPUFREQ;
 		cpu_policy->min = cpu_policy->cpuinfo.min_freq;
 		cpu_policy->user_policy.policy = cpu_policy->policy;
 		cpu_policy->user_policy.governor = cpu_policy->governor;
+#endif //CONFIG_SPICA_OTF
+
 	if (cpufreq_driver->suspend) {
 		ret = cpufreq_driver->suspend(cpu_policy, pmsg);
 		if (ret)
@@ -1641,10 +1647,13 @@ static int cpufreq_resume(struct sys_device *sysdev)
 	if (unlikely(cpu_policy->cpu != cpu))
 		goto fail;
 
+#ifdef CONFIG_SPICA_OTF
 		cpu_policy->max = prevclockmax;
 		cpu_policy->min = prevclockmin;
 		cpu_policy->user_policy.policy = cpu_policy->policy;
 		cpu_policy->user_policy.governor = cpu_policy->governor;
+#endif //CONFIG_SPICA_OTF
+
 	if (cpufreq_driver->resume) {
 		ret = cpufreq_driver->resume(cpu_policy);
 		if (ret) {
