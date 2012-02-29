@@ -104,11 +104,12 @@ printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
 }
 return 0;
 }
-
+module_init(init_gpufb_procsfs);
 static void __exit cleanup_gpufb_procsfs(void) {
 spica_remove(GPU_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 }
+module_exit(cleanup_gpufb_procsfs);
 #endif //CONFIG_SPICA_OTF
 //Spica OTF End
 

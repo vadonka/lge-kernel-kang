@@ -13,7 +13,7 @@ unsigned int NITROONOFF = 0;
 unsigned int NVRM_AP20_LOW_CORE_MV = 950;
 unsigned int NVRM_AP20_LOW_CPU_MV = 770;
 unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
-unsigned int VM_MAX_READAHEAD = 512;
+//unsigned int VM_MAX_READAHEAD = 512;
 //unsigned int swappiness = 10;
 //unsigned int vm_swappiness = 10;
 //unsigned int CARVEOUT_SIZE = 128;
@@ -34,7 +34,7 @@ unsigned int MAXSCREENOFFCPUFREQ = 525000;
 //}
 
 //const unsigned int STAR_RAM_CONSOLE_BASE = size1;
-unsigned int NVRM_AP20_SUSPEND_CORE_MV = 1000;
+const unsigned int NVRM_AP20_SUSPEND_CORE_MV = 1000;
 unsigned int NVRM_AP20_DDR2_MIN_KHZ = 50000;
 unsigned int NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 

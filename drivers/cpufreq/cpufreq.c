@@ -97,11 +97,12 @@ printk(KERN_INFO "/proc/spica/%s created\n", MAXSPW_PROCFS_NAME);
 }
 return 0;
 }
-
+module_init(init_maxsoc_procsfs);
 static void __exit cleanup_maxsoc_procsfs(void) {
 spica_remove(MAXSPW_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", MAXSPW_PROCFS_NAME);
 }
+module_exit(cleanup_maxsoc_procsfs);
 #endif //CONFIG_SPICA_OTF
 //Spica OTF End
 

@@ -215,11 +215,12 @@ printk(KERN_INFO "/proc/spica/%s created\n", ON_PROCFS_NAME);
 }
 return 0;
 }
-
+module_init(init_cpu_procsfs);
 static void __exit cleanup_cpu_procsfs(void) {
 spica_remove(ON_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", ON_PROCFS_NAME);
 }
+module_exit(cleanup_cpu_procsfs);
 static int __init init_lpddr_procsfs(void)
 {
 LPDDR_Proc_File = spica_add(LPDDR_PROCFS_NAME);
@@ -239,7 +240,7 @@ procfs_buffer_size2=strlen(procfs_buffer3);
 }
 return 0;
 }
-
+module_init(init_lpddr_procsfs);
 static int __init init_suspendcoremv_procsfs(void)
 {
 SUSPENDMV_Proc_File = spica_add(SUSPENDMV_PROCFS_NAME);
@@ -260,6 +261,7 @@ printk(KERN_INFO "/proc/spica/%s created\n", SUSPENDMV_PROCFS_NAME);
 }
 return 0;
 }
+module_init(init_suspendcoremv_procsfs);
 static int __init init_ddr_procsfs(void)
 {
 DDR_Proc_File = spica_add(DDR_PROCFS_NAME);
@@ -280,7 +282,7 @@ printk(KERN_INFO "/proc/spica/%s created\n", DDR_PROCFS_NAME);
 }
 return 0;
 }
-
+module_init(init_ddr_procsfs);
 static void __exit cleanup_sc_procsfs(void) {
 spica_remove(SUSPENDMV_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", SUSPENDMV_PROCFS_NAME);
@@ -289,11 +291,12 @@ static void __exit cleanup_ddr_procsfs(void) {
 spica_remove(DDR_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", DDR_PROCFS_NAME);
 }
-
+module_exit(cleanup_sc_procsfs);
 static void __exit cleanup_lpddr_procsfs(void) {
 spica_remove(LPDDR_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", LPDDR_PROCFS_NAME);
 }
+module_exit(cleanup_lpddr_procsfs);
 #endif //CONFIG_SPICA_OTF
 //Spica OTF End
 

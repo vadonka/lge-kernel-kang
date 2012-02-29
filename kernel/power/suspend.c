@@ -18,10 +18,11 @@
 #include "power.h"
 
 #ifdef CONFIG_SPICA_OTF
+#include <linux/earlysuspend.h>
 #include <linux/cpufreq.h>
 #include <linux/spica.h>
-extern unsigned long prevclockmax;
-extern unsigned long prevclockmin;
+extern unsigned int prevclockmax;
+extern unsigned int prevclockmin;
 extern void powersave_check(unsigned int check);
 extern void nitros_check(unsigned int check);
 #endif //CONFIG_SPICA_OTF

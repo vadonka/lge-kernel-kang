@@ -108,11 +108,12 @@ printk(KERN_INFO "/proc/spica/%s created\n", CPU_PROCFS_NAME);
 }
 return 0;
 }
-
+module_init(cpu_cpu_procsfs);
 static void __exit cpu_cleanup_cpu_procsfs(void) {
 spica_remove(CPU_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", CPU_PROCFS_NAME);
 }
+module_exit(cpu_cleanup_cpu_procsfs);
 #endif //CONFIG_SPICA_OTF
 //Spica OTF End
 

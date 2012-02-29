@@ -36,7 +36,7 @@ extern unsigned int MAXSCREENOFFCPUFREQ;
 
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
-extern unsigned int NVRM_AP20_SUSPEND_CORE_MV;
+extern const unsigned int NVRM_AP20_SUSPEND_CORE_MV;
 extern unsigned int NVRM_AP20_DDR2_MIN_KHZ;
 extern unsigned int NVRM_AP20_LPDDR2_MIN_KHZ;
 //static unsigned STAR_RAM_CONSOLE_SIZE;
