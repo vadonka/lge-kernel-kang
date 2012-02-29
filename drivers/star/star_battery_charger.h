@@ -12,7 +12,6 @@
 #define INCLUDED_STAR_LGE_BATTERY_HEADER
 
 //static void determine_fuel_reset(NvU32 bat_cbc);
-static NvBool determine_capacity_for_demo(void);
 
 #define BAT_CV_TABLE { 3320 , \
 3400 , \
@@ -114,7 +113,7 @@ static NvBool determine_capacity_for_demo(void);
 4113 , \
 4127 , \
 4145 , \
-4150 }
+4200 }
 
 #define BAT_CV_TA_TABLE { 3358, \
 3411, \
