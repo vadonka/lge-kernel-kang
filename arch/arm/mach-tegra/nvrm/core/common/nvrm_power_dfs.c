@@ -63,7 +63,7 @@
 
 unsigned int powersave = 0;
 unsigned int nitro = 0;
-void nitros_check(unsigned int check);
+void nitros_check(unsigned int check1);
 void powersave_check(unsigned int check);
 
 static struct proc_dir_entry *PW_Proc_File;
@@ -155,7 +155,7 @@ PW_Proc_File->uid     = 0;
 PW_Proc_File->gid     = 0;
 PW_Proc_File->size     = 37;
 sprintf(procfs_buffer21,"%d",PWONOFF);
-powersave_check(PWONOFF);
+//powersave_check(PWONOFF);
 procfs_buffer_size210=strlen(procfs_buffer21);
 printk(KERN_INFO "/proc/spica/%s created\n", PW_PROCFS_NAME);
 }
@@ -177,7 +177,6 @@ NITRO_Proc_File->uid     = 0;
 NITRO_Proc_File->gid     = 0;
 NITRO_Proc_File->size     = 37;
 sprintf(procfs_buffer11,"%d",NITROONOFF);
-nitors_check(NITROONOFF);
 procfs_buffer_size110=strlen(procfs_buffer11);
 printk(KERN_INFO "/proc/spica/%s created\n", NITRO_PROCFS_NAME);
 }
@@ -200,7 +199,7 @@ if (powersave == 1)
 {
 nitros_check(0);
 NVRM_CPU1_ON_MIN_KHZ = 810000;
-VDEFREQ = 340000;
+VDEFREQ = 330000;
 GPUFREQ = 660000;
 //NVRM_AP20_SUSPEND_CORE_MV = 900;
 NVRM_AP20_DDR2_MIN_KHZ = 40000;
@@ -213,7 +212,7 @@ else if (powersave == 2)
 {
 nitros_check(0);
 NVRM_CPU1_ON_MIN_KHZ = 810000;
-VDEFREQ = 340000;
+VDEFREQ = 320000;
 GPUFREQ = 650000;
 //NVRM_AP20_SUSPEND_CORE_MV = 900;
 NVRM_AP20_DDR2_MIN_KHZ = 35000;
@@ -225,7 +224,7 @@ NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 {
 nitros_check(0);
 NVRM_CPU1_ON_MIN_KHZ = 999000;
-VDEFREQ = 340000;
+VDEFREQ = 310000;
 GPUFREQ = 630000;
 //NVRM_AP20_SUSPEND_CORE_MV = 890;
 NVRM_AP20_DDR2_MIN_KHZ = 28000;
@@ -272,8 +271,8 @@ NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
 }
 
 }
-void nitros_check(unsigned int check) {
-nitro=check;
+void nitros_check(unsigned int check1) {
+nitro=check1;
 if (nitro == 1)
 {
 powersave_check(0);
