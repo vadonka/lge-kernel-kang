@@ -17,6 +17,7 @@ extern unsigned int NVRM_CPU1_ON_MIN_KHZ;
 extern unsigned int NVRM_CPU1_OFF_MAX_KHZ;
 extern unsigned int VDEFREQ;
 extern unsigned int GPUFREQ;
+extern unsigned int SDRAMFREQ;
 extern unsigned int PWONOFF;
 extern unsigned int NITROONOFF;
 extern unsigned int NVRM_AP20_LOW_CORE_MV;
