@@ -1,6 +1,6 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.1.5
-# Date: 2012.02.22
+# ANYKERNEL compiler script by vadonka v1.1.6
+# Date: 2012.03.02
 #
 # You need to define this below:
 ######################################################
@@ -21,26 +21,26 @@ export mthm=1
 
 # Check executables
 if [ -f /usr/bin/zip ]; then
-    if [ -f /usr/bin/unzip ]; then
-	if [ -f /usr/bin/abootimg ]; then
-	    echo "Required executables are found. OK!"
+	if [ -f /usr/bin/unzip ]; then
+		if [ -f /usr/bin/abootimg ]; then
+			echo "Required executables are found. OK!"
+		else
+			echo "ERROR: abootimg not found! Please install"
+			exit 1
+		fi
 	else
-	    echo "ERROR: abootimg not found! Please install"
-	    exit 0
+		echo "ERROR: unzip not found! Please install"
+		exit 1
 	fi
-    else
-	echo "ERROR: unzip not found! Please install"
-	exit 0
-    fi
 else
-    echo "ERROR: zip not found! Please install"
-    exit 0
+	echo "ERROR: zip not found! Please install"
+	exit 1
 fi
 
 # Check variables
 if [ -z $1 ]; then
-    export rh="0"
-    echo "Ramhack: no ramhack defined"
+	export rh="0"
+	echo "Ramhack: no ramhack defined"
 elif [[ $1 = [0-9]* ]]; then
 	let rh=$1
 	echo "Ramhack: ramhack is defined, size is: $1MB"
@@ -49,18 +49,8 @@ else
 	export rh="0"
 fi
 
-if [[ $2 == "shared" ]]; then
-    if [ -z $3 ]; then
-	export srh="0"
-    else
-	let srh=$3
-    fi
-	export csize=$((128-$rh+$srh))
-	echo "Using shared memory mode: $(($rh))MB ramhack with $(($srh))MB shared memory"
-else
-	let csize=$((128-$rh))
-	echo "Using traditional ramhack mode"
-fi
+let csize=$((128-$rh))
+echo "Using traditional ramhack mode"
 
 # Carveout size tweak
 export cout=`grep "^CONFIG_GPU_MEM_CARVEOUT" $kh/.config`
@@ -72,33 +62,32 @@ export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
 export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
 export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
+export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
 if [[ "$nooc" = "0" ]]; then
-    if [[ "$loc" = "1" ]]; then
-	export ocver="LOC"
-    else
-	export ocver="HOC"
-    fi
+	if [[ "$loc" = "1" ]]; then
+		export ocver="LOC"
+	else
+		export ocver="HOC"
+	fi
 else
-    export ocver="STOCK"
+	export ocver="STOCK"
 fi
 
 if [[ "$dsbatt" = "0" ]]; then
-    if [[ $2 = "shared" ]]; then
-	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M_S"'`
-	    sed -i "s/$cver/$nver/g" $kh/.config
-    else
-	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M"'`
-	    sed -i "s/$cver/$nver/g" $kh/.config
-    fi
+	if [[ "$otf" = "0" ]]; then
+		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_'$rh'M"'`
+		sed -i "s/$cver/$nver/g" $kh/.config
+	else
+		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF_'$rh'M"'`
+		sed -i "s/$cver/$nver/g" $kh/.config
+	fi
+elif [[ "$otf" = "0" ]]; then
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_'$rh'M"'`
+	sed -i "s/$cver/$nver/g" $kh/.config
 else
-    if [[ $2 = "shared" ]]; then
-	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_'$rh'M_S"'`
-	    sed -i "s/$cver/$nver/g" $kh/.config
-    else
-	    export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_'$rh'M"'`
-	    sed -i "s/$cver/$nver/g" $kh/.config
-    fi
+	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_OTF_'$rh'M"'`
+	sed -i "s/$cver/$nver/g" $kh/.config
 fi
 
 export starttime=`date +%s`

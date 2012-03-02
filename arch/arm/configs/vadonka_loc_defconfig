@@ -284,6 +284,7 @@ CONFIG_STOCK_VOLTAGE=y
 # CONFIG_STAR_PMIC is not set
 # CONFIG_STAR_HIDDEN_RESET is not set
 # CONFIG_LPRINTK is not set
+CONFIG_SPICA_OTF=y
 
 #
 # LGE STAR device driver
