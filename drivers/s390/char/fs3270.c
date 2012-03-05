@@ -14,6 +14,7 @@
 #include <linux/list.h>
 #include <linux/types.h>
 #include <linux/smp_lock.h>
+#include <linux/compat.h>
 
 #include <asm/ccwdev.h>
 #include <asm/cio.h>
@@ -74,7 +75,7 @@ fs3270_do_io(struct raw3270_view *view, struct raw3270_request *rq)
 		}
 		rc = raw3270_start(view, rq);
 		if (rc == 0) {
-			/* Started successfully. Now wait for completion. */
+			/* Started sucessfully. Now wait for completion. */
 			wait_event(fp->wait, raw3270_request_final(rq));
 		}
 	} while (rc == -EACCES);
