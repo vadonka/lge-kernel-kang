@@ -50,83 +50,6 @@
 #include "nvodm_keylist_reserved.h"
 #include "nvrm_drf.h"
 
-//Temporary dont use the Spica hack in this file
-#ifdef CONFIG_SPICA_OTF
-#undef CONFIG_SPICA_OTF
-#endif
-
-//Spica OTF Start
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-#define SDRAM_PROCFS_NAME "sdramfreq"
-#define SDRAM_PROCFS_SIZE 8
-static struct proc_dir_entry *SDRAM_Proc_File;
-static struct proc_dir_entry *spica_dir;
-static char procfs_buffer[SDRAM_PROCFS_SIZE];
-static unsigned long procfs_buffer_size = 0;
-
-int sdram_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "sdram_procfile_read (/proc/spica/%s) called\n", SDRAM_PROCFS_NAME);
-if (offset > 0) {
-ret  = 0;
-} else {
-memcpy(buffer, procfs_buffer, procfs_buffer_size);
-ret = procfs_buffer_size;
-
-}
-return ret;
-}
-
-int sdram_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp;
-temp=0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size;
-if ( temp < 300000 || temp > 350000 ) return procfs_buffer_size;
-/* [End] */
-procfs_buffer_size = count;
-	if (procfs_buffer_size > SDRAM_PROCFS_SIZE ) {
-		procfs_buffer_size = SDRAM_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
-}
-sscanf(procfs_buffer,"%u",&SDRAMFREQ);
-return procfs_buffer_size;
-}
-
-static int __init init_sdramfb_procsfs(void)
-{
-SDRAM_Proc_File = spica_add(SDRAM_PROCFS_NAME);
-if (SDRAM_Proc_File == NULL) {
-spica_remove(SDRAM_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", SDRAM_PROCFS_NAME);
-return -ENOMEM;
-} else {
-SDRAM_Proc_File->read_proc  = sdram_procfile_read;
-SDRAM_Proc_File->write_proc = sdram_procfile_write;
-SDRAM_Proc_File->mode     = S_IFREG | S_IRUGO;
-SDRAM_Proc_File->uid     = 0;
-SDRAM_Proc_File->gid     = 0;
-SDRAM_Proc_File->size     = 37;
-sprintf(procfs_buffer,"%d",SDRAMFREQ);
-procfs_buffer_size=strlen(procfs_buffer);
-printk(KERN_INFO "/proc/spica/%s created\n", SDRAM_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_sdramfb_procsfs);
-static void __exit cleanup_sdramfb_procsfs(void) {
-spica_remove(SDRAM_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", SDRAM_PROCFS_NAME);
-}
-module_exit(cleanup_sdramfb_procsfs);
-#endif //CONFIG_SPICA_OTF
-//Spica OTF End
-
 #define NVODM_ENABLE_EMC_DVFS (1)
 
 static const NvU8
@@ -147,14 +70,9 @@ s_NvOdmQueryProjectNameSetting[] = {'O','D','M',' ','K','i','t',0};
 static const NvOdmDownloadTransport
 s_NvOdmQueryDownloadTransportSetting = NvOdmDownloadTransport_None;
 
-
-
 #if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
-#ifdef CONFIG_SPICA_OTF
-static NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
-#else
+
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
-#endif
 {
     {
                   0x20,   /* Rev 2.0 */
@@ -427,17 +345,10 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
         }
     },
     {
-#ifdef CONFIG_SPICA_OTF
-                  0x20,   /* Rev 2.0 */
-             SDRAMFREQ,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
-                    46,   /* Number of EMC parameters below */
-#else
                   0x20,   /* Rev 2.0 */
 CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
-#endif
         {
             0x00000012,   /* RC */
             0x00000027,   /* RFC */
@@ -489,11 +400,8 @@ CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
     }
 };
 #else	// old version
-#ifdef CONFIG_SPICA_OTF
-static NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
-#else
+
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
-#endif
 {
     {
                   0x20,   /* Rev 2.0 */
@@ -766,17 +674,10 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
         }
     },
     {
-#ifdef CONFIG_SPICA_OTF
-                  0x20,   /* Rev 2.0 */
-             SDRAMFREQ,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
-                    46,   /* Number of EMC parameters below */
-#else
                   0x20,   /* Rev 2.0 */
 CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
-#endif
         {
 					  0x00000012,	/* RC */
 					  0x00000027,	/* RFC */
