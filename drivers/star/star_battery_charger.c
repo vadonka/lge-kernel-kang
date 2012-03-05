@@ -216,7 +216,7 @@ typedef enum {
 
 //20100609, , Charger Code [START]
 typedef enum {
-	CHG_IC_DEFAULT_MODE=0,    		/* 0  */
+	CHG_IC_DEFAULT_MODE=0,			/* 0  */
 	CHG_IC_TA_MODE,
 	CHG_IC_USB_LO_MODE,
 	CHG_IC_FACTORY_MODE,
@@ -384,6 +384,7 @@ typedef struct tegra_battery_dev {
 	//20100824, , get capacity using battery voltage for demo [END]
 	//NvU32	BatteryLifeTime;
 	//NvU32	BatteryMahConsumed;
+
 	NvU32	ACLineStatus;
 	NvU32	battery_poll_interval;
 	NvBool	present;
@@ -391,6 +392,7 @@ typedef struct tegra_battery_dev {
 	at_comm_status	at_comm_want;
 	NvBool	at_comm_ready;
 #endif // STAR_BATTERY_AT_COMMAND
+
 	NvU32	old_alarm_sec;
 	NvU32	old_checkbat_sec;
 	NvU32	last_cbc_time;
@@ -444,11 +446,11 @@ struct star_batt_test_reg {
 #define STAR_BATT_TEST_REG(_name, _code) { .name = _name, .code = _code}
 
 static struct star_batt_test_reg star_batt_test_regs[] = {
-	STAR_BATT_TEST_REG("TestMode",  	 BATT_TEST_MODE),
-	STAR_BATT_TEST_REG("TestCapacity",    BATT_TEST_CAPACITY),
-	STAR_BATT_TEST_REG("TestVoltage",    BATT_TEST_VOLT),
-	STAR_BATT_TEST_REG("TestTemperature", BATT_TEST_TEMP),
-	STAR_BATT_TEST_REG("TestPresent", BATT_TEST_PRESENT),
+	STAR_BATT_TEST_REG("TestMode",		BATT_TEST_MODE),
+	STAR_BATT_TEST_REG("TestCapacity",	BATT_TEST_CAPACITY),
+	STAR_BATT_TEST_REG("TestVoltage",	BATT_TEST_VOLT),
+	STAR_BATT_TEST_REG("TestTemperature",	BATT_TEST_TEMP),
+	STAR_BATT_TEST_REG("TestPresent",	BATT_TEST_PRESENT),
 };
 
 static int star_battery_debug_set(void *data, u64 val)
