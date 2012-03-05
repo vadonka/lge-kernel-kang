@@ -123,4 +123,8 @@ cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
 
 fi
 
-echo "Building time: $(($endtime/60-$starttime/60)) minutes"
+if [ "$(($endtime-$starttime))" -lt "180" ]; then
+    echo "Building time: $(($endtime-$starttime)) seconds"
+else
+    echo "Building time: $(($endtime/60-$starttime/60)) minutes"
+fi
