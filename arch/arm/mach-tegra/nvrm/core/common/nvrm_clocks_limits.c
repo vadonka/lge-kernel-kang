@@ -115,7 +115,8 @@ module_exit(cleanup_gpufb_procsfs);
 #define AVP_PROCFS_SIZE 8
 static struct proc_dir_entry *AVP_Proc_File;
 static struct proc_dir_entry *spica_dir;
-static char procfs_buffer[AVP_PROCFS_SIZE];
+static char procfs_buffer_avp[AVP_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_avp = 0;
 
 int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
@@ -123,8 +124,8 @@ printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME)
 if (offset > 0) {
 ret  = 0;
 } else {
-memcpy(buffer, procfs_buffer, procfs_buffer_size);
-ret = procfs_buffer_size;
+memcpy(buffer, procfs_buffer_avp, procfs_buffer_size_avp);
+ret = procfs_buffer_size_avp;
 
 }
 return ret;
@@ -135,19 +136,19 @@ int temp1;
 temp1=0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp1) < 1 ) return procfs_buffer_size;
-if ( temp1 < 200000 || temp1 > 250000 ) return procfs_buffer_size;
+if ( sscanf(buffer,"%d",&temp1) < 1 ) return procfs_buffer_size_avp;
+if ( temp1 < 200000 || temp1 > 250000 ) return procfs_buffer_size_avp;
 /* [End] */
-procfs_buffer_size = count;
-	if (procfs_buffer_size > AVP_PROCFS_SIZE ) {
-		procfs_buffer_size = AVP_PROCFS_SIZE;
+procfs_buffer_size_avp = count;
+	if (procfs_buffer_size_avp > AVP_PROCFS_SIZE ) {
+		procfs_buffer_size_avp = AVP_PROCFS_SIZE;
 	}
-if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
+if ( copy_from_user(procfs_buffer_avp, buffer, procfs_buffer_size_avp) ) {
 printk(KERN_INFO "buffer_size error\n");
 return -EFAULT;
 }
-sscanf(procfs_buffer,"%u",&AVPFREQ);
-return procfs_buffer_size;
+sscanf(procfs_buffer_avp,"%u",&AVPFREQ);
+return procfs_buffer_size_avp;
 }
 
 static int __init init_avpfb_procsfs(void)
@@ -164,8 +165,8 @@ AVP_Proc_File->mode     = S_IFREG | S_IRUGO;
 AVP_Proc_File->uid     = 0;
 AVP_Proc_File->gid     = 0;
 AVP_Proc_File->size     = 37;
-sprintf(procfs_buffer,"%d",AVPFREQ);
-procfs_buffer_size=strlen(procfs_buffer);
+sprintf(procfs_buffer_avp,"%d",AVPFREQ);
+procfs_buffer_size_avp=strlen(procfs_buffer_avp);
 printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
 }
 return 0;
