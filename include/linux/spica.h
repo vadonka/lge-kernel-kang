@@ -7,6 +7,7 @@
 #include <asm/uaccess.h>
 
 #undef CFS_BOOST
+#undef CONFIG_CFS_BOOST
 #define CFS_BOOST_NICE -15
 
 //extern unsigned int USE_FAKE_SHMOO;
