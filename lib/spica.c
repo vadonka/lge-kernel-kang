@@ -6,6 +6,7 @@ unsigned int NVRM_CPU1_ON_MIN_KHZ = 816000; //Default value should be changed he
 unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
 
 //unsigned int RAMHACK;
+unsigned int AVPFREQ = 240000;
 unsigned int VDEFREQ = 680000;
 unsigned int GPUFREQ = 340000;
 unsigned int PWONOFF = 0;

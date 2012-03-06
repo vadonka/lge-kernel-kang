@@ -15,6 +15,7 @@ extern void suspend_prepare_freq(void);
 extern void resume_prepare_freq(void);
 extern unsigned int NVRM_CPU1_ON_MIN_KHZ;
 extern unsigned int NVRM_CPU1_OFF_MAX_KHZ;
+extern unsigned int AVPFREQ;
 extern unsigned int VDEFREQ;
 extern unsigned int GPUFREQ;
 extern unsigned int PWONOFF;

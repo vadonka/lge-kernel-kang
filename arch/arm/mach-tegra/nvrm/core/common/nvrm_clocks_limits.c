@@ -110,6 +110,72 @@ spica_remove(GPU_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 }
 module_exit(cleanup_gpufb_procsfs);
+
+#define AVP_PROCFS_NAME "avpfreq"
+#define AVP_PROCFS_SIZE 8
+static struct proc_dir_entry *AVP_Proc_File;
+static struct proc_dir_entry *spica_dir;
+static char procfs_buffer[AVP_PROCFS_SIZE];
+
+int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+int ret;
+printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
+if (offset > 0) {
+ret  = 0;
+} else {
+memcpy(buffer, procfs_buffer, procfs_buffer_size);
+ret = procfs_buffer_size;
+
+}
+return ret;
+}
+
+int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp1;
+temp1=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp1) < 1 ) return procfs_buffer_size;
+if ( temp1 < 200000 || temp1 > 250000 ) return procfs_buffer_size;
+/* [End] */
+procfs_buffer_size = count;
+	if (procfs_buffer_size > AVP_PROCFS_SIZE ) {
+		procfs_buffer_size = AVP_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
+printk(KERN_INFO "buffer_size error\n");
+return -EFAULT;
+}
+sscanf(procfs_buffer,"%u",&AVPFREQ);
+return procfs_buffer_size;
+}
+
+static int __init init_avpfb_procsfs(void)
+{
+AVP_Proc_File = spica_add(AVP_PROCFS_NAME);
+if (AVP_Proc_File == NULL) {
+spica_remove(AVP_PROCFS_NAME);
+printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", AVP_PROCFS_NAME);
+return -ENOMEM;
+} else {
+AVP_Proc_File->read_proc  = avp_procfile_read;
+AVP_Proc_File->write_proc = avp_procfile_write;
+AVP_Proc_File->mode     = S_IFREG | S_IRUGO;
+AVP_Proc_File->uid     = 0;
+AVP_Proc_File->gid     = 0;
+AVP_Proc_File->size     = 37;
+sprintf(procfs_buffer,"%d",AVPFREQ);
+procfs_buffer_size=strlen(procfs_buffer);
+printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
+}
+return 0;
+}
+module_init(init_avpfb_procsfs);
+static void __exit cleanup_avpfb_procsfs(void) {
+spica_remove(AVP_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", AVP_PROCFS_NAME);
+}
+module_exit(cleanup_avpfb_procsfs);
 #endif //CONFIG_SPICA_OTF
 //Spica OTF End
 
@@ -328,12 +394,14 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // CPU clock duh!
     pSKUedLimits->CpuMaxKHz = MAX_CPU_OC_FREQ;
 
+#ifndef CONFIG_SPICA_OTF
 #ifdef CONFIG_BOOST_PERIPHERALS
     // AVP clock
     pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
     // 3D clock
     pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
 #endif // CONFIG_BOOST_PERIPHERALS
+#endif // CONFIG_SPICA_OTF
 
 #endif // CONFIG_FAKE_SHMOO
 
@@ -348,7 +416,11 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // Combine AVP/System clock absolute limit with scaling V/F ladder upper
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
+#ifdef CONFIG_SPICA_OTF
+    AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
+#else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
+#endif
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
     {
         if (pHwLimits[i].HwDeviceId == NV_DEVID_AVP)
