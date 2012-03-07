@@ -70,7 +70,7 @@ temp=0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size;
-if ( temp < 280000 || temp > 350000 ) return procfs_buffer_size;
+if ( temp < 280000 || temp > 400000 ) return procfs_buffer_size;
 /* [End] */
 procfs_buffer_size = count;
 	if (procfs_buffer_size > GPU_PROCFS_SIZE ) {
