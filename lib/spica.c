@@ -8,7 +8,7 @@ unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
 //unsigned int RAMHACK;
 unsigned int AVPFREQ = 240000;
 unsigned int VDEFREQ = 680000;
-unsigned int GPUFREQ = 340000;
+unsigned int GPUFREQ = 350000;
 unsigned int PWONOFF = 0;
 unsigned int NITROONOFF = 0;
 unsigned int NVRM_AP20_LOW_CORE_MV = 950;
