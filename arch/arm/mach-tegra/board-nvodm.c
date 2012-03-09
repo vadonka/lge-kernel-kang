@@ -1652,17 +1652,17 @@ static struct platform_device star_wm8994_pdevice =
 //20100701  crashdump [LGE_START]
 #if defined(CONFIG_ANDROID_RAM_CONSOLE)
 
+#if defined (CONFIG_MACH_STAR_TMUS)
 #if defined (CONFIG_STAR_HIDDEN_RESET)
 #define RAM_CONSOLE_RESERVED_SIZE 2
 #else
 #define RAM_CONSOLE_RESERVED_SIZE 1
 #endif
-//#define CARVEOUT_SIZE 64
-//#define STAR_RAM_CONSOLE_BASE 	((512-CARVEOUT_SIZE-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
-#define STAR_RAM_CONSOLE_BASE	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
-#ifdef CONFIG_MACH_STAR_TMUS
+#define CARVEOUT_SIZE 128
+#define STAR_RAM_CONSOLE_BASE 	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
 #define STAR_RAM_CONSOLE_SIZE	(128*SZ_1K)
-#else
+#elif defined (CONFIG_MACH_STAR_REV_F)
+#define STAR_RAM_CONSOLE_BASE 	(383*SZ_1M)
 #define STAR_RAM_CONSOLE_SIZE	(512*SZ_1K)
 #endif
 static struct resource ram_console_resource[] = {
@@ -1680,7 +1680,7 @@ static struct platform_device ram_console_device = {
         .num_resources  = ARRAY_SIZE(ram_console_resource),
         .resource       = ram_console_resource,
 };
-#endif
+#endif //CONFIG_ANDROID_RAM_CONSOLE
 //20100701  crashdump  [LGE_END]
 
 static struct platform_device *nvodm_devices[] __initdata = {

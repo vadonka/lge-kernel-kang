@@ -19,6 +19,7 @@ unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
 //unsigned int vm_swappiness = 10;
 //unsigned int CARVEOUT_SIZE = 128;
 unsigned int MAXSCREENOFFCPUFREQ = 525000;
+unsigned int GPURAMSIZE = 128;
 
 //unsigned int STAR_RAM_CONSOLE_BASE;
 //unsigned int STAR_RAM_CONSOLE_SIZE;

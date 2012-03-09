@@ -35,6 +35,7 @@ extern unsigned int NVRM_CPU1_OFF_PENDING_MS;
 extern unsigned int MAXSCREENOFFCPUFREQ;
 //extern unsigned int USE_VALUE;
 //extern unsigned int RAMHACK;
+extern unsigned int GPURAMSIZE;
 
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
