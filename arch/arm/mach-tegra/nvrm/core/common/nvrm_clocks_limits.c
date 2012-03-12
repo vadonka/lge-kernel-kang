@@ -470,10 +470,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     }
 
 	//Imperticus work
-	s_ClockRangeLimits[2].MaxKHz = 280000;
-	s_ClockRangeLimits[7].MaxKHz = 350000;
-	s_ClockRangeLimits[8].MaxKHz = 350000;
-	s_ClockRangeLimits[10].MaxKHz = 350000;
+	//s_ClockRangeLimits[2].MaxKHz = 280000;
+	//s_ClockRangeLimits[7].MaxKHz = 350000;
+	//s_ClockRangeLimits[8].MaxKHz = 350000;
+	//s_ClockRangeLimits[10].MaxKHz = 350000;
 
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail

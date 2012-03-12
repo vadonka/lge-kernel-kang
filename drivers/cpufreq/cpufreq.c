@@ -122,6 +122,7 @@ module_exit(cleanup_maxsoc_procsfs);
 int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
 extern NvRmCpuShmoo fake_CpuShmoo;  // Stored faked CpuShmoo values
 extern NvRmDfs *fakeShmoo_Dfs;
+extern NvU32 *FakeShmooVoltages;
 #endif // CONFIG_FAKE_SHMOO
 
 /**
@@ -764,17 +765,6 @@ static ssize_t show_frequency_voltage_table(struct cpufreq_policy *policy, char 
 	return table - buf;
 }
 
-static ssize_t show_scaling_available_frequencies(struct cpufreq_policy *policy, char *buf)
-{
-	int i;
-	char *table = buf;
-
-	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
-	{
-		table += sprintf(table, "%d ", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i]);
-	}
-	return table - buf;
-}
 
 static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 {
@@ -800,6 +790,21 @@ static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf,
 
 	return count;
 }
+
+
+//added to expose the normal scaling_available_frequencies, thanks to vork
+static ssize_t show_scaling_available_frequencies(struct cpufreq_policy *policy, char *buf)
+{
+	int i;
+	char *table = buf;
+
+	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
+	{
+		table += sprintf(table, "%d ", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i]);
+	}
+	return table - buf;
+}
+
 #endif // CONFIG_FAKE_SHMOO
 
 #define define_one_ro(_name) \
