@@ -115,26 +115,93 @@ printk(KERN_INFO "/proc/spica/%s removed\n", ON_PROCFS_NAME);
 module_exit(cleanup_cpu_procsfs);
 #endif // OTF_CPU1
 
-#define SUSPENDMV_PROCFS_NAME "suspend_core_mv"
-#define SUSPENDMV_PROCFS_SIZE 8
-
+/* DDR2 Min Khz */
+#ifdef CONFIG_OTF_DDR2MIN
 #define DDR_PROCFS_NAME "ddr2_min_khz"
 #define DDR_PROCFS_SIZE 6
+static unsigned long procfs_buffer_size_ddr2min = 0;
+static struct proc_dir_entry *DDR_Proc_File;
+static char procfs_buffer_ddr2min[DDR_PROCFS_SIZE];
+int min_ddr2min = 10000; // DDR2 Min Khz
+int max_ddr2min = 55000; // DDR2 Max Khz
+int ddr_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+int ret;
+printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", DDR_PROCFS_NAME);
+if (offset > 0) {
+	ret = 0;
+} else {
+	memcpy(buffer, procfs_buffer_ddr2min, procfs_buffer_size_ddr2min);
+	ret = procfs_buffer_size_ddr2min;
+}
+return ret;
+}
+
+int ddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp_ddr2min;
+temp_ddr2min=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp_ddr2min) < 1 ) return procfs_buffer_size_ddr2min;
+if ( temp_ddr2min < min_ddr2min || max_ddr2min > 55000 ) return procfs_buffer_size_ddr2min;
+/* [End] */
+	procfs_buffer_size_ddr2min = count;
+if (procfs_buffer_size_ddr2min > DDR_PROCFS_SIZE ) {
+	procfs_buffer_size_ddr2min = DDR_PROCFS_SIZE;
+	}
+if ( copy_from_user(procfs_buffer_ddr2min, buffer, procfs_buffer_size_ddr2min) ) {
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
+}
+sscanf(procfs_buffer_ddr2min,"%u",&NVRM_AP20_DDR2_MIN_KHZ);
+return procfs_buffer_size_ddr2min;
+}
+
+static int __init init_ddr_procsfs(void) {
+DDR_Proc_File = spica_add(DDR_PROCFS_NAME);
+if (DDR_Proc_File == NULL) {
+	spica_remove(DDR_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", DDR_PROCFS_NAME);
+	return -ENOMEM;
+} else {
+	DDR_Proc_File->read_proc = ddr_procfile_read;
+	DDR_Proc_File->write_proc = ddr_procfile_write;
+	DDR_Proc_File->mode = S_IFREG | S_IRUGO;
+	DDR_Proc_File->uid = 0;
+	DDR_Proc_File->gid = 0;
+	DDR_Proc_File->size = 37;
+	sprintf(procfs_buffer_ddr2min,"%d",NVRM_AP20_DDR2_MIN_KHZ);
+	procfs_buffer_size_ddr2min = strlen(procfs_buffer_ddr2min);
+	printk(KERN_INFO "/proc/spica/%s created\n", DDR_PROCFS_NAME);
+}
+return 0;
+}
+module_init(init_ddr_procsfs);
+
+static void __exit cleanup_ddr_procsfs(void) {
+spica_remove(DDR_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", DDR_PROCFS_NAME);
+}
+module_exit(cleanup_ddr_procsfs);
+#endif // OTF_DDR2MIN
+
+
+#define SUSPENDMV_PROCFS_NAME "suspend_core_mv"
+#define SUSPENDMV_PROCFS_SIZE 8
 
 #define LPDDR_PROCFS_NAME "lpddr2_min_khz"
 #define LPDDR_PROCFS_SIZE 6
 
 static unsigned long procfs_buffer_size0 = 0;
 static unsigned long procfs_buffer_size2 = 0;
-static unsigned long procfs_buffer_size3 = 0;
+
 
 static struct proc_dir_entry *LPDDR_Proc_File;
 static struct proc_dir_entry *SUSPENDMV_Proc_File;
-static struct proc_dir_entry *DDR_Proc_File;
+
 
 static char procfs_buffer3[LPDDR_PROCFS_SIZE];
 static char procfs_buffer1[SUSPENDMV_PROCFS_SIZE];
-static char procfs_buffer2[DDR_PROCFS_SIZE];
+
 
 int lpddr_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
@@ -162,18 +229,7 @@ ret = procfs_buffer_size0;
 return ret;
 }
 
-int ddr_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", DDR_PROCFS_NAME);
-if (offset > 0) {
-ret  = 0;
-} else {
-memcpy(buffer, procfs_buffer2, procfs_buffer_size3);
-ret = procfs_buffer_size3;
 
-}
-return ret;
-}
 
 int sc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp4;
@@ -195,25 +251,7 @@ return -EFAULT;
 sscanf(procfs_buffer1,"%u",&NVRM_AP20_SUSPEND_CORE_MV);
 return procfs_buffer_size0;
 }
-int ddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp5;
-temp5=0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp5) < 1 ) return procfs_buffer_size2;
-if ( temp5 < 10000 || temp5 > 55000 ) return procfs_buffer_size2;
-/* [End] */
-procfs_buffer_size2 = count;
-	if (procfs_buffer_size2 > DDR_PROCFS_SIZE ) {
-		procfs_buffer_size2 = DDR_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer2, buffer, procfs_buffer_size2) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
-}
-sscanf(procfs_buffer2,"%u",&NVRM_AP20_DDR2_MIN_KHZ);
-return procfs_buffer_size2;
-}
+
 int lpddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp6;
 temp6=0;
@@ -275,35 +313,12 @@ printk(KERN_INFO "/proc/spica/%s created\n", SUSPENDMV_PROCFS_NAME);
 return 0;
 }
 module_init(init_suspendcoremv_procsfs);
-static int __init init_ddr_procsfs(void)
-{
-DDR_Proc_File = spica_add(DDR_PROCFS_NAME);
-if (DDR_Proc_File == NULL) {
-spica_remove(DDR_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", DDR_PROCFS_NAME);
-return -ENOMEM;
-} else {
-DDR_Proc_File->read_proc  = ddr_procfile_read;
-DDR_Proc_File->write_proc = ddr_procfile_write;
-DDR_Proc_File->mode     = S_IFREG | S_IRUGO;
-DDR_Proc_File->uid     = 0;
-DDR_Proc_File->gid     = 0;
-DDR_Proc_File->size     = 37;
-sprintf(procfs_buffer2,"%d",NVRM_AP20_DDR2_MIN_KHZ);
-procfs_buffer_size3=strlen(procfs_buffer2);
-printk(KERN_INFO "/proc/spica/%s created\n", DDR_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_ddr_procsfs);
+
 static void __exit cleanup_sc_procsfs(void) {
 spica_remove(SUSPENDMV_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", SUSPENDMV_PROCFS_NAME);
 }
-static void __exit cleanup_ddr_procsfs(void) {
-spica_remove(DDR_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", DDR_PROCFS_NAME);
-}
+
 module_exit(cleanup_sc_procsfs);
 static void __exit cleanup_lpddr_procsfs(void) {
 spica_remove(LPDDR_PROCFS_NAME);

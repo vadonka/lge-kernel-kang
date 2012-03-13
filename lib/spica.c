@@ -47,7 +47,11 @@ unsigned int GPURAMSIZE = 128;
 
 //const unsigned int STAR_RAM_CONSOLE_BASE = size1;
 const unsigned int NVRM_AP20_SUSPEND_CORE_MV = 1000;
+
+#ifdef CONFIG_OTF_DDR2MIN
 unsigned int NVRM_AP20_DDR2_MIN_KHZ = 50000;
+#endif
+
 unsigned int NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 
 //unsigned int EMCVOLTAGE = 1200;

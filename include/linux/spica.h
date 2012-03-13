@@ -53,7 +53,11 @@ extern unsigned int GPURAMSIZE;
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
 extern const unsigned int NVRM_AP20_SUSPEND_CORE_MV;
+
+#ifdef CONFIG_OTF_DDR2MIN
 extern unsigned int NVRM_AP20_DDR2_MIN_KHZ;
+#endif
+
 extern unsigned int NVRM_AP20_LPDDR2_MIN_KHZ;
 //static unsigned STAR_RAM_CONSOLE_SIZE;
 //static unsigned STAR_RAM_CONSOLE_BASE;
