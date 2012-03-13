@@ -33,7 +33,7 @@ unsigned int NVRM_AP20_LOW_CPU_MV = 770;
 //unsigned int vm_swappiness = 10;
 //unsigned int CARVEOUT_SIZE = 128;
 unsigned int MAXSCREENOFFCPUFREQ = 525000;
-unsigned int GPURAMSIZE = 128;
+unsigned int GPURAMSIZE = CONFIG_GPU_MEM_CARVEOUT_SZ;
 
 //unsigned int STAR_RAM_CONSOLE_BASE;
 //unsigned int STAR_RAM_CONSOLE_SIZE;
