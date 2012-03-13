@@ -138,7 +138,7 @@ return ret;
 
 int ddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_ddr2min;
-temp_ddr2min=0;
+temp_ddr2min = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_ddr2min) < 1 ) return procfs_buffer_size_ddr2min;
@@ -207,7 +207,7 @@ return ret;
 
 int lpddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_lpddr2;
-temp_lpddr2=0;
+temp_lpddr2 = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_lpddr2) < 1 ) return procfs_buffer_size_lpddr2;
@@ -275,7 +275,7 @@ return ret;
 
 int sc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_scmv;
-temp_scmv=0;
+temp_scmv = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_scmv) < 1 ) return procfs_buffer_size_scmv;

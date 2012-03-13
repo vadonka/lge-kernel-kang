@@ -100,7 +100,7 @@ return ret;
 
 int pw_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp2;
-temp2=0;
+temp2 = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp2) < 0 )  return procfs_buffer_size210;
@@ -120,7 +120,7 @@ return procfs_buffer_size210;
 }
 int nitro_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp8;
-temp8=0;
+temp8 = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp8) < 0 )  return procfs_buffer_size110;

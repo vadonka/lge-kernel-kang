@@ -138,7 +138,7 @@ return ret;
 
 int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_avpfreq;
-temp_avpfreq=0;
+temp_avpfreq = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_avpfreq) < 1 ) return procfs_buffer_size_avpfreq;
