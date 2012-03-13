@@ -195,9 +195,9 @@ extern "C"
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
 #endif // OTF_DDR2MIN
 
-#ifndef CONFIG_SPICA_OTF
+#ifndef CONFIG_OTF_LPDDR2
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
-#endif // SPICA_OTF
+#endif //_OTF_LPDDR2
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
@@ -294,7 +294,9 @@ extern "C"
 #ifndef CONFIG_SPICA_OTF
 #define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
+#endif
 /// Core voltage in suspend
+#ifndef CONFIG_OTF_SCMV
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
 #endif
 

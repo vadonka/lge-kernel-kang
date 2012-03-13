@@ -184,131 +184,131 @@ printk(KERN_INFO "/proc/spica/%s removed\n", DDR_PROCFS_NAME);
 module_exit(cleanup_ddr_procsfs);
 #endif // OTF_DDR2MIN
 
-
-#define SUSPENDMV_PROCFS_NAME "suspend_core_mv"
-#define SUSPENDMV_PROCFS_SIZE 8
-
+/* LPDDR2 Min Khz */
+#ifdef CONFIG_OTF_LPDDR2
 #define LPDDR_PROCFS_NAME "lpddr2_min_khz"
 #define LPDDR_PROCFS_SIZE 6
-
-static unsigned long procfs_buffer_size0 = 0;
-static unsigned long procfs_buffer_size2 = 0;
-
-
+static unsigned long procfs_buffer_size_lpddr2 = 0;
 static struct proc_dir_entry *LPDDR_Proc_File;
-static struct proc_dir_entry *SUSPENDMV_Proc_File;
-
-
-static char procfs_buffer3[LPDDR_PROCFS_SIZE];
-static char procfs_buffer1[SUSPENDMV_PROCFS_SIZE];
-
-
+static char procfs_buffer_lpddr2[LPDDR_PROCFS_SIZE];
+int min_lpddr2 = 7000; // LPDDR2 Min Khz
+int max_lpddr2 = 20000; // LPDDR2 Max Khz
 int lpddr_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", LPDDR_PROCFS_NAME);
 if (offset > 0) {
-ret  = 0;
+	ret = 0;
 } else {
-memcpy(buffer, procfs_buffer3, procfs_buffer_size2);
-ret = procfs_buffer_size2;
-
+	memcpy(buffer, procfs_buffer_lpddr2, procfs_buffer_size_lpddr2);
+	ret = procfs_buffer_size_lpddr2;
 }
 return ret;
-}
-
-int sc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", SUSPENDMV_PROCFS_NAME);
-if (offset > 0) {
-ret  = 0;
-} else {
-memcpy(buffer, procfs_buffer1, procfs_buffer_size0);
-ret = procfs_buffer_size0;
-
-}
-return ret;
-}
-
-
-
-int sc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp4;
-temp4=0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp4) < 1 ) return procfs_buffer_size0;
-if ( temp4 < 600 || temp4 > 1100 ) return procfs_buffer_size0;
-/* [End] */
-
-procfs_buffer_size0 = count;
-	if (procfs_buffer_size0 > SUSPENDMV_PROCFS_SIZE ) {
-		procfs_buffer_size0 = SUSPENDMV_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer1, buffer, procfs_buffer_size0) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
-}
-sscanf(procfs_buffer1,"%u",&NVRM_AP20_SUSPEND_CORE_MV);
-return procfs_buffer_size0;
 }
 
 int lpddr_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp6;
-temp6=0;
+int temp_lpddr2;
+temp_lpddr2=0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp6) < 1 ) return procfs_buffer_size3;
-if ( temp6 < 7000 || temp6 > 20000 ) return procfs_buffer_size3;
+if ( sscanf(buffer,"%d",&temp_lpddr2) < 1 ) return procfs_buffer_size_lpddr2;
+if ( temp_lpddr2 < min_lpddr2 || temp_lpddr2 > max_lpddr2 ) return procfs_buffer_size_lpddr2;
 /* [Start] */
-procfs_buffer_size3 = count;
-	if (procfs_buffer_size3 > LPDDR_PROCFS_SIZE ) {
-		procfs_buffer_size3 = LPDDR_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer3, buffer, procfs_buffer_size3) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
+	procfs_buffer_size_lpddr2 = count;
+if (procfs_buffer_size_lpddr2 > LPDDR_PROCFS_SIZE ) {
+	procfs_buffer_size_lpddr2 = LPDDR_PROCFS_SIZE;
 }
-sscanf(procfs_buffer3,"%u",&NVRM_AP20_LPDDR2_MIN_KHZ);
-return procfs_buffer_size3;
+if ( copy_from_user(procfs_buffer_lpddr2, buffer, procfs_buffer_size_lpddr2) ) {
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
+}
+sscanf(procfs_buffer_lpddr2,"%u",&NVRM_AP20_LPDDR2_MIN_KHZ);
+return procfs_buffer_size_lpddr2;
 }
 
-static int __init init_lpddr_procsfs(void)
-{
+static int __init init_lpddr_procsfs(void) {
 LPDDR_Proc_File = spica_add(LPDDR_PROCFS_NAME);
 if (LPDDR_Proc_File == NULL) {
-spica_remove(LPDDR_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", LPDDR_PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(LPDDR_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", LPDDR_PROCFS_NAME);
+	return -ENOMEM;
 } else {
-LPDDR_Proc_File->read_proc  = lpddr_procfile_read;
-LPDDR_Proc_File->write_proc = lpddr_procfile_write;
-LPDDR_Proc_File->mode     = S_IFREG | S_IRUGO;
-LPDDR_Proc_File->uid     = 0;
-LPDDR_Proc_File->gid     = 0;
-LPDDR_Proc_File->size     = 37;
-sprintf(procfs_buffer3,"%d",NVRM_AP20_LPDDR2_MIN_KHZ);
-procfs_buffer_size2=strlen(procfs_buffer3);
+	LPDDR_Proc_File->read_proc = lpddr_procfile_read;
+	LPDDR_Proc_File->write_proc = lpddr_procfile_write;
+	LPDDR_Proc_File->mode = S_IFREG | S_IRUGO;
+	LPDDR_Proc_File->uid = 0;
+	LPDDR_Proc_File->gid = 0;
+	LPDDR_Proc_File->size = 37;
+	sprintf(procfs_buffer_lpddr2,"%d",NVRM_AP20_LPDDR2_MIN_KHZ);
+	procfs_buffer_size_lpddr2 = strlen(procfs_buffer_lpddr2);
 }
 return 0;
 }
 module_init(init_lpddr_procsfs);
-static int __init init_suspendcoremv_procsfs(void)
-{
+
+static void __exit cleanup_lpddr_procsfs(void) {
+spica_remove(LPDDR_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", LPDDR_PROCFS_NAME);
+}
+module_exit(cleanup_lpddr_procsfs);
+#endif // OTF_LPDDR2
+
+/* Suspend Core */
+#ifdef CONFIG_OTF_SCMV
+#define SUSPENDMV_PROCFS_NAME "suspend_core_mv"
+#define SUSPENDMV_PROCFS_SIZE 8
+static unsigned long procfs_buffer_size_scmv = 0;
+static struct proc_dir_entry *SUSPENDMV_Proc_File;
+static char procfs_buffer_scmv[SUSPENDMV_PROCFS_SIZE];
+int min_scmv = 600;  // Suspend Core Min mV
+int max_scmv = 1100; // Suspend Core Max mV
+int sc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+int ret;
+printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", SUSPENDMV_PROCFS_NAME);
+	if (offset > 0) {
+ret = 0;
+} else {
+	memcpy(buffer, procfs_buffer_scmv, procfs_buffer_size_scmv);
+	ret = procfs_buffer_size_scmv;
+}
+return ret;
+}
+
+int sc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp_scmv;
+temp_scmv=0;
+/* CAUTION: Don't change below 2 lines */
+/* [Start] */
+if ( sscanf(buffer,"%d",&temp_scmv) < 1 ) return procfs_buffer_size_scmv;
+if ( temp_scmv < min_scmv || temp_scmv > max_scmv ) return procfs_buffer_size_scmv;
+/* [End] */
+	procfs_buffer_size_scmv = count;
+if (procfs_buffer_size_scmv > SUSPENDMV_PROCFS_SIZE ) {
+	procfs_buffer_size_scmv = SUSPENDMV_PROCFS_SIZE;
+}
+if ( copy_from_user(procfs_buffer_scmv, buffer, procfs_buffer_size_scmv) ) {
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
+}
+sscanf(procfs_buffer_scmv,"%u",&NVRM_AP20_SUSPEND_CORE_MV);
+return procfs_buffer_size_scmv;
+}
+
+static int __init init_suspendcoremv_procsfs(void) {
 SUSPENDMV_Proc_File = spica_add(SUSPENDMV_PROCFS_NAME);
 if (SUSPENDMV_Proc_File == NULL) {
-spica_remove(SUSPENDMV_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", SUSPENDMV_PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(SUSPENDMV_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", SUSPENDMV_PROCFS_NAME);
+	return -ENOMEM;
 } else {
-SUSPENDMV_Proc_File->read_proc  = sc_procfile_read;
-SUSPENDMV_Proc_File->write_proc = sc_procfile_write;
-SUSPENDMV_Proc_File->mode     = S_IFREG | S_IRUGO;
-SUSPENDMV_Proc_File->uid     = 0;
-SUSPENDMV_Proc_File->gid     = 0;
-SUSPENDMV_Proc_File->size     = 37;
-sprintf(procfs_buffer1,"%d",NVRM_AP20_SUSPEND_CORE_MV);
-procfs_buffer_size0=strlen(procfs_buffer1);
-printk(KERN_INFO "/proc/spica/%s created\n", SUSPENDMV_PROCFS_NAME);
+	SUSPENDMV_Proc_File->read_proc = sc_procfile_read;
+	SUSPENDMV_Proc_File->write_proc = sc_procfile_write;
+	SUSPENDMV_Proc_File->mode = S_IFREG | S_IRUGO;
+	SUSPENDMV_Proc_File->uid = 0;
+	SUSPENDMV_Proc_File->gid = 0;
+	SUSPENDMV_Proc_File->size = 37;
+	sprintf(procfs_buffer_scmv,"%d",NVRM_AP20_SUSPEND_CORE_MV);
+	procfs_buffer_size_scmv = strlen(procfs_buffer_scmv);
+	printk(KERN_INFO "/proc/spica/%s created\n", SUSPENDMV_PROCFS_NAME);
 }
 return 0;
 }
@@ -318,15 +318,9 @@ static void __exit cleanup_sc_procsfs(void) {
 spica_remove(SUSPENDMV_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", SUSPENDMV_PROCFS_NAME);
 }
-
 module_exit(cleanup_sc_procsfs);
-static void __exit cleanup_lpddr_procsfs(void) {
-spica_remove(LPDDR_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", LPDDR_PROCFS_NAME);
-}
-module_exit(cleanup_lpddr_procsfs);
-#endif //CONFIG_SPICA_OTF
-//Spica OTF End
+#endif // OTF_SCMV
+#endif // SPICA_OTF
 
 /*****************************************************************************/
 

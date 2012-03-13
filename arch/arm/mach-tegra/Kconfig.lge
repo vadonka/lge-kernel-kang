@@ -60,6 +60,18 @@ config OTF_VDE
 	bool "OTF VDE Frequency"
 	default y
 
+config OTF_DDR2MIN
+	bool "OTF DDR2 Min Frequency"
+	default y
+
+config OTF_LPDDR2
+	bool "OTF LPDDR2 Min Frequency"
+	default y
+
+config OTF_SCMV
+	bool "OTF Suspend Core mV (DANGEROUS)"
+	default n
+
 config OTF_CPU1
 	bool "OTF CPU Second Core activation"
 	default y
