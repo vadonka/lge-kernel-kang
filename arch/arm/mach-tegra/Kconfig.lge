@@ -74,7 +74,7 @@ config OTF_SCMV
 
 config OTF_AP20LC
 	bool "OTF AP20 Low Corners voltages"
-	default y
+	default n
 
 config OTF_CPU1
 	bool "OTF CPU Second Core activation"

@@ -2217,6 +2217,12 @@ EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 #ifdef CONFIG_OTF_MAXSCOFF
 unsigned int oldmaxclock;
 unsigned int oldminclock;
+unsigned int oldmincpu1on;
+unsigned int oldgpufreq;
+unsigned int oldgpufbfreq;
+unsigned int oldcoremv;
+unsigned int oldddr2;
+unsigned int oldlpddr2;
 
 static void powersave_early_suspend(struct early_suspend *handler) {
 	int cpu;
@@ -2233,6 +2239,109 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			new_policy.min = oldminclock;
 			__cpufreq_set_policy(cpu_policy, &new_policy);
 			cpu_policy->user_policy.policy = cpu_policy->policy;
+#ifdef CONFIG_OTF_PSNIT
+		if (PWONOFF == 4) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 810000;
+			NVRM_CPU1_OFF_PENDING_MS = 500;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 230000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 320000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 630000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 40000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 910;
+			NVRM_AP20_LOW_CPU_MV = 760;
+#endif
+		} else if (PWONOFF == 5) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 810000;
+			NVRM_CPU1_OFF_PENDING_MS = 400;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 220000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 310000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 620000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 30000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 895;
+			NVRM_AP20_LOW_CPU_MV = 750;
+#endif
+		} else if (PWONOFF == 6) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 1015000;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 200000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 300000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 600000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 10000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 880;
+			NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 810000;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 240000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 380000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 680000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 50000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 925;
+			NVRM_AP20_LOW_CPU_MV = 770;
+#endif
+		}
+#endif // OTF_PSNIT
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2252,6 +2361,110 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			new_policy.min = oldminclock;
 			__cpufreq_set_policy(cpu_policy, &new_policy);
 			cpu_policy->user_policy.policy = cpu_policy->policy;
+			//extern int USE_FG;
+#ifdef CONFIG_OTF_PSNIT
+		if (PWONOFF == 1) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 810000;
+			NVRM_CPU1_OFF_PENDING_MS = 500;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 230000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 320000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 630000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 40000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 910;
+			NVRM_AP20_LOW_CPU_MV = 760;
+#endif
+		} else if (PWONOFF == 2) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 810000;
+			NVRM_CPU1_OFF_PENDING_MS = 400;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 220000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 310000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 620000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 30000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 895;
+			NVRM_AP20_LOW_CPU_MV = 750;
+#endif
+		} else if (PWONOFF == 3) {
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 1015000;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 210000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 300000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 610000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 10000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 880;
+			NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+		} else if (NITROONOFF == 1) {
+			PWONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = 750000;
+			NVRM_CPU1_OFF_PENDING_MS = 900;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = 250000;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = 390000;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = 700000;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = 50000;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = 925;
+			NVRM_AP20_LOW_CPU_MV = 770;
+#endif
+		}
+#endif // OTF_PSNIT
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2279,8 +2492,7 @@ static int __init cpufreq_core_init(void)
 		init_rwsem(&per_cpu(cpu_policy_rwsem, cpu));
 	}
 
-	cpufreq_global_kobject = kobject_create_and_add("cpufreq",
-						&cpu_sysdev_class.kset.kobj);
+	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_sysdev_class.kset.kobj);
 	BUG_ON(!cpufreq_global_kobject);
 
 #ifdef CONFIG_OTF_MAXSCOFF

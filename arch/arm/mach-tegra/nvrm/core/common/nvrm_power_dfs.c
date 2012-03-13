@@ -63,11 +63,6 @@
 #define NITRO_PROCFS_NAME "nitros"
 #define NITRO_PROCFS_SIZE 2
 
-unsigned int powersave = 0;
-unsigned int nitro = 0;
-void nitros_check(unsigned int check1);
-void powersave_check(unsigned int check);
-
 static struct proc_dir_entry *PW_Proc_File;
 static char procfs_buffer_pws[PW_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_pws = 0;
@@ -115,7 +110,6 @@ if ( copy_from_user(procfs_buffer_pws, buffer, procfs_buffer_size_pws) ) {
 	return -EFAULT;
 }
 sscanf(procfs_buffer_pws,"%u",&PWONOFF);
-powersave_check(PWONOFF);
 return procfs_buffer_size_pws;
 }
 
@@ -136,7 +130,6 @@ if ( copy_from_user(procfs_buffer_nitro, buffer, procfs_buffer_size_nitro) ) {
 	return -EFAULT;
 }
 sscanf(procfs_buffer_nitro,"%u",&NITROONOFF);
-nitros_check(NITROONOFF);
 return procfs_buffer_size_nitro;
 }
 
@@ -154,7 +147,6 @@ if (PW_Proc_File == NULL) {
 	PW_Proc_File->gid = 0;
 	PW_Proc_File->size = 37;
 	sprintf(procfs_buffer_pws,"%d",PWONOFF);
-	//powersave_check(PWONOFF);
 	procfs_buffer_size_pws = strlen(procfs_buffer_pws);
 	printk(KERN_INFO "/proc/spica/%s created\n", PW_PROCFS_NAME);
 }
@@ -192,212 +184,6 @@ spica_remove(NITRO_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", NITRO_PROCFS_NAME);
 }
 module_exit(cleanup_nitro_procsfs);
-
-void powersave_check(unsigned int check) {
-powersave = check;
-if (powersave == 1) {
-	nitros_check(0);
-	#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 810000;
-	//NVRM_CPU1_OFF_PENDING_MS = 500;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 230000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 340000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 660000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 900;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 40000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 940;
-	//NVRM_AP20_LOW_CPU_MV = 760;
-#endif
-} else if (powersave == 2) {
-	nitros_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 810000;
-	//NVRM_CPU1_OFF_PENDING_MS = 400;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 220000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 330000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 650000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 900;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 35000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 930;
-	//NVRM_AP20_LOW_CPU_MV = 750;
-#endif
-} else if (powersave == 3) {
-	nitros_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 999000;
-	//NVRM_CPU1_OFF_PENDING_MS = 200;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 210000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 320000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 630000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 890;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 28000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 14000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 925;
-	//NVRM_AP20_LOW_CPU_MV = 740;
-#endif
-} else if (powersave == 4) {
-	nitros_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 999000;
-	//NVRM_CPU1_OFF_PENDING_MS = 200;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 220000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 310000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 620000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 850;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 15000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 925;
-	//NVRM_AP20_LOW_CPU_MV = 740;
-#endif
-} else if (powersave == 5) {
-	nitros_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 999000;
-	//NVRM_CPU1_OFF_PENDING_MS = 200;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 220000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 310000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 610000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 830;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 13000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 925;
-	//NVRM_AP20_LOW_CPU_MV = 740;
-#endif
-} else if (powersave == 6) {
-	nitros_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 999000;
-	//NVRM_CPU1_OFF_PENDING_MS = 200;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 200000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 300000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 600000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 830;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 14000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	//NVRM_AP20_LOW_CORE_MV = 925;
-	//NVRM_AP20_LOW_CPU_MV = 740;
-#endif
-}
-}
-
-void nitros_check(unsigned int check1) {
-nitro = check1;
-if (nitro == 1) {
-	powersave_check(0);
-#ifdef CONFIG_OTF_CPU1
-	NVRM_CPU1_ON_MIN_KHZ = 810000;
-	NVRM_CPU1_OFF_PENDING_MS = 900;
-#endif
-#ifdef CONFIG_OTF_AVP
-	AVPFREQ = 250000;
-#endif
-#ifdef CONFIG_OTF_GPU
-	GPUFREQ = 380000;
-#endif
-#ifdef CONFIG_OTF_VDE
-	VDEFREQ = 700000;
-#endif
-#ifdef CONFIG_OTF_SCMV
-	NVRM_AP20_SUSPEND_CORE_MV = 1000;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
-	NVRM_AP20_DDR2_MIN_KHZ = 55000;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
-	NVRM_AP20_LPDDR2_MIN_KHZ = 20000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-	NVRM_AP20_LOW_CORE_MV = 950;
-	NVRM_AP20_LOW_CPU_MV = 770;
-#endif
-}
-}
 #endif // OTF_PSNIT
 #endif // SPICA_OTF
 
