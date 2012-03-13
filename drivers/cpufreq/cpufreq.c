@@ -63,7 +63,7 @@ temp6=0;
 /* CAUTION:Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp6) < 1 ) return procfs_buffer_size400;
-if ( temp6 < 216 || temp6 > 999000 ) return procfs_buffer_size400;
+if ( temp6 < 216000 || temp6 > 1100000 ) return procfs_buffer_size400;
 /* [End] */
 procfs_buffer_size400 = count;
 	if (procfs_buffer_size400 > MAXSPW_PROCFS_SIZE ) {
