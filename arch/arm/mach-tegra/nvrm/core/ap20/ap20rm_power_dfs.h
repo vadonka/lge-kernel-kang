@@ -291,7 +291,7 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
-#ifndef CONFIG_SPICA_OTF
+#ifndef CONFIG_OTF_AP20LC
 #define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
 #endif

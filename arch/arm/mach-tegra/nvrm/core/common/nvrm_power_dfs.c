@@ -228,8 +228,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 40000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 940;
 //NVRM_AP20_LOW_CPU_MV = 760;
+#endif
+
 }
 else if (powersave == 2)
 {
@@ -264,8 +267,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 35000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 930;
 //NVRM_AP20_LOW_CPU_MV = 750;
+#endif
+
 } else if (powersave == 3)
 {
 nitros_check(0);
@@ -299,8 +305,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 28000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 14000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 925;
 //NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+
 } else if (powersave == 4)
 {
 nitros_check(0);
@@ -334,8 +343,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 15000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 925;
 //NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+
 } else if (powersave == 5)
 {
 nitros_check(0);
@@ -369,8 +381,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 13000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 925;
 //NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+
 } else if (powersave == 6)
 {
 nitros_check(0);
@@ -404,8 +419,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 14000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 11000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 //NVRM_AP20_LOW_CORE_MV = 925;
 //NVRM_AP20_LOW_CPU_MV = 740;
+#endif
+
 }
 
 }
@@ -444,8 +462,11 @@ NVRM_AP20_DDR2_MIN_KHZ = 55000;
 NVRM_AP20_LPDDR2_MIN_KHZ = 20000;
 #endif
 
+#ifdef CONFIG_OTF_AP20LC
 NVRM_AP20_LOW_CORE_MV = 950;
 NVRM_AP20_LOW_CPU_MV = 770;
+#endif
+
 }
 }
 #endif //CONFIG_SPICA_OTF

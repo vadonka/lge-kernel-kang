@@ -22,8 +22,12 @@ unsigned int GPUFREQ = 350000;
 
 unsigned int PWONOFF = 0;
 unsigned int NITROONOFF = 0;
+
+#ifdef CONFIG_OTF_AP20LC
 unsigned int NVRM_AP20_LOW_CORE_MV = 950;
 unsigned int NVRM_AP20_LOW_CPU_MV = 770;
+#endif
+
 //unsigned int VM_MAX_READAHEAD = 512;
 //unsigned int swappiness = 10;
 //unsigned int vm_swappiness = 10;
