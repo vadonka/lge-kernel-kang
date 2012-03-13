@@ -150,7 +150,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 	last_rate = rate;
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
-	set_freezable();
+	set_freezable_with_signal();
 
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 

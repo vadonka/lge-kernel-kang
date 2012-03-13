@@ -43,64 +43,67 @@
 
 //Spica OTF Start
 #ifdef CONFIG_SPICA_OTF
+
 #include <linux/spica.h>
+static struct proc_dir_entry *spica_dir;
+
+/* GPU Freq */
+#ifdef CONFIG_OTF_GPU
 #define GPU_PROCFS_NAME "gpufreq"
 #define GPU_PROCFS_SIZE 8
 static struct proc_dir_entry *GPU_Proc_File;
-static struct proc_dir_entry *spica_dir;
-static char procfs_buffer[GPU_PROCFS_SIZE];
-static unsigned long procfs_buffer_size = 0;
-
-int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+static char procfs_buffer_gpufreq[GPU_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_gpufreq = 0;
+int min_gpufreq = 280000; // Min GPU freq
+int max_gpufreq = 400000; // Max GPU freq
+int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "gpu_procfile_read (/proc/spica/%s) called\n", GPU_PROCFS_NAME);
 if (offset > 0) {
-ret  = 0;
+	ret = 0;
 } else {
-memcpy(buffer, procfs_buffer, procfs_buffer_size);
-ret = procfs_buffer_size;
-
+	memcpy(buffer, procfs_buffer_gpufreq, procfs_buffer_size_gpufreq);
+	ret = procfs_buffer_size_gpufreq;
 }
 return ret;
 }
 
 int gpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp;
-temp=0;
+int temp_gpufreq;
+temp_gpufreq = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size;
-if ( temp < 280000 || temp > 400000 ) return procfs_buffer_size;
+if ( sscanf(buffer,"%d",&temp_gpufreq) < 1 ) return procfs_buffer_size_gpufreq;
+if ( temp_gpufreq < min_gpufreq || temp_gpufreq > max_gpufreq ) return procfs_buffer_size_gpufreq;
 /* [End] */
-procfs_buffer_size = count;
-	if (procfs_buffer_size > GPU_PROCFS_SIZE ) {
-		procfs_buffer_size = GPU_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer, buffer, procfs_buffer_size) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
+	procfs_buffer_size_gpufreq = count;
+if (procfs_buffer_size_gpufreq > GPU_PROCFS_SIZE ) {
+	procfs_buffer_size_gpufreq = GPU_PROCFS_SIZE;
 }
-sscanf(procfs_buffer,"%u",&GPUFREQ);
-return procfs_buffer_size;
+if ( copy_from_user(procfs_buffer_gpufreq, buffer, procfs_buffer_size_gpufreq) ) {
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
+}
+sscanf(procfs_buffer_gpufreq,"%u",&GPUFREQ);
+return procfs_buffer_size_gpufreq;
 }
 
-static int __init init_gpufb_procsfs(void)
-{
+static int __init init_gpufb_procsfs(void) {
 GPU_Proc_File = spica_add(GPU_PROCFS_NAME);
 if (GPU_Proc_File == NULL) {
-spica_remove(GPU_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPU_PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(GPU_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPU_PROCFS_NAME);
+	return -ENOMEM;
 } else {
-GPU_Proc_File->read_proc  = gpu_procfile_read;
-GPU_Proc_File->write_proc = gpu_procfile_write;
-GPU_Proc_File->mode     = S_IFREG | S_IRUGO;
-GPU_Proc_File->uid     = 0;
-GPU_Proc_File->gid     = 0;
-GPU_Proc_File->size     = 37;
-sprintf(procfs_buffer,"%d",GPUFREQ);
-procfs_buffer_size=strlen(procfs_buffer);
-printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
+	GPU_Proc_File->read_proc = gpu_procfile_read;
+	GPU_Proc_File->write_proc = gpu_procfile_write;
+	GPU_Proc_File->mode = S_IFREG | S_IRUGO;
+	GPU_Proc_File->uid = 0;
+	GPU_Proc_File->gid = 0;
+	GPU_Proc_File->size = 37;
+	sprintf(procfs_buffer_gpufreq,"%d",GPUFREQ);
+	procfs_buffer_size_gpufreq = strlen(procfs_buffer_gpufreq);
+	printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
 }
 return 0;
 }
@@ -110,64 +113,66 @@ spica_remove(GPU_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 }
 module_exit(cleanup_gpufb_procsfs);
+#endif // OTF_GPU
 
+/* AVP Freq */
+#ifdef CONFIG_OTF_AVP
 #define AVP_PROCFS_NAME "avpfreq"
 #define AVP_PROCFS_SIZE 8
 static struct proc_dir_entry *AVP_Proc_File;
-static struct proc_dir_entry *spica_dir;
-static char procfs_buffer_avp[AVP_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_avp = 0;
-
+static char procfs_buffer_avpfreq[AVP_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_avpfreq = 0;
+int min_avpfreq = 200000; // Min AVP freq
+int max_avpfreq = 250000; // Max AVP freq
 int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
 if (offset > 0) {
-ret  = 0;
+	ret = 0;
 } else {
-memcpy(buffer, procfs_buffer_avp, procfs_buffer_size_avp);
-ret = procfs_buffer_size_avp;
-
+	memcpy(buffer, procfs_buffer_avpfreq, procfs_buffer_size_avpfreq);
+	ret = procfs_buffer_size_avpfreq;
 }
 return ret;
 }
 
 int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp1;
-temp1=0;
+int temp_avpfreq;
+temp_avpfreq=0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp1) < 1 ) return procfs_buffer_size_avp;
-if ( temp1 < 200000 || temp1 > 250000 ) return procfs_buffer_size_avp;
+if ( sscanf(buffer,"%d",&temp_avpfreq) < 1 ) return procfs_buffer_size_avpfreq;
+if ( temp_avpfreq < min_avpfreq || temp_avpfreq > max_avpfreq ) return procfs_buffer_size_avpfreq;
 /* [End] */
-procfs_buffer_size_avp = count;
-	if (procfs_buffer_size_avp > AVP_PROCFS_SIZE ) {
-		procfs_buffer_size_avp = AVP_PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer_avp, buffer, procfs_buffer_size_avp) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
+	procfs_buffer_size_avpfreq = count;
+if (procfs_buffer_size_avpfreq > AVP_PROCFS_SIZE ) {
+	procfs_buffer_size_avpfreq = AVP_PROCFS_SIZE;
 }
-sscanf(procfs_buffer_avp,"%u",&AVPFREQ);
-return procfs_buffer_size_avp;
+if ( copy_from_user(procfs_buffer_avpfreq, buffer, procfs_buffer_size_avpfreq) ) {
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
+}
+sscanf(procfs_buffer_avpfreq,"%u",&AVPFREQ);
+return procfs_buffer_size_avpfreq;
 }
 
 static int __init init_avpfb_procsfs(void)
 {
 AVP_Proc_File = spica_add(AVP_PROCFS_NAME);
 if (AVP_Proc_File == NULL) {
-spica_remove(AVP_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", AVP_PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(AVP_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", AVP_PROCFS_NAME);
+	return -ENOMEM;
 } else {
-AVP_Proc_File->read_proc  = avp_procfile_read;
-AVP_Proc_File->write_proc = avp_procfile_write;
-AVP_Proc_File->mode     = S_IFREG | S_IRUGO;
-AVP_Proc_File->uid     = 0;
-AVP_Proc_File->gid     = 0;
-AVP_Proc_File->size     = 37;
-sprintf(procfs_buffer_avp,"%d",AVPFREQ);
-procfs_buffer_size_avp=strlen(procfs_buffer_avp);
-printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
+	AVP_Proc_File->read_proc = avp_procfile_read;
+	AVP_Proc_File->write_proc = avp_procfile_write;
+	AVP_Proc_File->mode = S_IFREG | S_IRUGO;
+	AVP_Proc_File->uid = 0;
+	AVP_Proc_File->gid = 0;
+	AVP_Proc_File->size = 37;
+	sprintf(procfs_buffer_avpfreq,"%d",AVPFREQ);
+	procfs_buffer_size_avpfreq = strlen(procfs_buffer_avpfreq);
+	printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
 }
 return 0;
 }
@@ -177,8 +182,8 @@ spica_remove(AVP_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", AVP_PROCFS_NAME);
 }
 module_exit(cleanup_avpfb_procsfs);
-#endif //CONFIG_SPICA_OTF
-//Spica OTF End
+#endif // OTF_AVP
+#endif // SPICA_OTF
 
 #ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
@@ -190,7 +195,7 @@ module_exit(cleanup_avpfb_procsfs);
 
 /* DEFAULT LG P990 VALUES */
 
-// Maximum recommanded voltage increment per step (by nvidia) -> 100mV 
+// Maximum recommanded voltage increment per step (by nvidia) -> 100mV
 
 // TEGRA_OC: max cpu low temp: -64
 // TEGRA_OC: max cpu high temp: 60
@@ -417,7 +422,8 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // Combine AVP/System clock absolute limit with scaling V/F ladder upper
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
-#ifdef CONFIG_SPICA_OTF
+
+#ifdef CONFIG_OTF_AVP
     AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
 #else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
@@ -469,11 +475,12 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         }
     }
 
-	//Imperticus work
-	//s_ClockRangeLimits[2].MaxKHz = 280000;
-	//s_ClockRangeLimits[7].MaxKHz = 350000;
-	//s_ClockRangeLimits[8].MaxKHz = 350000;
-	//s_ClockRangeLimits[10].MaxKHz = 350000;
+	/* Imperticus work
+	s_ClockRangeLimits[2].MaxKHz = 280000;
+	s_ClockRangeLimits[7].MaxKHz = 350000;
+	s_ClockRangeLimits[8].MaxKHz = 350000;
+	s_ClockRangeLimits[10].MaxKHz = 350000;
+	*/
 
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
@@ -547,17 +554,16 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-#ifdef CONFIG_SPICA_OTF
+
+#ifdef CONFIG_OTF_GPU
     TDMaxKHz = GPUFREQ; // pSKUedLimits->TDMaxKHz;
-    TDMaxKHz = NV_MIN(
-        TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
+    TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUFREQ;
 #else
     TDMaxKHz = pSKUedLimits->TDMaxKHz;
-    TDMaxKHz = NV_MIN(
-        TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
+    TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
-#endif //CONFIG_SPICA_OTF
+#endif // OTF_GPU
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)

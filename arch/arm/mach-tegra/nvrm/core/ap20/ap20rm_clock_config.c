@@ -44,78 +44,81 @@
 
 //Spica OTF start
 #ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-#define PROCFS_NAME   "vdefreq"
-#define PROCFS_SIZE     8
-static struct proc_dir_entry *VDE_Proc_File;
-static struct proc_dir_entry *spica_dir;
-static char procfs_buffer61[PROCFS_SIZE];
-static unsigned long procfs_buffer_size610 = 0;
 
-int vde_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+#include <linux/spica.h>
+static struct proc_dir_entry *spica_dir;
+
+/* VDE Freq */
+#ifdef CONFIG_OTF_VDE
+#define PROCFS_NAME "vdefreq"
+#define PROCFS_SIZE 8
+int min_vdefreq = 500000; // Min allowed freq
+int max_vdefreq = 700000; // Max allowed freq
+static struct proc_dir_entry *VDE_Proc_File;
+static char procfs_buffer_vdefreq[PROCFS_SIZE];
+static unsigned long procfs_buffer_size_vdefreq = 0;
+
+int vde_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "vde_procfile_read (/proc/spica/%s) called\n", PROCFS_NAME);
 if (offset > 0) {
-ret  = 0;
+	ret = 0;
 } else {
-memcpy(buffer, procfs_buffer61, procfs_buffer_size610);
-ret = procfs_buffer_size610;
-
+	memcpy(buffer, procfs_buffer_vdefreq, procfs_buffer_size_vdefreq);
+	ret = procfs_buffer_size_vdefreq;
 }
 return ret;
 }
 
 int vde_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp;
-temp=0;
+int temp_vdefreq;
+temp_vdefreq = 0;
 /* CAUTION: Don't change below lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size610;
-if ( temp < 500000 || temp > 700000 ) return procfs_buffer_size610;
+if ( sscanf(buffer,"%d",&temp_vdefreq) < 1 ) return procfs_buffer_size_vdefreq;
+if ( temp_vdefreq < min_vdefreq || temp_vdefreq > max_vdefreq ) return procfs_buffer_size_vdefreq;
 /* [End] */
-procfs_buffer_size610 = count;
-	if (procfs_buffer_size610 > PROCFS_SIZE ) {
-		procfs_buffer_size610 = PROCFS_SIZE;
-	}
-if ( copy_from_user(procfs_buffer61, buffer, procfs_buffer_size610) ) {
+	procfs_buffer_size_vdefreq = count;
+if (procfs_buffer_size_vdefreq > PROCFS_SIZE ) {
+	procfs_buffer_size_vdefreq = PROCFS_SIZE;
+}
+if ( copy_from_user(procfs_buffer_vdefreq, buffer, procfs_buffer_size_vdefreq) ) {
 printk(KERN_INFO "buffer_size error\n");
 return -EFAULT;
 }
-sscanf(procfs_buffer61,"%u",&VDEFREQ);
-return procfs_buffer_size610;
+sscanf(procfs_buffer_vdefreq,"%u",&VDEFREQ);
+return procfs_buffer_size_vdefreq;
 }
 
-
-static int __init init_gpu_procsfs(void)
-{
+static int __init init_vde_procsfs(void) {
 VDE_Proc_File = spica_add(PROCFS_NAME);
-
 if (VDE_Proc_File == NULL) {
-spica_remove(PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", PROCFS_NAME);
+	return -ENOMEM;
 } else {
-VDE_Proc_File->read_proc  = vde_procfile_read;
-VDE_Proc_File->write_proc = vde_procfile_write;
-VDE_Proc_File->mode     = S_IFREG | S_IRUGO;
-VDE_Proc_File->uid     = 0;
-VDE_Proc_File->gid     = 0;
-VDE_Proc_File->size     = 37;
-sprintf(procfs_buffer61,"%d",VDEFREQ);
-procfs_buffer_size610=strlen(procfs_buffer61);
-printk(KERN_INFO "/proc/spica/%s created\n", PROCFS_NAME);
+	VDE_Proc_File->read_proc = vde_procfile_read;
+	VDE_Proc_File->write_proc = vde_procfile_write;
+	VDE_Proc_File->mode = S_IFREG | S_IRUGO;
+	VDE_Proc_File->uid = 0;
+	VDE_Proc_File->gid = 0;
+	VDE_Proc_File->size = 37;
+	sprintf(procfs_buffer_vdefreq,"%d",VDEFREQ);
+	procfs_buffer_size_vdefreq = strlen(procfs_buffer_vdefreq);
+	printk(KERN_INFO "/proc/spica/%s created\n", PROCFS_NAME);
 }
 return 0;
 }
 
-module_init(init_gpu_procsfs);
-static void __exit cleanup_gpu_procsfs(void) {
+module_init(init_vde_procsfs);
+static void __exit cleanup_vde_procsfs(void) {
 spica_remove(PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", PROCFS_NAME);
 }
-module_exit(cleanup_gpu_procsfs);
-#endif //CONFIG_SPICA_OTF
-//Spica OTF End
+module_exit(cleanup_vde_procsfs);
+
+#endif // OTF_VDE
+#endif // SPICA_OTF
 
 // Enable CPU/EMC ratio policy
 #define NVRM_LIMIT_CPU_EMC_RATIO (1)
@@ -124,7 +127,7 @@ module_exit(cleanup_gpu_procsfs);
 #define NVRM_EMC_CLKCHANGE_PD (1)
 
 // Default CPU power good delay
-#define NVRM_DEFAULT_CPU_PWRGOOD_US (2000) 
+#define NVRM_DEFAULT_CPU_PWRGOOD_US (2000)
 
 // Default PMU accuracy %
 #define NVRM_DEFAULT_PMU_ACCURACY_PCT (3)
@@ -265,7 +268,7 @@ static struct Ap20CpuConfigRec
     // Number of PLLX frequency steps
     NvU32 PllXStepsNo;
 
-    // PLLX frequency steps table pointer 
+    // PLLX frequency steps table pointer
     const NvRmFreqKHz* pPllXStepsKHz;
 
     // Core over CPU voltage dependency parameters:
@@ -378,7 +381,7 @@ static NvRmFreqKHz Ap20CpuToEmcRatio(NvRmFreqKHz Emc2xKHz)
         24, 25, 25, 26, 26, 27, 27, 28, 28, 29, 29, 30, 30, 31, 31, 32
     };
     #define CPU_TO_EMC_MAX_RATIO (12)
-    
+
     NvRmFreqKHz CpuKHz;
     NvRmFreqKHz CpuMaxKHz = NvRmPrivGetSocClockLimits(NvRmModuleID_Cpu)->MaxKHz;
     NvRmFreqKHz Emc2xMaxKHz = NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0);
@@ -439,7 +442,7 @@ static void Ap20EmcConfigInit(NvRmDeviceHandle hRmDevice)
     NvRmFreqKHz Emc2xKHz, SourceKHz;
     NvU32 i, j, k, Source, ConfigurationsCount, UndividedIndex, dll;
     NvU32 Revision = 0;
-    
+
     NvRmFreqKHz PllM0KHz = NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0);
     NvRmFreqKHz PllP0KHz = NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0);
     const NvRmModuleClockLimits* pEmcClockLimits =
@@ -580,7 +583,7 @@ static void Ap20EmcConfigInit(NvRmDeviceHandle hRmDevice)
                  break;     // Abort sorting if min frequency reached
          }
 
-         if (i == 0) 
+         if (i == 0)
              break;         // Finish sorting if PLLM0 entry not found
 
          // Next source selection
@@ -615,8 +618,8 @@ Ap20EmcTimingSet(
 
     for (i = 0; i < s_Ap20EmcConfig.EmcTimingRegNum; i++)
     {
-	    //20110218, , DVFS patch [START]
-	    #if 1
+//20110218, , DVFS patch [START]
+#if 1
         if (s_Ap20EmcConfig.pEmcTimingReg[i] == EMC_DLL_XFORM_DQS_0)
         {
             NvU32 mask =
@@ -626,10 +629,10 @@ Ap20EmcTimingSet(
             d = ((((d & mask) << 2) - offs) & mask) | (d & (~mask));
         }
         else if (s_Ap20EmcConfig.pEmcTimingReg[i] == EMC_CFG_DIG_DLL_0)
-	    #else
+#else
         if (i == EMC_CFG_DIG_DLL_INDEX)
-	    #endif
-	    //20110218, , DVFS patch [END]
+#endif
+//20110218, , DVFS patch [END]
             d = pEmcConfig->EmcDigDll;
         else
             d = pEmcConfig->pOdmEmcConfig->EmcTimingParameters[i];
@@ -682,7 +685,7 @@ Ap20EmcTimingSetFinish(
 }
 
 static void
-Ap20EmcDividerBackgroundSet( 
+Ap20EmcDividerBackgroundSet(
     NvRmDeviceHandle hRmDevice,
     NvU32 value)
 {
@@ -883,7 +886,7 @@ Ap20Emc2xClockSourceFind(
         FinalStep = NV_FALSE;
     }
 
-    // Target can be reached in one step, provided: 
+    // Target can be reached in one step, provided:
     // - either current or target entry is PLLM0     OR
     // - current and target entries have same source OR
     // - current and target entries have same divider
@@ -1287,23 +1290,15 @@ Ap20SystemClockSourceFind(
      */
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
-#ifdef CONFIG_SPICA_OTF
-                C1KHz = M1KHz = DomainKHz;
-        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                VDEFREQ,
-                MaxKHz, &C1KHz);
-        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                VDEFREQ,
-                MaxKHz, &M1KHz);
+#ifdef CONFIG_OTF_VDE
+	C1KHz = M1KHz = DomainKHz;
+	c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &C1KHz);
+	m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &M1KHz);
 #else
-                C1KHz = M1KHz = DomainKHz;
-        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
-                MaxKHz, &C1KHz);
-        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
-                MaxKHz, &M1KHz);
-#endif
+	C1KHz = M1KHz = DomainKHz;
+	c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0), MaxKHz, &C1KHz);
+	m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0), MaxKHz, &M1KHz);
+#endif // OTF_VDE
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);
         if ((DomainKHz <= P2KHz) && (P2KHz < SourceKHz))
@@ -1468,7 +1463,7 @@ Ap20CpuClockSourceFind(
      * 3rd and final choice - PLLX base output. Clip PllX policy entries to
      * domain maximum limit, and find the entry with source frequency closest
      * and above the requested. If not found, use the last entry with the
-     * highest frequency. 
+     * highest frequency.
      */
     for (i = 0; i < s_Ap20CpuConfig.PllXStepsNo; i++)
     {
@@ -1613,7 +1608,7 @@ NvBool NvRmPrivAp20DfsClockConfigure(
         &pDfsKHz->Domains[NvRmDfsClockId_System],
         &SystemClockSource);
     pDfsKHz->Domains[NvRmDfsClockId_Avp] = FreqKHz = // no AVP clock skipping
-        pDfsKHz->Domains[NvRmDfsClockId_System];        
+        pDfsKHz->Domains[NvRmDfsClockId_System];
     NvRmPrivBusClockFreqSet(hRmDevice,
         pDfsKHz->Domains[NvRmDfsClockId_System],
         &FreqKHz,                                       // VDE decoupled
@@ -1632,7 +1627,7 @@ NvBool NvRmPrivAp20DfsClockConfigure(
         &FreqKHz, &Emc2xClockSource);
     pDfsKHz->Domains[NvRmDfsClockId_Emc] = FreqKHz >> 1;
 
-    // Configure CPU core clock 
+    // Configure CPU core clock
     Ap20CpuBusClockConfigure(hRmDevice,
         pMaxKHz->Domains[NvRmDfsClockId_Cpu],
         &pDfsKHz->Domains[NvRmDfsClockId_Cpu],
@@ -1809,7 +1804,7 @@ NvRmPrivAp20FastClockConfig(NvRmDeviceHandle hRmDevice)
 
     // Now configure secondary dividers and select the output with highest
     // frequency // as a source for the system bus clock.
-    SclkKHz = NV_MAX(PllC1KHz, NV_MAX(PllM1KHz, PllP2KHz)); 
+    SclkKHz = NV_MAX(PllC1KHz, NV_MAX(PllM1KHz, PllP2KHz));
     NvRmPrivDividerSet(
         hRmDevice,
         NvRmPrivGetClockSourceHandle(NvRmClockSource_PllP2)->pInfo.pDivider,
@@ -1889,7 +1884,7 @@ NvRmPrivAp20SdioTapDelayConfigure(
     NvU32 Instance = NVRM_MODULE_ID_INSTANCE( ModuleId );
     const NvOdmQuerySdioInterfaceProperty *pSdioInterfaceProps = NULL;
     NvU32 ClkSrcReg;
-    
+
     if (Module != NvRmModuleID_Sdio)
         return;
     pSdioInterfaceProps = NvOdmQueryGetSdioInterfaceProperty(Instance);
@@ -1898,20 +1893,20 @@ NvRmPrivAp20SdioTapDelayConfigure(
 
     // Allow only less than 16 as tap delay.
     NV_ASSERT(pSdioInterfaceProps->TapDelay < 0x10);
-    
+
     if (pSdioInterfaceProps->TapDelay > 0)
     {
-        ClkSrcReg = NV_REGR(hRmDevice, NvRmPrivModuleID_ClockAndReset, 0, 
+        ClkSrcReg = NV_REGR(hRmDevice, NvRmPrivModuleID_ClockAndReset, 0,
                         ClkSourceOffset);
 
-        // CLK_RST_CONTROLLER_CLK_SOURCE_SDMMC1_0_SDMMC1_INT_FB_SEL_RANGE 
+        // CLK_RST_CONTROLLER_CLK_SOURCE_SDMMC1_0_SDMMC1_INT_FB_SEL_RANGE
         ClkSrcReg = NV_FLD_SET_DRF_NUM(CLK_RST_CONTROLLER, CLK_SOURCE_SDMMC1,
                                 SDMMC1_INT_FB_SEL, 1, ClkSrcReg);
-        
+
         // CLK_RST_CONTROLLER_CLK_SOURCE_SDMMC1_0_SDMMC1_INT_FB_DLY_RANGE
         ClkSrcReg = NV_FLD_SET_DRF_NUM(CLK_RST_CONTROLLER, CLK_SOURCE_SDMMC1,
                             SDMMC1_INT_FB_DLY, pSdioInterfaceProps->TapDelay, ClkSrcReg);
-        NV_REGW(hRmDevice, NvRmPrivModuleID_ClockAndReset, 0, 
+        NV_REGW(hRmDevice, NvRmPrivModuleID_ClockAndReset, 0,
                         ClkSourceOffset, ClkSrcReg);
     }
 }

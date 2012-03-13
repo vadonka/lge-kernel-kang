@@ -44,7 +44,7 @@ extern unsigned int powersave;
 extern unsigned int nitro;
 extern void powersave_check(unsigned int check);
 extern void nitros_check(unsigned int check);
-int maxsoc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
+int maxsoc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSPW_PROCFS_NAME);
 if (offset > 0) {
@@ -114,7 +114,7 @@ module_exit(cleanup_maxsoc_procsfs);
 #include "../nvrm/core/common/nvrm_power_dfs.h"
 #include <nvrm_diag.h>
 
-/* 
+/*
  * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/tegra_lg_p990_kernel_oc_uv
  * Inspired by mblaster @ https://github.com/mblaster/linux_2.6.32_folio100
 */
@@ -1223,7 +1223,7 @@ struct cpufreq_policy *cp;
 		dprintk("failed to find sibling CPU, falling back to defaults\n");
 		policy->governor = CPUFREQ_DEFAULT_GOVERNOR;
 	}
-	
+
 	/* call driver. From then on the cpufreq must be able
 	 * to accept all calls to ->verify and ->setpolicy for this CPU
 	 */

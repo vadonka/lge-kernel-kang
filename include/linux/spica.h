@@ -14,16 +14,29 @@
 
 extern void suspend_prepare_freq(void);
 extern void resume_prepare_freq(void);
+
+#ifdef CONFIG_OTF_CPU1
 extern unsigned int NVRM_CPU1_ON_MIN_KHZ;
 extern unsigned int NVRM_CPU1_OFF_MAX_KHZ;
+extern unsigned int NVRM_CPU1_OFF_PENDING_MS;
+#endif
+
+#ifdef CONFIG_OTF_AVP
 extern unsigned int AVPFREQ;
+#endif
+
+#ifdef CONFIG_OTF_VDE
 extern unsigned int VDEFREQ;
+#endif
+
+#ifdef CONFIG_OTF_GPU
 extern unsigned int GPUFREQ;
+#endif
+
 extern unsigned int PWONOFF;
 extern unsigned int NITROONOFF;
 extern unsigned int NVRM_AP20_LOW_CORE_MV;
 extern unsigned int NVRM_AP20_LOW_CPU_MV;
-extern unsigned int NVRM_CPU1_OFF_PENDING_MS;
 //extern unsigned int VM_MAX_READAHEAD;
 //extern unsigned int swappiness;
 //extern unsigned int vm_swappiness;

@@ -251,9 +251,9 @@ extern "C"
 #else
 #define NVRM_CPU1_ON_MIN_KHZ (655000)
 #define NVRM_CPU1_OFF_MAX_KHZ (610000)
-#define NVRM_CPU1_ON_PENDING_MS (800)
-#define NVRM_CPU1_OFF_PENDING_MS (400)
-#endif //CONFIG_SPICA_OTF
+#define NVRM_CPU1_ON_PENDING_MS (2500)
+#define NVRM_CPU1_OFF_PENDING_MS (600)
+#endif // SPICA_OTF
 
 /**
  * Defines AP20 Thermal policy parameters.

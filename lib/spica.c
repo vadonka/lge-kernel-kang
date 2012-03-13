@@ -1,19 +1,29 @@
 #include <linux/spica.h>
 #define PROC_DIR "spica"
 
+#ifdef CONFIG_OTF_CPU1
 unsigned int NVRM_CPU1_ON_MIN_KHZ = 816000; //Default value should be changed here
 //#define NVRM_CPU1_ON_MIN_KHZ (MIN_CPU_ON * 1000);
 unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
+unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
+#endif
 
-//unsigned int RAMHACK;
+#ifdef CONFIG_OTF_AVP
 unsigned int AVPFREQ = 240000;
+#endif
+
+#ifdef CONFIG_OTF_VDE
 unsigned int VDEFREQ = 680000;
+#endif
+
+#ifdef CONFIG_OTF_GPU
 unsigned int GPUFREQ = 350000;
+#endif
+
 unsigned int PWONOFF = 0;
 unsigned int NITROONOFF = 0;
 unsigned int NVRM_AP20_LOW_CORE_MV = 950;
 unsigned int NVRM_AP20_LOW_CPU_MV = 770;
-unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
 //unsigned int VM_MAX_READAHEAD = 512;
 //unsigned int swappiness = 10;
 //unsigned int vm_swappiness = 10;
