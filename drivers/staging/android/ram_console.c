@@ -28,11 +28,14 @@
 
 //Spica OTF Start
 #ifdef CONFIG_SPICA_OTF
+
 #include <linux/spica.h>
+static struct proc_dir_entry *spica_dir;
+
+#ifdef CONFIG_OTF_GPURAM
 #define GPURAM_PROCFS_NAME "gpuramsize"
 #define GPURAM_PROCFS_SIZE 8
 static struct proc_dir_entry *GPURAM_Proc_File;
-static struct proc_dir_entry *spica_dir;
 static char procfs_buffer_gpuram[GPURAM_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_gpuram = 0;
 
@@ -40,52 +43,50 @@ int gpuram_procfile_read(char *buffer, char **buffer_location, off_t offset, int
 int ret;
 printk(KERN_INFO "gpuram_procfile_read (/proc/spica/%s) called\n", GPURAM_PROCFS_NAME);
 if (offset > 0) {
-ret  = 0;
+	ret = 0;
 } else {
-memcpy(buffer, procfs_buffer_gpuram, procfs_buffer_size_gpuram);
-ret = procfs_buffer_size_gpuram;
-
+	memcpy(buffer, procfs_buffer_gpuram, procfs_buffer_size_gpuram);
+	ret = procfs_buffer_size_gpuram;
 }
 return ret;
 }
 
 int gpuram_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp;
-temp=0;
+int temp_gpuram;
+temp_gpuram = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp) < 1 ) return procfs_buffer_size_gpuram;
-if ( temp != 128 && temp != 96 && temp != 80 && temp != 64 && temp != 48 && temp != 32 ) return procfs_buffer_size_gpuram;
+if ( sscanf(buffer,"%d",&temp_gpuram) < 1 ) return procfs_buffer_size_gpuram;
+if ( temp_gpuram != 128 && temp_gpuram != 96 && temp_gpuram != 80 && temp_gpuram != 64 && temp_gpuram != 48 && temp_gpuram != 32 ) return procfs_buffer_size_gpuram;
 /* [End] */
-procfs_buffer_size_gpuram = count;
-	if (procfs_buffer_size_gpuram > GPURAM_PROCFS_SIZE ) {
-		procfs_buffer_size_gpuram = GPURAM_PROCFS_SIZE;
-	}
+	procfs_buffer_size_gpuram = count;
+if (procfs_buffer_size_gpuram > GPURAM_PROCFS_SIZE ) {
+	procfs_buffer_size_gpuram = GPURAM_PROCFS_SIZE;
+}
 if ( copy_from_user(procfs_buffer_gpuram, buffer, procfs_buffer_size_gpuram) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
+	printk(KERN_INFO "buffer_size error\n");
+	return -EFAULT;
 }
 sscanf(procfs_buffer_gpuram,"%u",&GPURAMSIZE);
 return procfs_buffer_size_gpuram;
 }
 
-static int __init init_gpuramfb_procsfs(void)
-{
+static int __init init_gpuramfb_procsfs(void) {
 GPURAM_Proc_File = spica_add(GPURAM_PROCFS_NAME);
 if (GPURAM_Proc_File == NULL) {
-spica_remove(GPURAM_PROCFS_NAME);
-printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPURAM_PROCFS_NAME);
-return -ENOMEM;
+	spica_remove(GPURAM_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPURAM_PROCFS_NAME);
+	return -ENOMEM;
 } else {
-GPURAM_Proc_File->read_proc  = gpuram_procfile_read;
-GPURAM_Proc_File->write_proc = gpuram_procfile_write;
-GPURAM_Proc_File->mode     = S_IFREG | S_IRUGO;
-GPURAM_Proc_File->uid     = 0;
-GPURAM_Proc_File->gid     = 0;
-GPURAM_Proc_File->size     = 37;
-sprintf(procfs_buffer_gpuram,"%d",GPURAMSIZE);
-procfs_buffer_size_gpuram=strlen(procfs_buffer_gpuram);
-printk(KERN_INFO "/proc/spica/%s created\n", GPURAM_PROCFS_NAME);
+	GPURAM_Proc_File->read_proc = gpuram_procfile_read;
+	GPURAM_Proc_File->write_proc = gpuram_procfile_write;
+	GPURAM_Proc_File->mode = S_IFREG | S_IRUGO;
+	GPURAM_Proc_File->uid = 0;
+	GPURAM_Proc_File->gid = 0;
+	GPURAM_Proc_File->size = 37;
+	sprintf(procfs_buffer_gpuram,"%d",GPURAMSIZE);
+	procfs_buffer_size_gpuram = strlen(procfs_buffer_gpuram);
+	printk(KERN_INFO "/proc/spica/%s created\n", GPURAM_PROCFS_NAME);
 }
 return 0;
 }
@@ -95,8 +96,8 @@ spica_remove(GPURAM_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", GPURAM_PROCFS_NAME);
 }
 module_exit(cleanup_gpuramfb_procsfs);
-#endif //CONFIG_SPICA_OTF
-//Spica OTF End
+#endif // OTF_GPURAM
+#endif // SPICA_OTF
 
 //20101110, , Function for Warm-boot [START]
 void *reserved_buffer;
@@ -429,7 +430,7 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 #endif
        //RAMHACK reboot fix ported from the CM9 ICS kernel
        //reserved_start = start+ buffer_size;
-#ifdef CONFIG_SPICA_OTF
+#ifdef CONFIG_OTF_GPURAM
        reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
 #else
        reserved_start = start+ buffer_size - ((128-CONFIG_GPU_MEM_CARVEOUT_SZ)*SZ_1M);

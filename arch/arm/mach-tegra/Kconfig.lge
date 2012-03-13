@@ -80,6 +80,10 @@ config OTF_CPU1
 	bool "OTF CPU Second Core activation"
 	default y
 
+config OTF_GPURAM
+	bool "OTF GPU RAM size (dynamic declaration)"
+	default y
+
 endif # SPICA_OTF
 
 config STAR_PMIC
