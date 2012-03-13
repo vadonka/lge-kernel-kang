@@ -55,7 +55,7 @@ static unsigned long procfs_buffer_size_mincpu1on = 0;
 static struct proc_dir_entry *ON_Proc_File;
 static char procfs_buffer_mincpu1on[ON_PROCFS_SIZE];
 int min_mincpu1on = 216000;  // Min Freq
-int max_mincpu1on = 1100000; // Max Freq
+int max_mincpu1on = 1015000; // Max Freq
 int on_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", ON_PROCFS_NAME);
@@ -76,9 +76,9 @@ temp_mincpu1on = 0;
 if ( sscanf(buffer,"%d",&temp_mincpu1on) < 1 ) return procfs_buffer_size_mincpu1on;
 if ( temp_mincpu1on < min_mincpu1on || temp_mincpu1on > max_mincpu1on ) return procfs_buffer_size_mincpu1on;
 /* [End] */
-	procfs_buffer_size_mincpu1on = count;
+    procfs_buffer_size_mincpu1on = count;
 if (procfs_buffer_size_mincpu1on > ON_PROCFS_SIZE ) {
-	procfs_buffer_size_mincpu1on = ON_PROCFS_SIZE;
+    procfs_buffer_size_mincpu1on = ON_PROCFS_SIZE;
 }
 if ( copy_from_user(procfs_buffer_mincpu1on, buffer, procfs_buffer_size_mincpu1on) ) {
 	printk(KERN_INFO "buffer_size error\n");

@@ -81,9 +81,9 @@ temp_maxcpu1off = 0;
 if ( sscanf(buffer,"%d",&temp_maxcpu1off) < 1 ) return procfs_buffer_size_maxcpu1off;
 if ( temp_maxcpu1off < min_maxcpu1off || temp_maxcpu1off > max_maxcpu1off ) return procfs_buffer_size_maxcpu1off;
 /* [End] */
-	procfs_buffer_size_maxcpu1off = count;
+    procfs_buffer_size_maxcpu1off = count;
 if (procfs_buffer_size_maxcpu1off > CPU1OFF_PROCFS_SIZE ) {
-	procfs_buffer_size_maxcpu1off = CPU1OFF_PROCFS_SIZE;
+    procfs_buffer_size_maxcpu1off = CPU1OFF_PROCFS_SIZE;
 }
 if ( copy_from_user(procfs_buffer_maxcpu1off, buffer, procfs_buffer_size_maxcpu1off) ) {
 	printk(KERN_INFO "buffer_size error\n");
