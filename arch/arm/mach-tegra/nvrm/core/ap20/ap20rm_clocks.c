@@ -56,7 +56,7 @@ static struct proc_dir_entry *spica_dir;
 #define CPU_PROCFS_NAME "maxcpu1off"
 #define CPU1OFF_PROCFS_SIZE 8
 int min_maxcpu1off = 216000;  // Min freq
-int max_maxcpu1off = 1100000; // Max freq
+int max_maxcpu1off = 1015000; // Max freq
 static struct proc_dir_entry *CPU_Proc_File;
 static char procfs_buffer_maxcpu1off[CPU1OFF_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_maxcpu1off = 0;
