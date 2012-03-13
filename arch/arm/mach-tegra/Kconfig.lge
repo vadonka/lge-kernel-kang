@@ -84,6 +84,14 @@ config OTF_GPURAM
 	bool "OTF GPU RAM size (dynamic declaration)"
 	default y
 
+config OTF_MAXSCOFF
+	bool "OTF Screen Off Max Frequency"
+	default y
+
+config OTF_PSNIT
+	bool "OTF Extra: PowerSave & Nitro feature"
+	default y
+
 endif # SPICA_OTF
 
 config STAR_PMIC

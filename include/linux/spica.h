@@ -49,10 +49,17 @@ extern unsigned int NVRM_AP20_LOW_CPU_MV;
 //extern unsigned int STAR_RAM_CONSOLE_SIZE;
 //extern unsigned int USE_FG;
 //extern unsigned int RAM_CONSOLE_RESERVED_SIZE;
-extern unsigned int MAXSCREENOFFCPUFREQ;
+
+#ifdef CONFIG_OTF_MAXSCOFF
+extern unsigned int SCREENOFFFREQ;
+#endif
+
 //extern unsigned int USE_VALUE;
 //extern unsigned int RAMHACK;
+
+#ifdef CONFIG_OTF_GPURAM
 extern unsigned int GPURAMSIZE;
+#endif
 
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
 //extern unsigned int STAR_RAM_CONSOLE_BASE;
