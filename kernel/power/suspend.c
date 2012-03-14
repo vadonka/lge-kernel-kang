@@ -23,8 +23,6 @@
 #include <linux/spica.h>
 extern unsigned int oldmaxclock;
 extern unsigned int oldminclock;
-extern void powersave_check(unsigned int check);
-extern void nitros_check(unsigned int check);
 #endif //CONFIG_SPICA_OTF
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
@@ -178,7 +176,7 @@ static int suspend_enter(suspend_state_t state)
 	BUG_ON(irqs_disabled());
 
 #ifdef CONFIG_SPICA_OTF
- oldminclock = oldminclock + 100000;
+ oldminclock = 216000;
 #endif
 
  Enable_cpus:

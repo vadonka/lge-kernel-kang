@@ -700,7 +700,7 @@ NvRmPrivAp20GetPmRequest(
     static NvRmPmRequest s_LastPmRequest = (NvRmPmRequest_CpuOnFlag | 0x1);
 
 #ifdef CONFIG_OTF_CPU1
-    int s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ, s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ;
+    NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
 #else
     static NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
 #endif // OTF_CPU1

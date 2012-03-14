@@ -2219,10 +2219,13 @@ unsigned int oldmaxclock;
 unsigned int oldminclock;
 unsigned int oldmincpu1on;
 unsigned int oldgpufreq;
-unsigned int oldgpufbfreq;
+unsigned int oldvdefreq;
+unsigned int oldpadms;
 unsigned int oldcoremv;
+unsigned int oldlowcpu;
 unsigned int oldddr2;
 unsigned int oldlpddr2;
+unsigned int oldavpfreq;
 
 static void powersave_early_suspend(struct early_suspend *handler) {
 	int cpu;
@@ -2233,6 +2236,29 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			continue;
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
+#ifdef CONFIG_OTF_AVP
+			oldavpfreq = AVPFREQ;
+#endif
+#ifdef CONFIG_OTF_CPU1
+			oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
+			oldpadms = NVRM_CPU1_OFF_PENDING_MS;
+#endif
+#ifdef CONFIG_OTF_GPU
+			oldgpufreq = GPUFREQ;
+#endif
+#ifdef CONFIG_OTF_VDE
+			oldvdefreq = VDEFREQ;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			oldcoremv= NVRM_AP20_LOW_CORE_MV;
+			oldlowcpu = NVRM_AP20_LOW_CPU_MV;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
+#endif
 			oldmaxclock = cpu_policy->max;
 			oldminclock = cpu_policy->min;
 			new_policy.max = SCREENOFFFREQ;
@@ -2342,6 +2368,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #endif
 		}
 #endif // OTF_PSNIT
+
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2462,6 +2489,31 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_AP20LC
 			NVRM_AP20_LOW_CORE_MV = 925;
 			NVRM_AP20_LOW_CPU_MV = 770;
+#endif
+		} else if ((PWONOFF != 4) || (PWONOFF != 5) || (PWONOFF != 6)) { //applying powersave 4,5,6 for screen off purposes only, restoring normal to screen wakeup
+			NITROONOFF = 0;
+#ifdef CONFIG_OTF_CPU1
+			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
+			NVRM_CPU1_OFF_PENDING_MS = oldpadms;
+#endif
+#ifdef CONFIG_OTF_AVP
+			AVPFREQ = oldavpfreq;
+#endif
+#ifdef CONFIG_OTF_GPU
+			GPUFREQ = oldgpufreq;
+#endif
+#ifdef CONFIG_OTF_VDE
+			VDEFREQ = oldvdefreq;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
+			NVRM_AP20_DDR2_MIN_KHZ = oldddr2;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
+			NVRM_AP20_LPDDR2_MIN_KHZ = oldlpddr2;
+#endif
+#ifdef CONFIG_OTF_AP20LC
+			NVRM_AP20_LOW_CORE_MV = oldcoremv;
+			NVRM_AP20_LOW_CPU_MV = oldlowcpu;
 #endif
 		}
 #endif // OTF_PSNIT

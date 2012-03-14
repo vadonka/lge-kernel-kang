@@ -5,7 +5,7 @@
 unsigned int NVRM_CPU1_ON_MIN_KHZ = 810000; //Default value should be changed here
 //#define NVRM_CPU1_ON_MIN_KHZ (MIN_CPU_ON * 1000);
 unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
-unsigned int NVRM_CPU1_OFF_PENDING_MS = 200;
+unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
 #endif
 
 #ifdef CONFIG_OTF_AVP
