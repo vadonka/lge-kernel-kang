@@ -32,10 +32,10 @@ extern unsigned int VDEFREQ;
 #ifdef CONFIG_OTF_GPU
 extern unsigned int GPUFREQ;
 #endif
-
+#ifdef CONFIG_OTF_PSNIT
 extern unsigned int PWONOFF;
 extern unsigned int NITROONOFF;
-
+#endif
 #ifdef CONFIG_OTF_AP20LC
 extern unsigned int NVRM_AP20_LOW_CORE_MV;
 extern unsigned int NVRM_AP20_LOW_CPU_MV;
@@ -74,7 +74,9 @@ extern unsigned int NVRM_AP20_DDR2_MIN_KHZ;
 #ifdef CONFIG_OTF_LPDDR2
 extern unsigned int NVRM_AP20_LPDDR2_MIN_KHZ;
 #endif
-
+#ifdef CONFIG_OTF_BL
+extern unsigned int BLONOFF;
+#endif
 //static unsigned STAR_RAM_CONSOLE_SIZE;
 //static unsigned STAR_RAM_CONSOLE_BASE;
 //extern STAR_RAM_CONSOLE_BASE;
