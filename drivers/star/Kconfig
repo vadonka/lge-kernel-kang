@@ -7,7 +7,14 @@ config USE_DS_BATTERY_DRIVER
 	default n
 	depends on MACH_STAR
 	help
-	  Select Battery Driver type
+	 Select Battery Driver type
+
+config USE_LITE_BATTERY_DRIVER
+	bool "Star Battery Driver Lite Version"
+	default n
+	depends on MACH_STAR && !USE_DS_BATTERY_DRIVER
+	help
+	 Select Battery Driver type
 
 config STAR_BATTERY_CHARGER
 	bool "Star Battery & Charger Driver"
@@ -54,7 +61,7 @@ config RINETWORK_DRIVER
 config LOGGER
 	bool "High-speed in-kernel logging driver"
 	default y
-	depends on !ANDROID_LOGGER	
+	depends on !ANDROID_LOGGER
 
 source "drivers/star/sensor/Kconfig"
 source "drivers/star/sensor.module/Kconfig"
@@ -116,7 +123,7 @@ config STAR_FOTA
 	bool "Star FOTA Test Driver"
 	default y
 	help
-	 FOTA Test Driver	
+	 FOTA Test Driver
 
 config STAR_CPWATCHER
 	bool "Star CP Status Watcher Driver"
