@@ -2236,29 +2236,15 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			continue;
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
-#ifdef CONFIG_OTF_AVP
 			oldavpfreq = AVPFREQ;
-#endif
-#ifdef CONFIG_OTF_CPU1
 			oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
-			//oldpadms = NVRM_CPU1_OFF_PENDING_MS;
-#endif
-#ifdef CONFIG_OTF_GPU
+			oldpadms = NVRM_CPU1_OFF_PENDING_MS;
 			oldgpufreq = GPUFREQ;
-#endif
-#ifdef CONFIG_OTF_VDE
 			oldvdefreq = VDEFREQ;
-#endif
-#ifdef CONFIG_OTF_AP20LC
 			oldcoremv= NVRM_AP20_LOW_CORE_MV;
 			oldlowcpu = NVRM_AP20_LOW_CPU_MV;
-#endif
-#ifdef CONFIG_OTF_DDR2MIN
 			oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
-#endif
-#ifdef CONFIG_OTF_LPDDR2
 			oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
-#endif
 			oldmaxclock = cpu_policy->max;
 			oldminclock = cpu_policy->min;
 			new_policy.max = SCREENOFFFREQ;
@@ -2270,7 +2256,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			//NVRM_CPU1_OFF_PENDING_MS = 500;
+			NVRM_CPU1_OFF_PENDING_MS = 500;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 230000;
@@ -2295,7 +2281,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			//NVRM_CPU1_OFF_PENDING_MS = 400;
+			NVRM_CPU1_OFF_PENDING_MS = 400;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 220000;
@@ -2320,7 +2306,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			//NVRM_CPU1_OFF_PENDING_MS = 200;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 200000;
@@ -2345,7 +2331,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			//NVRM_CPU1_OFF_PENDING_MS = 200;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 240000;
@@ -2394,7 +2380,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			//NVRM_CPU1_OFF_PENDING_MS = 500;
+			NVRM_CPU1_OFF_PENDING_MS = 500;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 230000;
@@ -2419,7 +2405,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			//NVRM_CPU1_OFF_PENDING_MS = 400;
+			NVRM_CPU1_OFF_PENDING_MS = 400;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 220000;
@@ -2444,7 +2430,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			//NVRM_CPU1_OFF_PENDING_MS = 200;
+			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 210000;
@@ -2469,7 +2455,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			PWONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 750000;
-			//NVRM_CPU1_OFF_PENDING_MS = 900;
+			NVRM_CPU1_OFF_PENDING_MS = 900;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = 250000;
@@ -2494,7 +2480,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
-			//NVRM_CPU1_OFF_PENDING_MS = oldpadms;
+			NVRM_CPU1_OFF_PENDING_MS = oldpadms;
 #endif
 #ifdef CONFIG_OTF_AVP
 			AVPFREQ = oldavpfreq;

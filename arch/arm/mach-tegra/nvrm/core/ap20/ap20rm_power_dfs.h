@@ -190,7 +190,15 @@ extern "C"
  */
 
 // Defines minimum scaling limit for each supported SDRAM type
-
+#ifdef CONFIG_SPICA_OTF
+#include <linux/spica.h>
+#define NVRM_CPU1_ON_PENDING_MS (2500)
+#else
+#define NVRM_CPU1_ON_MIN_KHZ (655000)
+#define NVRM_CPU1_OFF_MAX_KHZ (610000)
+#define NVRM_CPU1_ON_PENDING_MS (2500)
+#define NVRM_CPU1_OFF_PENDING_MS (600)
+#endif // SPICA_OTF
 #ifndef CONFIG_OTF_DDR2MIN
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
 #endif // OTF_DDR2MIN
@@ -249,15 +257,15 @@ extern "C"
  * characterization data
  */
 
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#else
-#define NVRM_CPU1_ON_MIN_KHZ (655000)
-#define NVRM_CPU1_OFF_MAX_KHZ (610000)
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#define NVRM_CPU1_OFF_PENDING_MS (600)
-#endif // SPICA_OTF
+//#ifdef CONFIG_SPICA_OTF
+//#include <linux/spica.h>
+//#define NVRM_CPU1_ON_PENDING_MS (2500)
+//#else
+//#define NVRM_CPU1_ON_MIN_KHZ (655000)
+//#define NVRM_CPU1_OFF_MAX_KHZ (610000)
+//#define NVRM_CPU1_ON_PENDING_MS (2500)
+//#define NVRM_CPU1_OFF_PENDING_MS (600)
+//#endif // SPICA_OTF
 
 /**
  * Defines AP20 Thermal policy parameters.
