@@ -52,6 +52,19 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
+#ifdef CONFIG_FAKE_SHMOO
+#include <linux/kernel.h>
+
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+ */
+
+extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
+extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+
+#endif // CONFIG_FAKE_SHMOO
+
 //Spica OTF Start
 #ifdef CONFIG_SPICA_OTF
 #include <linux/spica.h>
@@ -64,8 +77,8 @@
 #define NITRO_PROCFS_SIZE 2
 
 static struct proc_dir_entry *PW_Proc_File;
-static char procfs_buffer_pws[PW_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_pws = 0;
+static char procfs_buffer_pw[PW_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_pw = 0;
 static struct proc_dir_entry *NITRO_Proc_File;
 static char procfs_buffer_nitro[NITRO_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_nitro = 0;
@@ -76,8 +89,8 @@ printk(KERN_INFO "pw_procfile_read (/proc/spica/%s) called\n", PW_PROCFS_NAME);
 if (offset > 0) {
 	ret = 0;
 } else {
-	memcpy(buffer, procfs_buffer_pws, procfs_buffer_size_pws);
-	ret = procfs_buffer_size_pws;
+	memcpy(buffer, procfs_buffer_pw, procfs_buffer_size_pw);
+	ret = procfs_buffer_size_pw;
 }
 return ret;
 }
@@ -94,34 +107,30 @@ return ret;
 }
 
 int pw_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_pws;
-temp_pws = 0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp_pws) < 0 )  return procfs_buffer_size_pws;
-if ( temp_pws < 0 || temp_pws > 6 ) return procfs_buffer_size_pws;
-/* [End] */
-    procfs_buffer_size_pws = count;
-if (procfs_buffer_size_pws > PW_PROCFS_SIZE ) {
-    procfs_buffer_size_pws = PW_PROCFS_SIZE;
+int temp_pw;
+temp_pw = 0;
+if ( sscanf(buffer,"%d",&temp_pw) < 0 )  return procfs_buffer_size_pw;
+if ( temp_pw < 0 || temp_pw > 6 ) return procfs_buffer_size_pw;
+
+procfs_buffer_size_pw = count;
+if (procfs_buffer_size_pw > PW_PROCFS_SIZE ) {
+    procfs_buffer_size_pw = PW_PROCFS_SIZE;
     }
-if ( copy_from_user(procfs_buffer_pws, buffer, procfs_buffer_size_pws) ) {
+if ( copy_from_user(procfs_buffer_pw, buffer, procfs_buffer_size_pw) ) {
 	printk(KERN_INFO "buffer_size error\n");
 	return -EFAULT;
 }
-sscanf(procfs_buffer_pws,"%u",&PWONOFF);
-return procfs_buffer_size_pws;
+sscanf(procfs_buffer_pw,"%u",&PWONOFF);
+return procfs_buffer_size_pw;
 }
 
 int nitro_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_nitro;
 temp_nitro = 0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
 if ( sscanf(buffer,"%d",&temp_nitro) < 0 )  return procfs_buffer_size_nitro;
 if ( temp_nitro < 0 || temp_nitro > 1 ) return procfs_buffer_size_nitro;
-/* [End] */
-    procfs_buffer_size_nitro = count;
+
+procfs_buffer_size_nitro = count;
 if (procfs_buffer_size_nitro > NITRO_PROCFS_SIZE ) {
     procfs_buffer_size_nitro = NITRO_PROCFS_SIZE;
 }
@@ -133,7 +142,7 @@ sscanf(procfs_buffer_nitro,"%u",&NITROONOFF);
 return procfs_buffer_size_nitro;
 }
 
-static int __init init_ocuv_procsfs(void) {
+static int __init init_pw_procsfs(void) {
 PW_Proc_File = spica_add(PW_PROCFS_NAME);
 if (PW_Proc_File == NULL) {
 	spica_remove(PW_PROCFS_NAME);
@@ -146,13 +155,13 @@ if (PW_Proc_File == NULL) {
 	PW_Proc_File->uid = 0;
 	PW_Proc_File->gid = 0;
 	PW_Proc_File->size = 37;
-	sprintf(procfs_buffer_pws,"%d",PWONOFF);
-	procfs_buffer_size_pws = strlen(procfs_buffer_pws);
+	sprintf(procfs_buffer_pw,"%d",PWONOFF);
+	procfs_buffer_size_pw = strlen(procfs_buffer_pw);
 	printk(KERN_INFO "/proc/spica/%s created\n", PW_PROCFS_NAME);
 }
 	return 0;
 }
-module_init(init_ocuv_procsfs);
+module_init(init_pw_procsfs);
 
 static int __init init_nitro_procsfs(void) {
 NITRO_Proc_File = spica_add(NITRO_PROCFS_NAME);
@@ -174,11 +183,13 @@ if (NITRO_Proc_File == NULL) {
 	return 0;
 }
 module_init(init_nitro_procsfs);
-static void __exit cleanup_ocuv_procsfs(void) {
+
+static void __exit cleanup_pw_procsfs(void) {
 spica_remove(PW_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", PW_PROCFS_NAME);
 }
-module_exit(cleanup_ocuv_procsfs);
+module_exit(cleanup_pw_procsfs);
+
 static void __exit cleanup_nitro_procsfs(void) {
 spica_remove(NITRO_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", NITRO_PROCFS_NAME);
@@ -186,19 +197,6 @@ printk(KERN_INFO "/proc/spica/%s removed\n", NITRO_PROCFS_NAME);
 module_exit(cleanup_nitro_procsfs);
 #endif // OTF_PSNIT
 #endif // SPICA_OTF
-
-#ifdef CONFIG_FAKE_SHMOO
-#include <linux/kernel.h>
-
-/*
- * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
- */
-
-extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
-extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
-NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
-
-#endif // CONFIG_FAKE_SHMOO
 
 /*****************************************************************************/
 

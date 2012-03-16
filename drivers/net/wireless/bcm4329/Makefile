@@ -80,9 +80,8 @@ EXTRA_CFLAGS = \
 	-Iinclude/asm/mach-default \
 	-DBCMEMBEDIMAGE="<dongle/rte/wl/builds/4325b0/sdio-g-cdc-reclaim-idsup-wme/rtecdc.h>" \
 
-ifeq ($(CONFIG_BRCM_LGE_WL_PKTFILTER),y)
 EXTRA_CFLAGS += -DPKT_FILTER_SUPPORT
-endif
+
 ifeq ($(CONFIG_BRCM_LGE_WL_ARPOFFLOAD),y)
 EXTRA_CFLAGS += -DARP_OFFLOAD_SUPPORT
 endif

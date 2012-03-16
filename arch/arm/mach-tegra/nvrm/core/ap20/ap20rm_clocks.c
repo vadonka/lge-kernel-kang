@@ -53,71 +53,72 @@ static struct proc_dir_entry *spica_dir;
 
 /* CPU1 OFF MAX */
 #ifdef CONFIG_OTF_CPU1
-#define CPU_PROCFS_NAME "maxcpu1off"
-#define CPU1OFF_PROCFS_SIZE 8
-int min_maxcpu1off = 216000;  // Min freq
-int max_maxcpu1off = 1015000; // Max freq
-static struct proc_dir_entry *CPU_Proc_File;
-static char procfs_buffer_maxcpu1off[CPU1OFF_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_maxcpu1off = 0;
+#define CPUOFF_PROCFS_NAME "maxcpu1off"
+#define CPUOFF_PROCFS_SIZE 8
+int min_maxcpu = 216000;  // Min freq
+int max_maxcpu = 1015000; // Max freq
+static struct proc_dir_entry *CPUOFF_Proc_File;
+static char procfs_buffer_cpuoff[CPUOFF_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_cpuoff = 0;
 
-int cpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+int cpuoff_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
-printk(KERN_INFO "cpu_procfile_read (/proc/spica/%s) called\n", CPU_PROCFS_NAME);
+printk(KERN_INFO "cpuoff_procfile_read (/proc/spica/%s) called\n", CPUOFF_PROCFS_NAME);
 if (offset > 0) {
 	ret = 0;
 } else {
-	memcpy(buffer, procfs_buffer_maxcpu1off, procfs_buffer_size_maxcpu1off);
-	ret = procfs_buffer_size_maxcpu1off;
+	memcpy(buffer, procfs_buffer_cpuoff, procfs_buffer_size_cpuoff);
+	ret = procfs_buffer_size_cpuoff;
 }
 return ret;
 }
 
-int cpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_maxcpu1off;
-temp_maxcpu1off = 0;
+int cpuoff_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int temp_cpuoff;
+temp_cpuoff = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
-if ( sscanf(buffer,"%d",&temp_maxcpu1off) < 1 ) return procfs_buffer_size_maxcpu1off;
-if ( temp_maxcpu1off < min_maxcpu1off || temp_maxcpu1off > max_maxcpu1off ) return procfs_buffer_size_maxcpu1off;
+if ( sscanf(buffer,"%d",&temp_cpuoff) < 1 ) return procfs_buffer_size_cpuoff;
+if ( temp_cpuoff < min_maxcpu || temp_cpuoff > max_maxcpu ) return procfs_buffer_size_cpuoff;
 /* [End] */
-    procfs_buffer_size_maxcpu1off = count;
-if (procfs_buffer_size_maxcpu1off > CPU1OFF_PROCFS_SIZE ) {
-    procfs_buffer_size_maxcpu1off = CPU1OFF_PROCFS_SIZE;
+    procfs_buffer_size_cpuoff = count;
+if (procfs_buffer_size_cpuoff > CPUOFF_PROCFS_SIZE ) {
+    procfs_buffer_size_cpuoff = CPUOFF_PROCFS_SIZE;
 }
-if ( copy_from_user(procfs_buffer_maxcpu1off, buffer, procfs_buffer_size_maxcpu1off) ) {
+if ( copy_from_user(procfs_buffer_cpuoff, buffer, procfs_buffer_size_cpuoff) ) {
 	printk(KERN_INFO "buffer_size error\n");
 	return -EFAULT;
 }
-sscanf(procfs_buffer_maxcpu1off,"%u",&NVRM_CPU1_OFF_MAX_KHZ);
-return procfs_buffer_size_maxcpu1off;
+sscanf(procfs_buffer_cpuoff,"%u",&NVRM_CPU1_OFF_MAX_KHZ);
+return procfs_buffer_size_cpuoff;
 }
 
-static int __init cpu_cpu_procsfs(void) {
-CPU_Proc_File = spica_add(CPU_PROCFS_NAME);
-if (CPU_Proc_File == NULL) {
-	spica_remove(CPU_PROCFS_NAME);
-	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", CPU_PROCFS_NAME);
+static int __init cpuoff_procsfs(void) {
+CPUOFF_Proc_File = spica_add(CPUOFF_PROCFS_NAME);
+if (CPUOFF_Proc_File == NULL) {
+	spica_remove(CPUOFF_PROCFS_NAME);
+	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", CPUOFF_PROCFS_NAME);
 	return -ENOMEM;
 } else {
-	CPU_Proc_File->read_proc = cpu_procfile_read;
-	CPU_Proc_File->write_proc = cpu_procfile_write;
-	CPU_Proc_File->mode = S_IFREG | S_IRUGO;
-	CPU_Proc_File->uid = 0;
-	CPU_Proc_File->gid = 0;
-	CPU_Proc_File->size = 37;
-	sprintf(procfs_buffer_maxcpu1off,"%d",NVRM_CPU1_OFF_MAX_KHZ);
-	procfs_buffer_size_maxcpu1off = strlen(procfs_buffer_maxcpu1off);
-	printk(KERN_INFO "/proc/spica/%s created\n", CPU_PROCFS_NAME);
+	CPUOFF_Proc_File->read_proc = cpuoff_procfile_read;
+	CPUOFF_Proc_File->write_proc = cpuoff_procfile_write;
+	CPUOFF_Proc_File->mode = S_IFREG | S_IRUGO;
+	CPUOFF_Proc_File->uid = 0;
+	CPUOFF_Proc_File->gid = 0;
+	CPUOFF_Proc_File->size = 37;
+	sprintf(procfs_buffer_cpuoff,"%d",NVRM_CPU1_OFF_MAX_KHZ);
+	procfs_buffer_size_cpuoff = strlen(procfs_buffer_cpuoff);
+	printk(KERN_INFO "/proc/spica/%s created\n", CPUOFF_PROCFS_NAME);
 }
 return 0;
 }
-module_init(cpu_cpu_procsfs);
-static void __exit cpu_cleanup_cpu_procsfs(void) {
-spica_remove(CPU_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", CPU_PROCFS_NAME);
+module_init(cpuoff_procsfs);
+
+static void __exit cpu_cleanup_cpuoff_procsfs(void) {
+spica_remove(CPUOFF_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", CPUOFF_PROCFS_NAME);
 }
-module_exit(cpu_cleanup_cpu_procsfs);
+module_exit(cpu_cleanup_cpuoff_procsfs);
 #endif // OTF_CPU1
 #endif // SPICA_OTF
 

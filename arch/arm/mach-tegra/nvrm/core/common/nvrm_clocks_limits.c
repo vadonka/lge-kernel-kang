@@ -52,43 +52,41 @@ static struct proc_dir_entry *spica_dir;
 #define GPU_PROCFS_NAME "gpufreq"
 #define GPU_PROCFS_SIZE 8
 static struct proc_dir_entry *GPU_Proc_File;
-static char procfs_buffer_gpufreq[GPU_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_gpufreq = 0;
-int min_gpufreq = 280000; // Min GPU freq
-int max_gpufreq = 400000; // Max GPU freq
+static char procfs_buffer_gpu[GPU_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_gpu = 0;
+int min_gpu = 280000; // Min GPU freq
+int max_gpu = 400000; // Max GPU freq
 int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "gpu_procfile_read (/proc/spica/%s) called\n", GPU_PROCFS_NAME);
 if (offset > 0) {
 	ret = 0;
 } else {
-	memcpy(buffer, procfs_buffer_gpufreq, procfs_buffer_size_gpufreq);
-	ret = procfs_buffer_size_gpufreq;
+	memcpy(buffer, procfs_buffer_gpu, procfs_buffer_size_gpu);
+	ret = procfs_buffer_size_gpu;
 }
 return ret;
 }
 
 int gpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_gpufreq;
-temp_gpufreq = 0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp_gpufreq) < 1 ) return procfs_buffer_size_gpufreq;
-if ( temp_gpufreq < min_gpufreq || temp_gpufreq > max_gpufreq ) return procfs_buffer_size_gpufreq;
-/* [End] */
-	procfs_buffer_size_gpufreq = count;
-if (procfs_buffer_size_gpufreq > GPU_PROCFS_SIZE ) {
-	procfs_buffer_size_gpufreq = GPU_PROCFS_SIZE;
+int temp_gpu;
+temp_gpu = 0;
+if ( sscanf(buffer,"%d",&temp_gpu) < 1 ) return procfs_buffer_size_gpu;
+if ( temp_gpu < min_gpu || temp_gpu > max_gpu ) return procfs_buffer_size_gpu;
+
+procfs_buffer_size_gpu = count;
+if (procfs_buffer_size_gpu > GPU_PROCFS_SIZE ) {
+	procfs_buffer_size_gpu = GPU_PROCFS_SIZE;
 }
-if ( copy_from_user(procfs_buffer_gpufreq, buffer, procfs_buffer_size_gpufreq) ) {
+if ( copy_from_user(procfs_buffer_gpu, buffer, procfs_buffer_size_gpu) ) {
 	printk(KERN_INFO "buffer_size error\n");
 	return -EFAULT;
 }
-sscanf(procfs_buffer_gpufreq,"%u",&GPUFREQ);
-return procfs_buffer_size_gpufreq;
+sscanf(procfs_buffer_gpu,"%u",&GPUFREQ);
+return procfs_buffer_size_gpu;
 }
 
-static int __init init_gpufb_procsfs(void) {
+static int __init init_gpu_procsfs(void) {
 GPU_Proc_File = spica_add(GPU_PROCFS_NAME);
 if (GPU_Proc_File == NULL) {
 	spica_remove(GPU_PROCFS_NAME);
@@ -101,18 +99,19 @@ if (GPU_Proc_File == NULL) {
 	GPU_Proc_File->uid = 0;
 	GPU_Proc_File->gid = 0;
 	GPU_Proc_File->size = 37;
-	sprintf(procfs_buffer_gpufreq,"%d",GPUFREQ);
-	procfs_buffer_size_gpufreq = strlen(procfs_buffer_gpufreq);
+	sprintf(procfs_buffer_gpu,"%d",GPUFREQ);
+	procfs_buffer_size_gpu = strlen(procfs_buffer_gpu);
 	printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
 }
 return 0;
 }
-module_init(init_gpufb_procsfs);
-static void __exit cleanup_gpufb_procsfs(void) {
+module_init(init_gpu_procsfs);
+
+static void __exit cleanup_gpu_procsfs(void) {
 spica_remove(GPU_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
 }
-module_exit(cleanup_gpufb_procsfs);
+module_exit(cleanup_gpu_procsfs);
 #endif // OTF_GPU
 
 /* AVP Freq */
@@ -120,43 +119,41 @@ module_exit(cleanup_gpufb_procsfs);
 #define AVP_PROCFS_NAME "avpfreq"
 #define AVP_PROCFS_SIZE 8
 static struct proc_dir_entry *AVP_Proc_File;
-static char procfs_buffer_avpfreq[AVP_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_avpfreq = 0;
-int min_avpfreq = 200000; // Min AVP freq
-int max_avpfreq = 250000; // Max AVP freq
+static char procfs_buffer_avp[AVP_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_avp = 0;
+int min_avp = 200000; // Min AVP freq
+int max_avp = 250000; // Max AVP freq
 int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
 if (offset > 0) {
 	ret = 0;
 } else {
-	memcpy(buffer, procfs_buffer_avpfreq, procfs_buffer_size_avpfreq);
-	ret = procfs_buffer_size_avpfreq;
+	memcpy(buffer, procfs_buffer_avp, procfs_buffer_size_avp);
+	ret = procfs_buffer_size_avp;
 }
 return ret;
 }
 
 int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_avpfreq;
-temp_avpfreq = 0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp_avpfreq) < 1 ) return procfs_buffer_size_avpfreq;
-if ( temp_avpfreq < min_avpfreq || temp_avpfreq > max_avpfreq ) return procfs_buffer_size_avpfreq;
-/* [End] */
-	procfs_buffer_size_avpfreq = count;
-if (procfs_buffer_size_avpfreq > AVP_PROCFS_SIZE ) {
-	procfs_buffer_size_avpfreq = AVP_PROCFS_SIZE;
+int temp_avp;
+temp_avp = 0;
+if ( sscanf(buffer,"%d",&temp_avp) < 1 ) return procfs_buffer_size_avp;
+if ( temp_avp < min_avp || temp_avp > max_avp ) return procfs_buffer_size_avp;
+
+procfs_buffer_size_avp = count;
+if (procfs_buffer_size_avp > AVP_PROCFS_SIZE ) {
+	procfs_buffer_size_avp = AVP_PROCFS_SIZE;
 }
-if ( copy_from_user(procfs_buffer_avpfreq, buffer, procfs_buffer_size_avpfreq) ) {
+if ( copy_from_user(procfs_buffer_avp, buffer, procfs_buffer_size_avp) ) {
 	printk(KERN_INFO "buffer_size error\n");
 	return -EFAULT;
 }
-sscanf(procfs_buffer_avpfreq,"%u",&AVPFREQ);
-return procfs_buffer_size_avpfreq;
+sscanf(procfs_buffer_avp,"%u",&AVPFREQ);
+return procfs_buffer_size_avp;
 }
 
-static int __init init_avpfb_procsfs(void)
+static int __init init_avp_procsfs(void)
 {
 AVP_Proc_File = spica_add(AVP_PROCFS_NAME);
 if (AVP_Proc_File == NULL) {
@@ -170,18 +167,19 @@ if (AVP_Proc_File == NULL) {
 	AVP_Proc_File->uid = 0;
 	AVP_Proc_File->gid = 0;
 	AVP_Proc_File->size = 37;
-	sprintf(procfs_buffer_avpfreq,"%d",AVPFREQ);
-	procfs_buffer_size_avpfreq = strlen(procfs_buffer_avpfreq);
+	sprintf(procfs_buffer_avp,"%d",AVPFREQ);
+	procfs_buffer_size_avp = strlen(procfs_buffer_avp);
 	printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
 }
 return 0;
 }
-module_init(init_avpfb_procsfs);
-static void __exit cleanup_avpfb_procsfs(void) {
+module_init(init_avp_procsfs);
+
+static void __exit cleanup_avp_procsfs(void) {
 spica_remove(AVP_PROCFS_NAME);
 printk(KERN_INFO "/proc/spica/%s removed\n", AVP_PROCFS_NAME);
 }
-module_exit(cleanup_avpfb_procsfs);
+module_exit(cleanup_avp_procsfs);
 #endif // OTF_AVP
 #endif // SPICA_OTF
 

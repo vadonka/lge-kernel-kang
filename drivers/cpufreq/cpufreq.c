@@ -55,51 +55,49 @@ extern NvU32 *FakeShmooVoltages;
 #include <linux/spica.h>
 
 #ifdef CONFIG_OTF_MAXSCOFF
-#define MAXSOC_PROCFS_NAME "screenoff_maxcpufreq"
-#define MAXSOC_PROCFS_SIZE 7
+#define MAXSPW_PROCFS_NAME "screenoff_maxcpufreq"
+#define MAXSPW_PROCFS_SIZE 7
 
 static struct proc_dir_entry *MAXSOC_Proc_File;
-static char procfs_buffer_sc[MAXSOC_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_sc = 0;
+static char procfs_buffer_sm[MAXSPW_PROCFS_SIZE];
+static unsigned long procfs_buffer_size_sm = 0;
 int min_freq_sc = 216000; // Min Screen Off Freq
 int max_freq_sc = 816000; // Max Screen Off Freq
 int maxsoc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
-printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSOC_PROCFS_NAME);
+printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSPW_PROCFS_NAME);
 if (offset > 0) {
     ret = 0;
 } else {
-    memcpy(buffer, procfs_buffer_sc, procfs_buffer_size_sc);
-    ret = procfs_buffer_size_sc;
+    memcpy(buffer, procfs_buffer_sm, procfs_buffer_size_sm);
+    ret = procfs_buffer_size_sm;
 }
 return ret;
 }
 
 int maxsoc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_sc;
-temp_sc = 0;
-/* CAUTION:Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp_sc) < 1 ) return procfs_buffer_size_sc;
-if ( temp_sc < min_freq_sc || temp_sc > max_freq_sc ) return procfs_buffer_size_sc;
-/* [End] */
-    procfs_buffer_size_sc = count;
-if (procfs_buffer_size_sc > MAXSOC_PROCFS_SIZE ) {
-    procfs_buffer_size_sc = MAXSOC_PROCFS_SIZE;
+int temp_sm;
+temp_sm = 0;
+if ( sscanf(buffer,"%d",&temp_sm) < 1 ) return procfs_buffer_size_sm;
+if ( temp_sm < min_freq_sc || temp_sm > max_freq_sc ) return procfs_buffer_size_sm;
+
+procfs_buffer_size_sm = count;
+if (procfs_buffer_size_sm > MAXSPW_PROCFS_SIZE ) {
+    procfs_buffer_size_sm = MAXSPW_PROCFS_SIZE;
 }
-if ( copy_from_user(procfs_buffer_sc, buffer, procfs_buffer_size_sc) ) {
+if ( copy_from_user(procfs_buffer_sm, buffer, procfs_buffer_size_sm) ) {
 printk(KERN_INFO "buffer_size error\n");
 return -EFAULT;
 }
-sscanf(procfs_buffer_sc,"%u",&SCREENOFFFREQ);
-return procfs_buffer_size_sc;
+sscanf(procfs_buffer_sm,"%u",&SCREENOFFFREQ);
+return procfs_buffer_size_sm;
 }
 
 static int __init init_maxsoc_procsfs(void) {
-MAXSOC_Proc_File = spica_add(MAXSOC_PROCFS_NAME);
+MAXSOC_Proc_File = spica_add(MAXSPW_PROCFS_NAME);
 if (MAXSOC_Proc_File == NULL) {
-    spica_remove(MAXSOC_PROCFS_NAME);
-    printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSOC_PROCFS_NAME);
+    spica_remove(MAXSPW_PROCFS_NAME);
+    printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSPW_PROCFS_NAME);
     return -ENOMEM;
 } else {
     MAXSOC_Proc_File->read_proc = maxsoc_procfile_read;
@@ -108,16 +106,16 @@ if (MAXSOC_Proc_File == NULL) {
     MAXSOC_Proc_File->uid = 0;
     MAXSOC_Proc_File->gid = 0;
     MAXSOC_Proc_File->size = 37;
-    sprintf(procfs_buffer_sc,"%d",SCREENOFFFREQ);
-    procfs_buffer_size_sc = strlen(procfs_buffer_sc);
-    printk(KERN_INFO "/proc/spica/%s created\n", MAXSOC_PROCFS_NAME);
+    sprintf(procfs_buffer_sm,"%d",SCREENOFFFREQ);
+    procfs_buffer_size_sm = strlen(procfs_buffer_sm);
+    printk(KERN_INFO "/proc/spica/%s created\n", MAXSPW_PROCFS_NAME);
 }
 return 0;
 }
 module_init(init_maxsoc_procsfs);
 static void __exit cleanup_maxsoc_procsfs(void) {
-spica_remove(MAXSOC_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", MAXSOC_PROCFS_NAME);
+spica_remove(MAXSPW_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", MAXSPW_PROCFS_NAME);
 }
 module_exit(cleanup_maxsoc_procsfs);
 #endif // OTF_MAXSCOFF
