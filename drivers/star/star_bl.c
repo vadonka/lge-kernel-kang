@@ -36,76 +36,6 @@
 #include <linux/delay.h>
 #include <mach/lprintk.h>
 
-/* Powersave BackLigh level */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-
-#ifdef CONFIG_OTF_BL
-#define BL_PROCFS_NAME "bl"
-#define BL_PROCFS_SIZE 2
-static struct proc_dir_entry *BL_Proc_File;
-static char procfs_buffer_bl[BL_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_bl = 0;
-
-int bl_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) { 
-int ret;
-printk(KERN_INFO "bl_procfile_read (/proc/spica/%s) called\n", BL_PROCFS_NAME);
-if (offset > 0) {
-	ret = 0;
-} else {
-	memcpy(buffer, procfs_buffer_bl, procfs_buffer_size_bl);
-	ret = procfs_buffer_size_bl;
-}
-return ret;
-}
-
-int bl_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-unsigned int temp_bl;
-temp_bl = 0;
-if ( sscanf(buffer,"%d",&temp_bl) < 0 )  return procfs_buffer_size_bl;
-if ( temp_bl < 0 || temp_bl > 1 ) return procfs_buffer_size_bl;
-	procfs_buffer_size_bl = count;
-if (procfs_buffer_size_bl > BL_PROCFS_SIZE ) {
-	procfs_buffer_size_bl = BL_PROCFS_SIZE;
-}
-if ( copy_from_user(procfs_buffer_bl, buffer, procfs_buffer_size_bl) ) {
-printk(KERN_INFO "buffer_size error\n");
-return -EFAULT;
-}
-sscanf(procfs_buffer_bl,"%u",&BLONOFF);
-return procfs_buffer_size_bl;
-}
-
-static int __init init_bl_procsfs(void) {
-BL_Proc_File = spica_add(BL_PROCFS_NAME);
-if (BL_Proc_File == NULL) {
-	spica_remove(BL_PROCFS_NAME);
-	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", BL_PROCFS_NAME);
-	return -ENOMEM;
-} else {
-	BL_Proc_File->read_proc = bl_procfile_read;
-	BL_Proc_File->write_proc = bl_procfile_write;
-	//BL_Proc_File->owner = THIS_MODULE;
-	BL_Proc_File->mode = S_IFREG | S_IRUGO;
-	BL_Proc_File->uid = 0;
-	BL_Proc_File->gid = 0;
-	BL_Proc_File->size = 37;
-	sprintf(procfs_buffer_bl,"%d",BLONOFF);
-	procfs_buffer_size_bl = strlen(procfs_buffer_bl);
-	printk(KERN_INFO "/proc/spica/%s created\n", BL_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_bl_procsfs);
-
-static void __exit cleanup_bl_procsfs(void) {
-spica_remove(BL_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", BL_PROCFS_NAME);
-}
-module_exit(cleanup_bl_procsfs);
-#endif // OTF_BL
-#endif // SPICA_OTF
-
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
@@ -331,10 +261,12 @@ static struct aat2870_ctl_tbl_t aat2870bl_normal_tbl[] = {
 #endif
 };
 
+//#define ORIGINAL_ALC_VALUES
+
 /* Set to ALC mode HW-high gain mode*/
-#ifdef CONFIG_OTF_BL
-static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl0[] = {
-	/* ALC table 0~15 20101218 tunning ver. */
+static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
+/* ALC table 0~15 20101218 tunning ver. */
+#if ORIGINAL_ALC_VALUES
     {0x12,0x19},  /* ALS current setting 5.6mA */
     {0x13,0x20},  /* ALS current setting 7.2mA */
     {0x14,0x21},  /* ALS current setting 7.4mA */
@@ -351,41 +283,8 @@ static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl0[] = {
     {0x1F,0x35},  /* ALS current setting 13.5mA */
     {0x20,0x36},  /* ALS current setting 14.2mA */
     {0x21,0x37},  /* ALS current setting 14.6mA */
-    {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k, GAIN=low, GM=man gain, ALS_EN=on */
-    {0x0F,0x01},  /* SBIAS=3.0V, SBIAS=on */
-    {0x10,0x90},  /* pwm inactive, auto polling, 1sec, +0% */
-    {0x00,0xFF},  /* Channel Enable : ALL */
-    {0xFF,0xFE}   /* end or command */
-};
-static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl1[] = {
-	/* ALC table 0~15 20101218 tunning ver. */
-	/* Fajarep values from swiftextreme kernel */
-    {0x12,0x0A},  /* ALS current setting 2.64mA  - 0 lux */
-    {0x13,0x0C},  /* ALS current setting 3.08mA  - 50 lux*/
-    {0x14,0x0D},  /* ALS current setting 3.3mA   - 100 lux */
-    {0x15,0x08},  /* ALS current setting 3.52mA  - 130 lux */
-    {0x16,0x09},  /* ALS current setting 3.74mA  - 160 lux */
-    {0x17,0x10},  /* ALS current setting 3.96mA  - 200 lux */
-    {0x18,0x11},  /* ALS current setting 4.18mA  - 250 lux */
-    {0x19,0x12},  /* ALS current setting 4.62mA  - 300 lux */
-    {0x1A,0x14},  /* ALS current setting 4.84mA  - 400 lux */
-    {0x1B,0x15},  /* ALS current setting 5.06mA  - 500 lux */
-    {0x1C,0x16},  /* ALS current setting 5.28mA  - 650 lux */
-    {0x1D,0x17},  /* ALS current setting 5.5mA   - 800 lux */
-    {0x1E,0x18},  /* ALS current setting 5.72mA  - 1000 lux */
-    {0x1F,0x1E},  /* ALS current setting 7.04mA  - 1400 lux */
-    {0x20,0x23},  /* ALS current setting 8.14mA  - 2000 lux */
-    {0x21,0x35},  /* ALS current setting 12.38mA - 3000 lux */
-    {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k, GAIN=low, GM=man gain, ALS_EN=on */
-    {0x0F,0x01},  /* SBIAS=3.0V, SBIAS=on */
-    {0x10,0x90},  /* pwm inactive, auto polling, 1sec, +0% */
-    {0x00,0xFF},  /* Channel Enable : ALL */
-    {0xFF,0xFE}   /* end or command */
-};
 #else
-static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
-	/* ALC table 0~15 20101218 tunning ver. */
-	/* Fajarep values from swiftextreme kernel */
+	//Fajarep values from swiftextreme kernel
     {0x12,0x0A},  /* ALS current setting 2.64mA  - 0 lux */
     {0x13,0x0C},  /* ALS current setting 3.08mA  - 50 lux*/
     {0x14,0x0D},  /* ALS current setting 3.3mA   - 100 lux */
@@ -402,13 +301,15 @@ static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
     {0x1F,0x1E},  /* ALS current setting 7.04mA  - 1400 lux */
     {0x20,0x23},  /* ALS current setting 8.14mA  - 2000 lux */
     {0x21,0x35},  /* ALS current setting 12.38mA - 3000 lux */
-    {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k, GAIN=low, GM=man gain, ALS_EN=on */
+#endif
+
+    {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k,
+                                   * GAIN=low, GM=man gain, ALS_EN=on */
     {0x0F,0x01},  /* SBIAS=3.0V, SBIAS=on */
     {0x10,0x90},  /* pwm inactive, auto polling, 1sec, +0% */
     {0x00,0xFF},  /* Channel Enable : ALL */
     {0xFF,0xFE}   /* end or command */
 };
-#endif
 
 static struct aat2870_lux_tbl_t  aat2870_lux_tbl[] = {
 
@@ -1285,16 +1186,7 @@ static int star_aat2870_probe(struct platform_device *pdev)
 	drvdata = drv;
 	
 	drv->cmds.normal = aat2870bl_normal_tbl;
-
-#ifdef CONFIG_OTF_BL
-if (BLONOFF == 0)
-	drv->cmds.alc = aat2870bl_alc_tbl0;
-else if (BLONOFF == 1)
-	drv->cmds.alc = aat2870bl_alc_tbl1;
-#else
 	drv->cmds.alc = aat2870bl_alc_tbl;
-#endif
-
 	drv->cmds.sleep = aat2870bl_sleep_tbl;
 
 	drv->op_mode = AAT2870_OP_MODE_NORMAL;

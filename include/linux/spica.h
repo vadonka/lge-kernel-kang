@@ -74,9 +74,7 @@ extern unsigned int NVRM_AP20_DDR2_MIN_KHZ;
 #ifdef CONFIG_OTF_LPDDR2
 extern unsigned int NVRM_AP20_LPDDR2_MIN_KHZ;
 #endif
-#ifdef CONFIG_OTF_BL
-extern unsigned int BLONOFF;
-#endif
+
 //static unsigned STAR_RAM_CONSOLE_SIZE;
 //static unsigned STAR_RAM_CONSOLE_BASE;
 //extern STAR_RAM_CONSOLE_BASE;

@@ -92,10 +92,6 @@ config OTF_PSNIT
 	bool "OTF Extra: PowerSave & Nitro feature"
 	default y
 
-config OTF_BL
-	bool "OTF Extra: Backlight switch normal/powersave"
-	default y
-
 endif # SPICA_OTF
 
 config STAR_PMIC
