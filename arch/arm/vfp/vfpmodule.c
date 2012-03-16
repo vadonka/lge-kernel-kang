@@ -266,7 +266,14 @@ void VFP_bounce(u32 trigger, u32 fpexc, struct pt_regs *regs)
 	u32 fpscr, orig_fpscr, fpsid, exceptions;
 
 	pr_debug("VFP: bounce: trigger %08x fpexc %08x\n", trigger, fpexc);
-
+#ifdef CONFIG_ARM_THUMB
+if (regs->ARM_cpsr & PSR_T_BIT)
+regs->ARM_pc += 2;
+#endif
+#ifdef CONFIG_ARM_THUMB
+	if (regs->ARM_cpsr & PSR_T_BIT)
+		regs->ARM_pc += 2;
+#endif
 	/*
 	 * At this point, FPEXC can have the following configuration:
 	 *
