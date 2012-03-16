@@ -62,6 +62,7 @@ export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
 export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
 export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
+export litebatt=`grep -c "^CONFIG_USE_LITE_BATTERY" $kh/.config`
 export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
 if [ "$nooc" == "0" ]; then
@@ -75,11 +76,19 @@ else
 fi
 
 if [ "$dsbatt" == "0" ]; then
-	if [ "$otf" == "0" ]; then
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
+	if [ "$litebatt" == "0" ]; then
+		if [ "$otf" == "0" ]; then
+			export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
+			sed -i "s/$cver/$nver/g" $kh/.config
+		else
+			export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
+			sed -i "s/$cver/$nver/g" $kh/.config
+		fi
+	elif [ "$otf" == "0" ]; then
+		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_LITE"'`
 		sed -i "s/$cver/$nver/g" $kh/.config
 	else
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
+		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_LITE_OTF"'`
 		sed -i "s/$cver/$nver/g" $kh/.config
 	fi
 elif [ "$otf" == "0" ]; then
