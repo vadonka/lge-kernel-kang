@@ -150,8 +150,10 @@ static int tegra_cpufreq_dfsd(void *arg)
 	last_rate = rate;
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
-	set_freezable_with_signal();
-
+	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
+	//set_freezable_with_signal();
+	  set_freezable();
+	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 
 		req = NvRmPrivPmThread();
