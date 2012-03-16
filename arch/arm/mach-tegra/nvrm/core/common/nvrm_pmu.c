@@ -490,12 +490,12 @@ NvBool NvRmPmuGetBatteryData(
     if (NvOdmPmuGetBatteryData(
         s_Pmu.hOdmPmu, (NvOdmPmuBatteryInstance)batteryInst, &BatteryData))
     {
-        pData->batteryAverageCurrent = BatteryData.batteryAverageCurrent;
-        pData->batteryAverageInterval = BatteryData.batteryAverageInterval;
-        pData->batteryCurrent = BatteryData.batteryCurrent;
-        pData->batteryLifePercent = BatteryData.batteryLifePercent;
-        pData->batteryLifeTime = BatteryData.batteryLifeTime;
-        pData->batteryMahConsumed = BatteryData.batteryMahConsumed;
+        //pData->batteryAverageCurrent = BatteryData.batteryAverageCurrent;
+        //pData->batteryAverageInterval = BatteryData.batteryAverageInterval;
+        //pData->batteryCurrent = BatteryData.batteryCurrent;
+        //pData->batteryLifePercent = BatteryData.batteryLifePercent;
+        //pData->batteryLifeTime = BatteryData.batteryLifeTime;
+        //pData->batteryMahConsumed = BatteryData.batteryMahConsumed;
         pData->batteryTemperature = BatteryData.batteryTemperature;
         pData->batteryVoltage = BatteryData.batteryVoltage;
         NvOsMutexUnlock(s_Pmu.hMutex);
