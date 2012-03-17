@@ -74,7 +74,7 @@ config OTF_SCMV
 
 config OTF_AP20LC
 	bool "OTF AP20 Low Corners voltages"
-	default n
+	default y
 
 config OTF_CPU1
 	bool "OTF CPU Second Core activation"
@@ -90,6 +90,10 @@ config OTF_MAXSCOFF
 
 config OTF_PSNIT
 	bool "OTF Extra: PowerSave & Nitro feature"
+	default y
+
+config OTF_BATTPROT
+	bool "OTF Extra: Battery Overheat Protection"
 	default y
 
 endif # SPICA_OTF

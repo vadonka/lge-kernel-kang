@@ -28,8 +28,6 @@
 #include <linux/cpu.h>
 #include <linux/completion.h>
 #include <linux/mutex.h>
-#include <linux/earlysuspend.h>
-#include <linux/sched.h>
 
 #define dprintk(msg...) cpufreq_debug_printk(CPUFREQ_DEBUG_CORE, \
 						"cpufreq-core", msg)
@@ -47,14 +45,13 @@
 int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
 extern NvRmCpuShmoo fake_CpuShmoo;  // Stored faked CpuShmoo values
 extern NvRmDfs *fakeShmoo_Dfs;
-extern NvU32 *FakeShmooVoltages;
 #endif // CONFIG_FAKE_SHMOO
 
 //Spica OTF Start
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-
 #ifdef CONFIG_OTF_MAXSCOFF
+#include <linux/spica.h>
+#include <linux/earlysuspend.h>
+#include <linux/sched.h>
 #define MAXSM_PROCFS_NAME "screenoff_maxcpufreq"
 #define MAXSM_PROCFS_SIZE 7
 static struct proc_dir_entry *MAXSM_Proc_File;
@@ -119,7 +116,6 @@ printk(KERN_INFO "/proc/spica/%s removed\n", MAXSM_PROCFS_NAME);
 }
 module_exit(cleanup_maxsm_procsfs);
 #endif // OTF_MAXSCOFF
-#endif // SPICA_OTF
 
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low

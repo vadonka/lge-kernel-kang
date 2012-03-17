@@ -191,10 +191,11 @@ static struct attribute_group stats_attr_group = {
 static int freq_table_get_index(struct cpufreq_stats *stat, unsigned int freq)
 {
 	int index;
-	for (index = 0; index < stat->state_num; index++)
-	 if (stat->freq_table[index] > freq)
-	  break;
-	return index - 1; /* below lowest freq in table: return -1 */
+	for (index = 0; index < stat->max_state; index++) {
+		if (stat->freq_table[index] == freq)
+			return index;
+	}
+	return -1;
 }
 
 static void cpufreq_stats_free_table(unsigned int cpu)
