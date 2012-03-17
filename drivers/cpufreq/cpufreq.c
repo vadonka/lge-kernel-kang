@@ -55,17 +55,16 @@ extern NvU32 *FakeShmooVoltages;
 #include <linux/spica.h>
 
 #ifdef CONFIG_OTF_MAXSCOFF
-#define MAXSPW_PROCFS_NAME "screenoff_maxcpufreq"
-#define MAXSPW_PROCFS_SIZE 7
-
-static struct proc_dir_entry *MAXSOC_Proc_File;
-static char procfs_buffer_sm[MAXSPW_PROCFS_SIZE];
+#define MAXSM_PROCFS_NAME "screenoff_maxcpufreq"
+#define MAXSM_PROCFS_SIZE 7
+static struct proc_dir_entry *MAXSM_Proc_File;
+static char procfs_buffer_sm[MAXSM_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_sm = 0;
-int min_freq_sc = 216000; // Min Screen Off Freq
-int max_freq_sc = 816000; // Max Screen Off Freq
-int maxsoc_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+int min_smfreq = 216000; // Min Screen Off Freq
+int max_smfreq = 816000; // Max Screen Off Freq
+int maxsm_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
-printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSPW_PROCFS_NAME);
+printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSM_PROCFS_NAME);
 if (offset > 0) {
     ret = 0;
 } else {
@@ -75,15 +74,15 @@ if (offset > 0) {
 return ret;
 }
 
-int maxsoc_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
+int maxsm_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
 int temp_sm;
 temp_sm = 0;
 if ( sscanf(buffer,"%d",&temp_sm) < 1 ) return procfs_buffer_size_sm;
-if ( temp_sm < min_freq_sc || temp_sm > max_freq_sc ) return procfs_buffer_size_sm;
+if ( temp_sm < min_smfreq || temp_sm > max_smfreq ) return procfs_buffer_size_sm;
 
 procfs_buffer_size_sm = count;
-if (procfs_buffer_size_sm > MAXSPW_PROCFS_SIZE ) {
-    procfs_buffer_size_sm = MAXSPW_PROCFS_SIZE;
+if (procfs_buffer_size_sm > MAXSM_PROCFS_SIZE ) {
+    procfs_buffer_size_sm = MAXSM_PROCFS_SIZE;
 }
 if ( copy_from_user(procfs_buffer_sm, buffer, procfs_buffer_size_sm) ) {
 printk(KERN_INFO "buffer_size error\n");
@@ -93,31 +92,32 @@ sscanf(procfs_buffer_sm,"%u",&SCREENOFFFREQ);
 return procfs_buffer_size_sm;
 }
 
-static int __init init_maxsoc_procsfs(void) {
-MAXSOC_Proc_File = spica_add(MAXSPW_PROCFS_NAME);
-if (MAXSOC_Proc_File == NULL) {
-    spica_remove(MAXSPW_PROCFS_NAME);
-    printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSPW_PROCFS_NAME);
+static int __init init_maxsm_procsfs(void) {
+MAXSM_Proc_File = spica_add(MAXSM_PROCFS_NAME);
+if (MAXSM_Proc_File == NULL) {
+    spica_remove(MAXSM_PROCFS_NAME);
+    printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSM_PROCFS_NAME);
     return -ENOMEM;
 } else {
-    MAXSOC_Proc_File->read_proc = maxsoc_procfile_read;
-    MAXSOC_Proc_File->write_proc = maxsoc_procfile_write;
-    MAXSOC_Proc_File->mode = S_IFREG | S_IRUGO;
-    MAXSOC_Proc_File->uid = 0;
-    MAXSOC_Proc_File->gid = 0;
-    MAXSOC_Proc_File->size = 37;
+    MAXSM_Proc_File->read_proc = maxsm_procfile_read;
+    MAXSM_Proc_File->write_proc = maxsm_procfile_write;
+    MAXSM_Proc_File->mode = S_IFREG | S_IRUGO;
+    MAXSM_Proc_File->uid = 0;
+    MAXSM_Proc_File->gid = 0;
+    MAXSM_Proc_File->size = 37;
     sprintf(procfs_buffer_sm,"%d",SCREENOFFFREQ);
     procfs_buffer_size_sm = strlen(procfs_buffer_sm);
-    printk(KERN_INFO "/proc/spica/%s created\n", MAXSPW_PROCFS_NAME);
+    printk(KERN_INFO "/proc/spica/%s created\n", MAXSM_PROCFS_NAME);
 }
 return 0;
 }
-module_init(init_maxsoc_procsfs);
-static void __exit cleanup_maxsoc_procsfs(void) {
-spica_remove(MAXSPW_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", MAXSPW_PROCFS_NAME);
+module_init(init_maxsm_procsfs);
+
+static void __exit cleanup_maxsm_procsfs(void) {
+spica_remove(MAXSM_PROCFS_NAME);
+printk(KERN_INFO "/proc/spica/%s removed\n", MAXSM_PROCFS_NAME);
 }
-module_exit(cleanup_maxsoc_procsfs);
+module_exit(cleanup_maxsm_procsfs);
 #endif // OTF_MAXSCOFF
 #endif // SPICA_OTF
 
@@ -2234,15 +2234,29 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			continue;
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
+#ifdef CONFIG_OTF_AVP
 			oldavpfreq = AVPFREQ;
+#endif
+#ifdef CONFIG_OTF_CPU1
 			oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
 			oldpadms = NVRM_CPU1_OFF_PENDING_MS;
+#endif
+#ifdef CONFIG_OTF_GPU
 			oldgpufreq = GPUFREQ;
+#endif
+#ifdef CONFIG_OTF_VDE
 			oldvdefreq = VDEFREQ;
+#endif
+#ifdef CONFIG_OTF_AP20LC
 			oldcoremv= NVRM_AP20_LOW_CORE_MV;
 			oldlowcpu = NVRM_AP20_LOW_CPU_MV;
+#endif
+#ifdef CONFIG_OTF_DDR2MIN
 			oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
+#endif
+#ifdef CONFIG_OTF_LPDDR2
 			oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
+#endif
 			oldmaxclock = cpu_policy->max;
 			oldminclock = cpu_policy->min;
 			new_policy.max = SCREENOFFFREQ;

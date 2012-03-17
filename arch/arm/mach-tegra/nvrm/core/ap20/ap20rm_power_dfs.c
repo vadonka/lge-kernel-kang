@@ -720,16 +720,16 @@ NvRmPrivAp20GetPmRequest(
         NvRmFreqKHz MaxKHz =
             NvRmPrivGetSocClockLimits(NvRmModuleID_Cpu)->MaxKHz;
 
-//#ifdef CONFIG_OTF_CPU1
-//        s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ;
-//        s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ;
-//#else
+#ifdef CONFIG_OTF_CPU1
+        s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ;
+        s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ;
+#else
         s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ ?
                          NVRM_CPU1_ON_MIN_KHZ : (MaxKHz / 3);
         s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ ?
                           NVRM_CPU1_OFF_MAX_KHZ : (2 * MaxKHz / 3);
         NV_ASSERT(s_Cpu1OnMinKHz < s_Cpu1OffMaxKHz);
-//#endif // OTF_CPU1
+#endif // OTF_CPU1
 
     }
 
