@@ -121,14 +121,15 @@ for m in `find $kh -name '*.ko'`; do
     cp $m $ch/$cdir/system/lib/modules
 done
 
-cp $cm7b/boot.img $ch/$cdir/tmp
-abootimg -u $ch/$cdir/tmp/boot.img -k $kh/arch/arm/boot/zImage
+cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
+#cp $cm7b/boot.img $ch/$cdir/tmp
+#abootimg -u $ch/$cdir/tmp/boot.img -k $kh/arch/arm/boot/zImage
 #abootimg -u $ch/$cdir/tmp/boot.img -c "cmdline = mem=`echo $((383+$rh))'M@0M'` nvmem=`echo $((128-$rh))'M@'$((384+$rh))'M'` loglevel=0 muic_state=1 \
 #lpj=9994240 CRC=3010002a8e458d7 vmalloc=256M brdrev=1.0 video=tegrafb console=ttyS0,115200n8 \
 #usbcore.old_scheme_first=1 tegraboot=sdmmc tegrapart=recovery:35e00:2800:800,linux:34700:1000:800,\
 #mbr:400:200:800,system:600:2bc00:800,cache:2c200:8000:800,misc:34200:400:800,\
 #userdata:38700:c0000:800 androidboot.hardware=p990"
-abootimg -i $ch/$cdir/tmp/boot.img > $ch/$cdir/tmp/bootimg.info
+#abootimg -i $ch/$cdir/tmp/boot.img > $ch/$cdir/tmp/bootimg.info
 cd $ch/$cdir && zip -rq9 $ch/$cdir.zip .
 cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
 
