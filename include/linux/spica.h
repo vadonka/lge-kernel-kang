@@ -39,7 +39,6 @@ extern unsigned int NITROONOFF;
 extern unsigned int NVRM_AP20_LOW_CORE_MV;
 extern unsigned int NVRM_AP20_LOW_CPU_MV;
 #endif
-
 //extern unsigned int VM_MAX_READAHEAD;
 //extern unsigned int swappiness;
 //extern unsigned int vm_swappiness;

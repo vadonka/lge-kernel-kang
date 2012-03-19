@@ -25,7 +25,6 @@ unsigned int NITROONOFF = 0;
 unsigned int NVRM_AP20_LOW_CORE_MV = 925;
 unsigned int NVRM_AP20_LOW_CPU_MV = 770;
 #endif
-
 //unsigned int VM_MAX_READAHEAD = 512;
 //unsigned int swappiness = 10;
 //unsigned int vm_swappiness = 10;

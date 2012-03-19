@@ -17,6 +17,9 @@ export kinstsrc=/home/android/android/kernel-installer/source
 # Maximum thread number, multiplier
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 export mthm=1
+# Compiler
+#export cc=arm-linux-gnueabi-
+export cc=/home/android/android/android-toolchain-eabi-4.5/bin/arm-eabi-
 ######################################################
 
 # Check executables
@@ -100,7 +103,6 @@ else
 fi
 
 export starttime=`date +%s`
-export cc=arm-linux-gnueabi-
 export USE_CCACHE=1
 export CCACHE_DIR=~/android/ccache
 make clean -j $(($mthd*$mthm))

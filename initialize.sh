@@ -1,6 +1,7 @@
 #!/bin/sh
 
-export CCOMPILER=arm-linux-gnueabi-
+#export cc=arm-linux-gnueabi-
+export cc=/home/android/android/android-toolchain-eabi-4.5/bin/arm-eabi-
 export USE_CCACHE=1
 export CCACHE_DIR=~/android/ccache
 
@@ -15,7 +16,7 @@ else
 fi
 
 make clean
-make CROSS_COMPILE=$CCOMPILER clean
-make ARCH=arm CROSS_COMPILE=$CCOMPILER clean
-make ARCH=arm CROSS_COMPILE=$CCOMPILER mrproper
-make ARCH=arm CROSS_COMPILE=$CCOMPILER $DEFCONFIG
+make CROSS_COMPILE=$cc clean
+make ARCH=arm CROSS_COMPILE=$cc clean
+make ARCH=arm CROSS_COMPILE=$cc mrproper
+make ARCH=arm CROSS_COMPILE=$cc $DEFCONFIG
