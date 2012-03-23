@@ -22,7 +22,14 @@ config STAR_BATTERY_CHARGER
 	depends on MACH_STAR
 	help
 	 Support for Battery & Charger Driver.
-	
+
+config BATTSCALE
+	bool "The Battery voltage measurement multiplied by 1000"
+	default y
+	depends on MACH_STAR
+	help
+	 Measuring the battery voltage multiplied by 1000.
+
 config STAR_MUIC
 	bool "Star Muic MAXIM Driver"
 	default y

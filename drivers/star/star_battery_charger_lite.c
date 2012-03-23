@@ -1438,10 +1438,17 @@ static int tegra_battery_get_property(struct power_supply *psy,
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_HEALTH(%d)", val->intval);
 			break;
 
+#ifdef CONFIG_BATTSCALE
+		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+			val->intval = batt_dev->batt_vol * 1000;
+			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
+			break;
+#else
 		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 			val->intval = batt_dev->batt_vol;
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
 			break;
+#endif
 
 		case POWER_SUPPLY_PROP_CAPACITY:
 			if (batt_dev->BatteryGauge_on == NV_TRUE)

@@ -16,6 +16,12 @@ NAME = Man-Eating Seals of Antiquity
 # o  print "Entering directory ...";
 MAKEFLAGS += -rR --no-print-directory
 
+# Avoid funny character set dependencies
+unexport LC_ALL
+LC_COLLATE=C
+LC_NUMERIC=C
+export LC_COLLATE LC_NUMERIC
+
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
 #
@@ -109,7 +115,7 @@ ifneq ($(KBUILD_OUTPUT),)
 saved-output := $(KBUILD_OUTPUT)
 KBUILD_OUTPUT := $(shell cd $(KBUILD_OUTPUT) && /bin/pwd)
 $(if $(KBUILD_OUTPUT),, \
-     $(error output directory "$(saved-output)" does not exist))
+	$(error output directory "$(saved-output)" does not exist))
 
 PHONY += $(MAKECMDGOALS) sub-make
 
@@ -218,8 +224,8 @@ KCONFIG_CONFIG	?= .config
 
 # SHELL used by kbuild
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
-	  else if [ -x /bin/bash ]; then echo /bin/bash; \
-	  else echo sh; fi ; fi)
+		else if [ -x /bin/bash ]; then echo /bin/bash; \
+		else echo sh; fi ; fi)
 
 HOSTCC       = ccache gcc
 HOSTCXX      = ccache g++
@@ -351,7 +357,12 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks
+		   -fno-delete-null-pointer-checks \
+		   -march=armv7-a \
+		   -mtune=cortex-a8 \
+		   -mfpu=neon \
+		   -funsafe-math-optimizations \
+		   -mno-unaligned-access
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
