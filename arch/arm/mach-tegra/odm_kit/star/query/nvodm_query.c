@@ -1464,7 +1464,14 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 NvU32 NvOdmQueryCarveoutSize(void)
 {
     //20100802  increase carveout memory
+#if 0
     return (CONFIG_GPU_MEM_CARVEOUT_SZ*ONE_MB);
+#else
+    extern unsigned int nvmap_carveout_size;
+    /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
+    pr_info("%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
+    return nvmap_carveout_size;
+#endif
 }
 
 NvU32 NvOdmQuerySecureRegionSize(void)
