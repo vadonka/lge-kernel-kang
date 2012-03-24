@@ -49,6 +49,7 @@
 #include "tegra_devkit_custopt.h"
 #include "nvodm_keylist_reserved.h"
 #include "nvrm_drf.h"
+#include <linux/kernel.h>
 
 #define NVODM_ENABLE_EMC_DVFS (1)
 
@@ -1449,7 +1450,7 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
         // maximum size of SDRAM will also change.
         case NvOdmMemoryType_Sdram:
             return 0x20000000;
-       
+
         case NvOdmMemoryType_Nor:
         case NvOdmMemoryType_Nand:
         case NvOdmMemoryType_I2CEeprom:
@@ -1469,7 +1470,7 @@ NvU32 NvOdmQueryCarveoutSize(void)
 #else
     extern unsigned int nvmap_carveout_size;
     /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
-    pr_info("%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
+    printk(KERN_INFO "%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
     return nvmap_carveout_size;
 #endif
 }
