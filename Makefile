@@ -328,14 +328,27 @@ DEPMOD		= /sbin/depmod
 KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
+GCCVERSION	= $(shell gcc --version | grep ^gcc | sed 's/^.* //g')
+GCCVERSION45	:= $(shell expr 4.5.0 \<= `$(CC) -dumpversion`)
+GCCVERSION46	:= $(shell expr 4.6.0 \<= `$(CC) -dumpversion`)
+GCCVERSION47	:= $(shell expr 4.7.0 \<= `$(CC) -dumpversion`)
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
+
+ifeq "$(GCCVERSION46)" "1"
 MODFLAGS	= -DMODULE -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-math-optimizations -mno-unaligned-access
+else
+MODFLAGS	= -DMODULE -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops
+endif
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
+ifeq "$(GCCVERSION46)" "1"
 CFLAGS_KERNEL	= -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-math-optimizations -mno-unaligned-access
+else
+CFLAGS_KERNEL	= -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops
+endif
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
@@ -353,16 +366,11 @@ LINUXINCLUDE    := -Iinclude \
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 
-KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-		   -fno-strict-aliasing -fno-common \
-		   -Werror-implicit-function-declaration \
-		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks \
-		   -march=armv7-a \
-		   -mfpu=vfpv3-d16 \
-		   -mtune=cortex-a9 \
-		   -funsafe-math-optimizations \
-		   -mno-unaligned-access
+ifeq "$(GCCVERSION46)" "1"
+KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -march=armv7-a -mfpu=vfpv3-d16 -mtune=cortex-a9 -funsafe-math-optimizations -mno-unaligned-access
+else
+KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -fno-delete-null-pointer-checks -march=armv7-a -mfpu=vfpv3-d16 -mtune=cortex-a9
+endif
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
