@@ -294,10 +294,10 @@ static void type_det_work(struct work_struct *work)
 #endif
 
 	#if HOOK_USE_ADC
-		hook_value = headset_get_hook_adc_value();	
+		hook_value = headset_get_hook_adc_value();
 
 		if(hook_value > 350) //20101127  detect adc 1200==>350[LGE_LAB1]
-			headset_type = STAR_HEADSET;	
+			headset_type = STAR_HEADSET;
 		else
 			headset_type = STAR_HEADPHONE;
 	#else
@@ -314,7 +314,7 @@ static void type_det_work(struct work_struct *work)
 	}
 	else if(headset_status == 0){
 		headset_type = STAR_NONE;
-        hook_status = HOOK_RELEASED; 
+        hook_status = HOOK_RELEASED;
 		input_report_key(headset_sw_data->ip_dev, KEY_HOOK, 0);
 		input_sync(headset_sw_data->ip_dev);
     }
@@ -350,7 +350,7 @@ static void hook_det_work(struct work_struct *work)
     if (headset_off) return;
     if(headset_type != STAR_HEADSET)
         return;
-	
+
     if(is_hook_test == false){
         hok_adc_value = 20;
     }
@@ -358,7 +358,6 @@ static void hook_det_work(struct work_struct *work)
         lprintk(D_AUDIO, KERN_ERR "##(hook_det)## IS FACTORYMODE\n");
         hok_adc_value = 65;
     }
-    
 	if(hook_status == HOOK_RELEASED){
 		#if HOOK_USE_ADC
         hookkey_gpio_status = headset_get_hook_adc_average(5);
@@ -399,7 +398,6 @@ static void hook_det_work(struct work_struct *work)
 		}
 		#endif
 	}
-    
 }
 
 static void headset_int_handler(void *dev_id)
@@ -415,12 +413,12 @@ static void headset_int_handler(void *dev_id)
 	headset_status = headset_gpio_status;
 
 	if(headset_status == 0)
-   	{
-        schedule_work(&headset_sw_data->delayed_work);
+	{
+        schedule_work(&headset_sw_data->work);
 		  #if defined(STAR_COUNTRY_KR) && !defined(CONFIG_MACH_STAR_SKT_REV_A)  
 			headset_Mic_Bias(0);
 		  #endif
-   	}
+	}
 	else
 	{
 	    schedule_delayed_work(&headset_sw_data->delayed_work,	msecs_to_jiffies(type_detection_time));	
@@ -919,5 +917,3 @@ module_exit(headsetdet_exit);
 MODULE_AUTHOR("LG Electronics");
 MODULE_DESCRIPTION("Star Headset Detection Driver");
 MODULE_LICENSE("GPL");
-
-
