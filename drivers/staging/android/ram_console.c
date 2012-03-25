@@ -26,83 +26,6 @@
 #include <linux/rslib.h>
 #endif
 
-//Spica OTF Start
-#ifdef CONFIG_SPICA_OTF
-
-#include <linux/spica.h>
-static struct proc_dir_entry *spica_dir;
-
-#ifdef CONFIG_OTF_GPURAM
-#define GPURAM_PROCFS_NAME "gpuramsize"
-#define GPURAM_PROCFS_SIZE 8
-static struct proc_dir_entry *GPURAM_Proc_File;
-static char procfs_buffer_gpuram[GPURAM_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_gpuram = 0;
-
-int gpuram_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "gpuram_procfile_read (/proc/spica/%s) called\n", GPURAM_PROCFS_NAME);
-if (offset > 0) {
-	ret = 0;
-} else {
-	memcpy(buffer, procfs_buffer_gpuram, procfs_buffer_size_gpuram);
-	ret = procfs_buffer_size_gpuram;
-}
-return ret;
-}
-
-int gpuram_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_gpuram;
-temp_gpuram = 0;
-/* CAUTION: Don't change below 2 lines */
-/* [Start] */
-if ( sscanf(buffer,"%d",&temp_gpuram) < 1 ) return procfs_buffer_size_gpuram;
-if ( temp_gpuram != 128 && temp_gpuram != 96 && temp_gpuram != 80 && temp_gpuram != 64 && temp_gpuram != 48 && temp_gpuram != 32 ) return procfs_buffer_size_gpuram;
-/* [End] */
-	procfs_buffer_size_gpuram = count;
-if (procfs_buffer_size_gpuram > GPURAM_PROCFS_SIZE ) {
-	procfs_buffer_size_gpuram = GPURAM_PROCFS_SIZE;
-}
-if ( copy_from_user(procfs_buffer_gpuram, buffer, procfs_buffer_size_gpuram) ) {
-	printk(KERN_INFO "buffer_size error\n");
-	return -EFAULT;
-}
-sscanf(procfs_buffer_gpuram,"%u",&GPURAMSIZE);
-return procfs_buffer_size_gpuram;
-}
-
-static int __init init_gpuramfb_procsfs(void) {
-GPURAM_Proc_File = spica_add(GPURAM_PROCFS_NAME);
-if (GPURAM_Proc_File == NULL) {
-	spica_remove(GPURAM_PROCFS_NAME);
-	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPURAM_PROCFS_NAME);
-	return -ENOMEM;
-} else {
-	GPURAM_Proc_File->read_proc = gpuram_procfile_read;
-	GPURAM_Proc_File->write_proc = gpuram_procfile_write;
-	GPURAM_Proc_File->mode = S_IFREG | S_IRUGO;
-	GPURAM_Proc_File->uid = 0;
-	GPURAM_Proc_File->gid = 0;
-	GPURAM_Proc_File->size = 37;
-	sprintf(procfs_buffer_gpuram,"%d",GPURAMSIZE);
-	procfs_buffer_size_gpuram = strlen(procfs_buffer_gpuram);
-	printk(KERN_INFO "/proc/spica/%s created\n", GPURAM_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_gpuramfb_procsfs);
-static void __exit cleanup_gpuramfb_procsfs(void) {
-spica_remove(GPURAM_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", GPURAM_PROCFS_NAME);
-}
-module_exit(cleanup_gpuramfb_procsfs);
-#endif // OTF_GPURAM
-#endif // SPICA_OTF
-
-//20101110, , Function for Warm-boot [START]
-void *reserved_buffer;
-//20101110, , Function for Warm-boot [END]
-
 struct ram_console_buffer {
 	uint32_t    sig;
 	uint32_t    start;
@@ -400,11 +323,6 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 	size_t buffer_size;
 	void *buffer;
 
-//20101110, , Function for Warm-boot [START]
-        size_t reserved_start;
-        size_t reserved_size;
-//20101110, , Function for Warm-boot [END]
-
 	if (res == NULL || pdev->num_resources != 1 ||
 	    !(res->flags & IORESOURCE_MEM)) {
 		printk(KERN_ERR "ram_console: invalid resource, %p %d flags "
@@ -421,72 +339,8 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-#if 1
-       //fix it
-#if defined (CONFIG_STAR_HIDDEN_RESET)
-       #define RAM_RESERVED_SIZE 3*512*1024
-#else
-       #define RAM_RESERVED_SIZE 100*1024
-#endif
-       //RAMHACK reboot fix ported from the CM9 ICS kernel
-       //reserved_start = start+ buffer_size;
-#ifdef CONFIG_OTF_GPURAM
-       reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
-#else
-       reserved_start = start+ buffer_size - ((128-CONFIG_GPU_MEM_CARVEOUT_SZ)*SZ_1M);
-#endif
-       reserved_buffer = ioremap(reserved_start, RAM_RESERVED_SIZE);
-
-       //memset(reserved_buffer, 0x00, 100*1024);
-       printk ("ram console : ram_console virtual addr = 0x%x \n", buffer);
-       printk ("ram console : reserved_buffer virtual = 0x%x \n", reserved_buffer);
-       printk ("ram console : reserved_buffer physical= 0x%x \n", reserved_start);
-#endif
-
 	return ram_console_init(buffer, buffer_size, NULL/* allocate */);
 }
-
-/* 
-void *get_reserved_buffer()
-{
-	return reserved_buffer;
-}
-*/
-
-void write_cmd_reserved_buffer(unsigned char *buf, size_t len)
-{
-	memcpy(reserved_buffer, buf, len);
-}
-
-void read_cmd_reserved_buffer(unsigned char *buf, size_t len)
-{
-	memcpy(buf, reserved_buffer, len);
-}
-
-EXPORT_SYMBOL_GPL(write_cmd_reserved_buffer);
-EXPORT_SYMBOL_GPL(read_cmd_reserved_buffer);
-#if defined (CONFIG_STAR_HIDDEN_RESET)
-void write_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
-{
-	printk("write_screen_shot_reserved_buffer address =%x + 32\n",reserved_buffer);
-
-
-	copy_from_user(reserved_buffer+32, buf, 800*480*3);
-	//memcpy(reserved_buffer+32, buf, 800*480*3);
-}
-
-void read_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
-{
-
-	copy_to_user(buf ,reserved_buffer+32,800*480*3);
-	//memcpy(buf, reserved_buffer+32, 800*480*3);
-
-}
-EXPORT_SYMBOL_GPL(write_screen_shot_reserved_buffer);
-EXPORT_SYMBOL_GPL(read_screen_shot_reserved_buffer);
-
-#endif
-
 static struct platform_driver ram_console_driver = {
 	.probe = ram_console_driver_probe,
 	.driver		= {
