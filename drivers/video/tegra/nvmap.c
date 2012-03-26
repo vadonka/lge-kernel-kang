@@ -3511,7 +3511,7 @@ fs_initcall(nvmap_dev_init);
  * init sequence, to allow kernel drivers access to nvmap before devfs
  * is initialized */
 #define NR_CARVEOUTS 2
-unsigned int nvmap_carveout_size = 0;
+unsigned int nvmap_carveout_size;
 static unsigned int nvmap_carveout_cmds = 0;
 static unsigned long nvmap_carveout_cmd_base[NR_CARVEOUTS];
 static unsigned long nvmap_carveout_cmd_size[NR_CARVEOUTS];
