@@ -1431,7 +1431,6 @@ const NvOdmGpioWakeupSource *NvOdmQueryGetWakeupSources(NvU32 *pCount)
  */
 NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 {
-    
     switch (MemType)
     {
         // NOTE:
@@ -1462,18 +1461,18 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 }
 
 #define ONE_MB	0x00100000
+#ifdef CONFIG_OTF_GPURAM
+#include <linux/spica.h>
 NvU32 NvOdmQueryCarveoutSize(void)
 {
-    //20100802  increase carveout memory
-#if 0
-    return (CONFIG_GPU_MEM_CARVEOUT_SZ*ONE_MB);
-#else
-    extern unsigned int nvmap_carveout_size;
-    /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
-    printk(KERN_INFO "%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
-    return nvmap_carveout_size;
-#endif
+    return (GPURAMSIZE*ONE_MB);
 }
+#else
+NvU32 NvOdmQueryCarveoutSize(void)
+{
+    return (128*ONE_MB);
+}
+#endif
 
 NvU32 NvOdmQuerySecureRegionSize(void)
 {

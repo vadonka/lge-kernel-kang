@@ -431,14 +431,7 @@ static int ram_console_driver_probe(struct platform_device *pdev)
        //RAMHACK reboot fix ported from the CM9 ICS kernel
        //reserved_start = start+ buffer_size;
 #ifdef CONFIG_OTF_GPURAM
-#if 0
        reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
-#else
-       extern unsigned int nvmap_carveout_size;
-       /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
-       printk(KERN_INFO "%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
-       reserved_start = start+ buffer_size - ((128*SZ_1M)-nvmap_carveout_size);
-#endif
 #else
        reserved_start = start+ buffer_size - ((128-CONFIG_GPU_MEM_CARVEOUT_SZ)*SZ_1M);
 #endif
@@ -448,7 +441,6 @@ static int ram_console_driver_probe(struct platform_device *pdev)
        printk ("ram console : ram_console virtual addr = 0x%x \n", buffer);
        printk ("ram console : reserved_buffer virtual = 0x%x \n", reserved_buffer);
        printk ("ram console : reserved_buffer physical= 0x%x \n", reserved_start);
- 
 #endif
 
 	return ram_console_init(buffer, buffer_size, NULL/* allocate */);
@@ -486,9 +478,9 @@ void write_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
 void read_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
 {
 
-        copy_to_user(buf ,reserved_buffer+32,800*480*3);	
+	copy_to_user(buf ,reserved_buffer+32,800*480*3);
 	//memcpy(buf, reserved_buffer+32, 800*480*3);
-	
+
 }
 EXPORT_SYMBOL_GPL(write_screen_shot_reserved_buffer);
 EXPORT_SYMBOL_GPL(read_screen_shot_reserved_buffer);

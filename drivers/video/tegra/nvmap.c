@@ -3522,7 +3522,6 @@ static int __init nvmap_core_init(void)
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte;
-	//unsigned int i;
 	unsigned int i, sz = 0;
 
 	nvmap_context.compact_kbytes_count = 0;
