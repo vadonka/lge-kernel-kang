@@ -1,4 +1,3 @@
-
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
@@ -7,6 +6,7 @@
 #include <linux/cramfs_fs.h>
 #include <linux/initrd.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 
 #include "do_mounts.h"
 #include "../fs/squashfs/squashfs_fs.h"
