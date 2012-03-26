@@ -23,6 +23,7 @@
 
 #include "mballoc.h"
 #include <linux/debugfs.h>
+#include <linux/slab.h>
 #include <trace/events/ext4.h>
 
 /*
@@ -69,7 +70,7 @@
  *
  * pa_lstart -> the logical start block for this prealloc space
  * pa_pstart -> the physical start block for this prealloc space
- * pa_len    -> lenght for this prealloc space
+ * pa_len    -> length for this prealloc space
  * pa_free   ->  free space available in this prealloc space
  *
  * The inode preallocation space is used looking at the _logical_ start
