@@ -1391,7 +1391,7 @@ sba_coalesce_chunks(struct ioc *ioc, struct device *dev,
 #endif
 
 			/*
-			** Not virtually contiguous.
+			** Not virtually contigous.
 			** Terminate prev chunk.
 			** Start a new chunk.
 			**

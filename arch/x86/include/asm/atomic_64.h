@@ -20,7 +20,7 @@
  */
 static inline int atomic_read(const atomic_t *v)
 {
-	return (*(volatile int *)&(v)->counter);
+	return v->counter;
 }
 
 /**
@@ -200,7 +200,7 @@ static inline int atomic_sub_return(int i, atomic_t *v)
  */
 static inline long atomic64_read(const atomic64_t *v)
 {
-	return (*(volatile int *)&(v)->counter);
+	return v->counter;
 }
 
 /**
