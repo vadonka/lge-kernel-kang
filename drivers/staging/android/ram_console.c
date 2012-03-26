@@ -395,6 +395,7 @@ static int __init ram_console_early_init(void)
 #else
 static int ram_console_driver_probe(struct platform_device *pdev)
 {
+	extern unsigned int nvmap_carveout_size;
 	struct resource *res = pdev->resource;
 	size_t start;
 	size_t buffer_size;
@@ -429,26 +430,16 @@ static int ram_console_driver_probe(struct platform_device *pdev)
        #define RAM_RESERVED_SIZE 100*1024
 #endif
        //RAMHACK reboot fix ported from the CM9 ICS kernel
-       //reserved_start = start+ buffer_size;
-#ifdef CONFIG_OTF_GPURAM
-#if 0
-       reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
-#else
-       extern unsigned int nvmap_carveout_size;
+       //reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
        /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
-       printk(KERN_INFO "%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
-       reserved_start = start+ buffer_size - ((128*SZ_1M)-nvmap_carveout_size);
-#endif
-#else
-       reserved_start = start+ buffer_size - ((128-CONFIG_GPU_MEM_CARVEOUT_SZ)*SZ_1M);
-#endif
+       printk ("%s: console carveout size=%d\n", __func__, nvmap_carveout_size);
+       reserved_start = start+buffer_size-((128*SZ_1M)-nvmap_carveout_size);
        reserved_buffer = ioremap(reserved_start, RAM_RESERVED_SIZE);
 
        //memset(reserved_buffer, 0x00, 100*1024);
        printk ("ram console : ram_console virtual addr = 0x%x \n", buffer);
        printk ("ram console : reserved_buffer virtual = 0x%x \n", reserved_buffer);
        printk ("ram console : reserved_buffer physical= 0x%x \n", reserved_start);
- 
 #endif
 
 	return ram_console_init(buffer, buffer_size, NULL/* allocate */);
