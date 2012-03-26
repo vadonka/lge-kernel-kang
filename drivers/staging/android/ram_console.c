@@ -433,7 +433,7 @@ static int ram_console_driver_probe(struct platform_device *pdev)
        //reserved_start = start+ buffer_size - ((128-GPURAMSIZE)*SZ_1M);
        /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
        printk ("%s: console carveout size=%d\n", __func__, nvmap_carveout_size);
-       reserved_start = start+buffer_size-((128*SZ_1M)-nvmap_carveout_size);
+       reserved_start = start+ buffer_size- ((128*SZ_1M) - nvmap_carveout_size);
        reserved_buffer = ioremap(reserved_start, RAM_RESERVED_SIZE);
 
        //memset(reserved_buffer, 0x00, 100*1024);
