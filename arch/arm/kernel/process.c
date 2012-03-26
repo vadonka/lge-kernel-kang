@@ -83,41 +83,8 @@ static int __init hlt_setup(char *__unused)
 __setup("nohlt", nohlt_setup);
 __setup("hlt", hlt_setup);
 
-extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
-
 void arm_machine_restart(char mode, const char *cmd)
 {
-	/*
-	 * Clean and disable cache, and turn off interrupts
-	 */
-
-#if defined (CONFIG_MACH_STAR)
-	unsigned char tmpbuf[2];
-        if (cmd)
-        {
-         strncpy(tmpbuf, cmd, 1);
-        }
-        else
-        {
-          tmpbuf[0] = 'w';
-        }
-
-	switch (tmpbuf[0])
-	{
-		case 'w':
-		break;
-#if defined (CONFIG_STAR_HIDDEN_RESET)
-		case 'h':
-		break;
-#endif
-		case 'p':
-		break;
-		default:
-		tmpbuf[0] ='w';
-		break;
-	}
-	write_cmd_reserved_buffer(tmpbuf,1);
-#endif
 
 //20110124, , fix lockup during reset [START]
 #if defined(CONFIG_MACH_STAR)
