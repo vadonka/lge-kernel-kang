@@ -13,6 +13,14 @@ extra-y     += init_task.o
 CPPFLAGS_vmlinux.lds := -Usparc -m$(BITS)
 extra-y              += vmlinux.lds
 
+ifdef CONFIG_FUNCTION_TRACER
+# Do not profile debug and lowlevel utilities
+CFLAGS_REMOVE_ftrace.o := -pg
+CFLAGS_REMOVE_time_$(BITS).o := -pg
+CFLAGS_REMOVE_perf_event.o := -pg
+CFLAGS_REMOVE_pcr.o := -pg
+endif
+
 obj-$(CONFIG_SPARC32)   += entry.o wof.o wuf.o
 obj-$(CONFIG_SPARC32)   += etrap_32.o
 obj-$(CONFIG_SPARC32)   += rtrap_32.o
@@ -24,7 +32,6 @@ obj-$(CONFIG_SPARC32)   += sun4m_irq.o sun4c_irq.o sun4d_irq.o
 
 obj-y                   += process_$(BITS).o
 obj-y                   += signal_$(BITS).o
-obj-y                   += sigutil_$(BITS).o
 obj-$(CONFIG_SPARC32)   += ioport.o
 obj-y                   += setup_$(BITS).o
 obj-y                   += idprom.o
@@ -73,7 +80,7 @@ obj-y                     += dma.o
 obj-$(CONFIG_SPARC32_PCI) += pcic.o
 
 obj-$(CONFIG_SMP)         += trampoline_$(BITS).o smp_$(BITS).o
-obj-$(CONFIG_SPARC32_SMP) += sun4m_smp.o sun4d_smp.o
+obj-$(CONFIG_SPARC32_SMP) += sun4m_smp.o sun4d_smp.o leon_smp.o
 obj-$(CONFIG_SPARC64_SMP) += hvtramp.o
 
 obj-y                     += auxio_$(BITS).o
@@ -86,8 +93,9 @@ obj-$(CONFIG_KGDB)        += kgdb_$(BITS).o
 
 
 obj-$(CONFIG_DYNAMIC_FTRACE) += ftrace.o
-CFLAGS_REMOVE_ftrace.o := -pg
+obj-$(CONFIG_FUNCTION_GRAPH_TRACER) += ftrace.o
 
+obj-$(CONFIG_EARLYFB) += btext.o
 obj-$(CONFIG_STACKTRACE)     += stacktrace.o
 # sparc64 PCI
 obj-$(CONFIG_SPARC64_PCI)    += pci.o pci_common.o psycho_common.o

@@ -214,11 +214,11 @@ skpinv:	addi	r6,r6,1				/* Increment */
 	bl	1f		/* Find our address */
 1:	mflr	r9
 	rlwimi	r7,r9,0,20,31
-	addi	r7,r7,24
+	addi	r7,r7,(2f - 1b)
 	mtspr	SPRN_SRR0,r7
 	mtspr	SPRN_SRR1,r6
 	rfi
-
+2:
 /* 4. Clear out PIDs & Search info */
 	li	r6,0
 	mtspr   SPRN_MAS6,r6
@@ -639,6 +639,13 @@ interrupt_base:
 	rlwinm	r12,r12,0,16,1
 	mtspr	SPRN_MAS1,r12
 
+	/* Make up the required permissions for kernel code */
+#ifdef CONFIG_PTE_64BIT
+	li	r13,_PAGE_PRESENT | _PAGE_BAP_SX
+	oris	r13,r13,_PAGE_ACCESSED@h
+#else
+	li	r13,_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_EXEC
+#endif
 	b	4f
 
 	/* Get the PGD for the current thread */
@@ -646,15 +653,15 @@ interrupt_base:
 	mfspr	r11,SPRN_SPRG_THREAD
 	lwz	r11,PGDIR(r11)
 
-4:
-	/* Make up the required permissions */
+	/* Make up the required permissions for user code */
 #ifdef CONFIG_PTE_64BIT
-	li	r13,_PAGE_PRESENT | _PAGE_EXEC
+	li	r13,_PAGE_PRESENT | _PAGE_BAP_UX
 	oris	r13,r13,_PAGE_ACCESSED@h
 #else
 	li	r13,_PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_EXEC
 #endif
 
+4:
 	FIND_PTE
 	andc.	r13,r13,r11		/* Check permission */
 
@@ -746,9 +753,6 @@ finish_tlb_load:
 	rlwimi	r12, r11, 32-19, 27, 31	/* extract WIMGE from pte */
 #else
 	rlwimi	r12, r11, 26, 27, 31	/* extract WIMGE from pte */
-#endif
-#ifdef CONFIG_SMP
-	ori	r12, r12, MAS2_M
 #endif
 	mtspr	SPRN_MAS2, r12
 
@@ -887,13 +891,17 @@ KernelSPE:
 	lwz	r3,_MSR(r1)
 	oris	r3,r3,MSR_SPE@h
 	stw	r3,_MSR(r1)	/* enable use of SPE after return */
+#ifdef CONFIG_PRINTK
 	lis	r3,87f@h
 	ori	r3,r3,87f@l
 	mr	r4,r2		/* current */
 	lwz	r5,_NIP(r1)
 	bl	printk
+#endif
 	b	ret_from_except
+#ifdef CONFIG_PRINTK
 87:	.string	"SPE used in kernel  (task=%p, pc=%x)  \n"
+#endif
 	.align	4,0
 
 #endif /* CONFIG_SPE */
@@ -941,28 +949,6 @@ _GLOBAL(__setup_e500mc_ivors)
 	li	r3,CriticalDoorbell@l
 	mtspr	SPRN_IVOR37,r3
 	sync
-	blr
-
-/*
- * extern void loadcam_entry(unsigned int index)
- *
- * Load TLBCAM[index] entry in to the L2 CAM MMU
- */
-_GLOBAL(loadcam_entry)
-	lis	r4,TLBCAM@ha
-	addi	r4,r4,TLBCAM@l
-	mulli	r5,r3,TLBCAM_SIZE
-	add	r3,r5,r4
-	lwz	r4,0(r3)
-	mtspr	SPRN_MAS0,r4
-	lwz	r4,4(r3)
-	mtspr	SPRN_MAS1,r4
-	lwz	r4,8(r3)
-	mtspr	SPRN_MAS2,r4
-	lwz	r4,12(r3)
-	mtspr	SPRN_MAS3,r4
-	tlbwe
-	isync
 	blr
 
 /*

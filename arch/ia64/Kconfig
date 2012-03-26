@@ -53,6 +53,9 @@ config MMU
 	bool
 	default y
 
+config NEED_DMA_MAP_STATE
+	def_bool y
+
 config SWIOTLB
        bool
 
@@ -86,9 +89,6 @@ config GENERIC_TIME
 config GENERIC_TIME_VSYSCALL
 	bool
 	default y
-
-config HAVE_LEGACY_PER_CPU_AREA
-	def_bool y
 
 config HAVE_SETUP_PER_CPU_AREA
 	def_bool y
