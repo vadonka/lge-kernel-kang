@@ -37,7 +37,7 @@ config GPU_MEM_CARVEOUT_SZ
 	default 128
 
 config STOCK_VOLTAGE
-	bool "stock voltage values"
+	bool "Stock voltage values"
 	depends on MACH_STAR
 	default y
 

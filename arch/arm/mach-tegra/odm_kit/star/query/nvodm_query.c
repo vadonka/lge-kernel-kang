@@ -928,21 +928,21 @@ static const NvOdmQuerySpiIdleSignalState s_NvOdmQuerySpiIdleSignalStateLevel[] 
 	{NV_FALSE, NvOdmQuerySpiSignalMode_1, NV_FALSE} // Spi 1 
 }; 
 
-const NvOdmQuerySpiIdleSignalState * 
-NvOdmQuerySpiGetIdleSignalState( 
-	NvOdmIoModule OdmIoModule, 
-	NvU32 ControllerId) 
-{ 
-	if (OdmIoModule == NvOdmIoModule_Spi) 
+const NvOdmQuerySpiIdleSignalState *
+NvOdmQuerySpiGetIdleSignalState(
+	NvOdmIoModule OdmIoModule,
+	NvU32 ControllerId)
+{
+	if (OdmIoModule == NvOdmIoModule_Spi)
 	{ 
-		if (ControllerId == 0) 
-			return &s_NvOdmQuerySpiIdleSignalStateLevel[0]; 
+		if (ControllerId == 0)
+			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
 #ifdef CONFIG_MACH_STAR_TMUS
-		else if (ControllerId == 1) 
-			return &s_NvOdmQuerySpiIdleSignalStateLevel[0]; 
+		else if (ControllerId == 1)
+			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
 #endif
 	} 
-	return NULL; 
+	return NULL;
 } 
 //20101204-1, , NVIDIA's patch for setting signal level during idle state [END]
 
@@ -974,7 +974,7 @@ NvOdmQueryDapPortGetProperty(
         { NvOdmDapPort_None, NvOdmDapPort_None, { 0, 0, 0, 0 } },
         // I2S1 (DAC1) <-> DAP1 <-> HIFICODEC
         { NvOdmDapPort_I2s1, NvOdmDapPort_HifiCodecType,
-          { 2, 16, 48000, NvOdmQueryI2sDataCommFormat_I2S } }, // Dap1
+          { 2, 24, 48000, NvOdmQueryI2sDataCommFormat_I2S } }, // Dap1
         // I2S2 (DAC2) <-> DAP2 <-> VOICECODEC
         {NvOdmDapPort_I2s2, NvOdmDapPort_VoiceCodecType,
           {2, 16, 16000, NvOdmQueryI2sDataCommFormat_Dsp } },   // Dap2
