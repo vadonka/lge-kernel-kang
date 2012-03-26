@@ -291,7 +291,7 @@ extern "C"
  */
 #define NVRM_DTT_DEGREES_HIGH           (95L)
 #define NVRM_DTT_DEGREES_LOW            (65L)
-#define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
+#define NVRM_DTT_DEGREES_HYSTERESIS     (8L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
 #define NVRM_DTT_CPU_DELTA_KHZ          (100000UL)
@@ -303,7 +303,7 @@ extern "C"
 
 /// Default low corners for core and dedicated CPU voltages
 #ifndef CONFIG_OTF_AP20LC
-#define NVRM_AP20_LOW_CORE_MV (900)
+#define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
 #endif
 /// Core voltage in suspend
