@@ -19,6 +19,7 @@
 #include <linux/version.h>
 #include <linux/blkdev.h>
 #include <linux/mutex.h>
+#include <linux/slab.h>
 #include "ext4.h"
 
 struct ext4_system_zone {
