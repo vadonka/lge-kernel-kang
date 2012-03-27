@@ -408,7 +408,7 @@ static ssize_t star_proxi_onoff_show(struct device *dev, struct device_attribute
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+static ssize_t star_proxi_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     u32 val = 0;
     val = simple_strtoul(buf, NULL, 10);
@@ -450,7 +450,7 @@ static ssize_t star_proxi_delay_show(struct device *dev, struct device_attribute
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_delay_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+static ssize_t star_proxi_delay_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     u32 val = 0;
 
@@ -470,7 +470,7 @@ static ssize_t star_proxi_wake_show(struct device *dev, struct device_attribute 
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_wake_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
+static ssize_t star_proxi_wake_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     u32 val = 0;
 
