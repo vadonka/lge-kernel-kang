@@ -977,10 +977,10 @@ NvOdmQueryDapPortGetProperty(
           { 2, 24, 48000, NvOdmQueryI2sDataCommFormat_I2S } }, // Dap1
         // I2S2 (DAC2) <-> DAP2 <-> VOICECODEC
         {NvOdmDapPort_I2s2, NvOdmDapPort_VoiceCodecType,
-          {2, 16, 16000, NvOdmQueryI2sDataCommFormat_Dsp } },   // Dap2
+          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_Dsp } },   // Dap2
         // I2S2 (DAC2) <-> DAP3 <-> BASEBAND
         {NvOdmDapPort_I2s2, NvOdmDapPort_BaseBand,
-          {2, 16, 16000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap3
+          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap3
         // I2S2 (DAC2) <-> DAP4 <-> BLUETOOTH
         {NvOdmDapPort_I2s2, NvOdmDapPort_BlueTooth,
           {2, 16, 16000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap4
