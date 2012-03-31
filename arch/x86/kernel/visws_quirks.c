@@ -49,6 +49,11 @@ extern int no_broadcast;
 char visws_board_type	= -1;
 char visws_board_rev	= -1;
 
+int is_visws_box(void)
+{
+	return visws_board_type >= 0;
+}
+
 static void __init visws_time_init(void)
 {
 	printk(KERN_INFO "Starting Cobalt Timer system clock\n");
@@ -178,7 +183,7 @@ static void __init MP_processor_info(struct mpc_cpu *m)
 		return;
 	}
 
-	apic->apicid_to_cpu_present(m->apicid, &apic_cpus);
+	apic_cpus = apic->apicid_to_cpu_present(m->apicid);
 	physids_or(phys_cpu_present_map, phys_cpu_present_map, apic_cpus);
 	/*
 	 * Validate version
@@ -192,7 +197,7 @@ static void __init MP_processor_info(struct mpc_cpu *m)
 	apic_version[m->apicid] = ver;
 }
 
-static void __init visws_find_smp_config(void)
+static void __init visws_find_smp_config(unsigned int reserve)
 {
 	struct mpc_cpu *mp = phys_to_virt(CO_CPU_TAB_PHYS);
 	unsigned short ncpus = readw(phys_to_virt(CO_CPU_NUM_PHYS));
@@ -237,8 +242,6 @@ void __init visws_early_detect(void)
 	x86_init.irqs.pre_vector_init = visws_pre_intr_init;
 	x86_init.irqs.trap_init = visws_trap_init;
 	x86_init.timers.timer_init = visws_time_init;
-	x86_init.pci.init = pci_visws_init;
-	x86_init.pci.init_irq = x86_init_noop;
 
 	/*
 	 * Install reboot quirks:
@@ -483,7 +486,7 @@ static void end_cobalt_irq(unsigned int irq)
 }
 
 static struct irq_chip cobalt_irq_type = {
-	.name =		"Cobalt-APIC",
+	.typename =	"Cobalt-APIC",
 	.startup =	startup_cobalt_irq,
 	.shutdown =	disable_cobalt_irq,
 	.enable =	enable_cobalt_irq,
@@ -505,7 +508,7 @@ static struct irq_chip cobalt_irq_type = {
  */
 static unsigned int startup_piix4_master_irq(unsigned int irq)
 {
-	legacy_pic->init(0);
+	init_8259A(0);
 
 	return startup_cobalt_irq(irq);
 }
@@ -520,7 +523,7 @@ static void end_piix4_master_irq(unsigned int irq)
 }
 
 static struct irq_chip piix4_master_irq_type = {
-	.name =		"PIIX4-master",
+	.typename =	"PIIX4-master",
 	.startup =	startup_piix4_master_irq,
 	.ack =		ack_cobalt_irq,
 	.end =		end_piix4_master_irq,
@@ -528,7 +531,10 @@ static struct irq_chip piix4_master_irq_type = {
 
 
 static struct irq_chip piix4_virtual_irq_type = {
-	.name =		"PIIX4-virtual",
+	.typename =	"PIIX4-virtual",
+	.shutdown =	disable_8259A_irq,
+	.enable =	enable_8259A_irq,
+	.disable =	disable_8259A_irq,
 };
 
 
@@ -553,7 +559,7 @@ static irqreturn_t piix4_master_intr(int irq, void *dev_id)
 	struct irq_desc *desc;
 	unsigned long flags;
 
-	raw_spin_lock_irqsave(&i8259A_lock, flags);
+	spin_lock_irqsave(&i8259A_lock, flags);
 
 	/* Find out what's interrupting in the PIIX4 master 8259 */
 	outb(0x0c, 0x20);		/* OCW3 Poll command */
@@ -590,7 +596,7 @@ static irqreturn_t piix4_master_intr(int irq, void *dev_id)
 		outb(0x60 + realirq, 0x20);
 	}
 
-	raw_spin_unlock_irqrestore(&i8259A_lock, flags);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 
 	desc = irq_to_desc(realirq);
 
@@ -603,12 +609,12 @@ static irqreturn_t piix4_master_intr(int irq, void *dev_id)
 		handle_IRQ_event(realirq, desc->action);
 
 	if (!(desc->status & IRQ_DISABLED))
-		legacy_pic->chip->unmask(realirq);
+		enable_8259A_irq(realirq);
 
 	return IRQ_HANDLED;
 
 out_unlock:
-	raw_spin_unlock_irqrestore(&i8259A_lock, flags);
+	spin_unlock_irqrestore(&i8259A_lock, flags);
 	return IRQ_NONE;
 }
 
@@ -622,12 +628,6 @@ static struct irqaction cascade_action = {
 	.name =		"cascade",
 };
 
-static inline void set_piix4_virtual_irq_type(void)
-{
-	piix4_virtual_irq_type.shutdown = i8259A_chip.mask;
-	piix4_virtual_irq_type.enable =	i8259A_chip.unmask;
-	piix4_virtual_irq_type.disable = i8259A_chip.mask;
-}
 
 void init_VISWS_APIC_irqs(void)
 {
@@ -653,7 +653,6 @@ void init_VISWS_APIC_irqs(void)
 			desc->chip = &piix4_master_irq_type;
 		}
 		else if (i < CO_IRQ_APIC0) {
-			set_piix4_virtual_irq_type();
 			desc->chip = &piix4_virtual_irq_type;
 		}
 		else if (IS_CO_APIC(i)) {

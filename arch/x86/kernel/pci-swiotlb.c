@@ -42,31 +42,18 @@ static struct dma_map_ops swiotlb_dma_ops = {
 	.dma_supported = NULL,
 };
 
-/*
- * pci_swiotlb_detect - set swiotlb to 1 if necessary
- *
- * This returns non-zero if we are forced to use swiotlb (by the boot
- * option).
- */
-int __init pci_swiotlb_detect(void)
+void __init pci_swiotlb_init(void)
 {
-	int use_swiotlb = swiotlb | swiotlb_force;
-
 	/* don't initialize swiotlb if iommu=off (no_iommu=1) */
 #ifdef CONFIG_X86_64
-	if (!no_iommu && max_pfn > MAX_DMA32_PFN)
+	if ((!iommu_detected && !no_iommu && max_pfn > MAX_DMA32_PFN))
 		swiotlb = 1;
 #endif
 	if (swiotlb_force)
 		swiotlb = 1;
-
-	return use_swiotlb;
-}
-
-void __init pci_swiotlb_init(void)
-{
 	if (swiotlb) {
-		swiotlb_init(0);
+		printk(KERN_INFO "PCI-DMA: Using software bounce buffering for IO (SWIOTLB)\n");
+		swiotlb_init();
 		dma_ops = &swiotlb_dma_ops;
 	}
 }

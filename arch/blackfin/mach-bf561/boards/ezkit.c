@@ -49,7 +49,7 @@ static struct isp1760_platform_data isp1760_priv = {
 };
 
 static struct platform_device bfin_isp1760_device = {
-	.name           = "isp1760",
+	.name           = "isp1760-hcd",
 	.id             = 0,
 	.dev = {
 		.platform_data = &isp1760_priv,
@@ -159,50 +159,43 @@ static struct platform_device smc91x_device = {
 };
 #endif
 
-#if defined(CONFIG_SERIAL_BFIN) || defined(CONFIG_SERIAL_BFIN_MODULE)
-#ifdef CONFIG_SERIAL_BFIN_UART0
-static struct resource bfin_uart0_resources[] = {
-	{
-		.start = BFIN_UART_THR,
-		.end = BFIN_UART_GCTL+2,
-		.flags = IORESOURCE_MEM,
+#if defined(CONFIG_AX88180) || defined(CONFIG_AX88180_MODULE)
+static struct resource ax88180_resources[] = {
+	[0] = {
+		.start	= 0x2c000000,
+		.end	= 0x2c000000 + 0x8000,
+		.flags	= IORESOURCE_MEM,
 	},
-	{
-		.start = IRQ_UART_RX,
-		.end = IRQ_UART_RX+1,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = IRQ_UART_ERROR,
-		.end = IRQ_UART_ERROR,
-		.flags = IORESOURCE_IRQ,
-	},
-	{
-		.start = CH_UART_TX,
-		.end = CH_UART_TX,
-		.flags = IORESOURCE_DMA,
-	},
-	{
-		.start = CH_UART_RX,
-		.end = CH_UART_RX,
-		.flags = IORESOURCE_DMA,
+	[1] = {
+		.start	= IRQ_PF10,
+		.end	= IRQ_PF10,
+		.flags	= (IORESOURCE_IRQ | IORESOURCE_IRQ_LOWLEVEL),
 	},
 };
 
-unsigned short bfin_uart0_peripherals[] = {
-	P_UART0_TX, P_UART0_RX, 0
-};
-
-static struct platform_device bfin_uart0_device = {
-	.name = "bfin-uart",
-	.id = 0,
-	.num_resources = ARRAY_SIZE(bfin_uart0_resources),
-	.resource = bfin_uart0_resources,
-	.dev = {
-		.platform_data = &bfin_uart0_peripherals, /* Passed to driver */
-	},
+static struct platform_device ax88180_device = {
+	.name		= "ax88180",
+	.id		= -1,
+	.num_resources	= ARRAY_SIZE(ax88180_resources),
+	.resource	= ax88180_resources,
 };
 #endif
+
+#if defined(CONFIG_SERIAL_BFIN) || defined(CONFIG_SERIAL_BFIN_MODULE)
+static struct resource bfin_uart_resources[] = {
+	{
+		.start = 0xFFC00400,
+		.end = 0xFFC004FF,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device bfin_uart_device = {
+	.name = "bfin-uart",
+	.id = 1,
+	.num_resources = ARRAY_SIZE(bfin_uart_resources),
+	.resource = bfin_uart_resources,
+};
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
@@ -274,8 +267,8 @@ static struct platform_device ezkit_flash_device = {
 };
 #endif
 
-#if defined(CONFIG_SND_BLACKFIN_AD183X) \
-	|| defined(CONFIG_SND_BLACKFIN_AD183X_MODULE)
+#if defined(CONFIG_SND_BLACKFIN_AD1836) \
+	|| defined(CONFIG_SND_BLACKFIN_AD1836_MODULE)
 static struct bfin5xx_spi_chip ad1836_spi_chip_info = {
 	.enable_dma = 0,
 	.bits_per_word = 16,
@@ -328,8 +321,8 @@ static struct platform_device bfin_spi0_device = {
 #endif
 
 static struct spi_board_info bfin_spi_board_info[] __initdata = {
-#if defined(CONFIG_SND_BLACKFIN_AD183X) \
-	|| defined(CONFIG_SND_BLACKFIN_AD183X_MODULE)
+#if defined(CONFIG_SND_BLACKFIN_AD1836) \
+	|| defined(CONFIG_SND_BLACKFIN_AD1836_MODULE)
 	{
 		.modalias = "ad1836",
 		.max_speed_hz = 3125000,     /* max spi clock (SCK) speed in HZ */
@@ -428,6 +421,10 @@ static struct platform_device *ezkit_devices[] __initdata = {
 	&smc91x_device,
 #endif
 
+#if defined(CONFIG_AX88180) || defined(CONFIG_AX88180_MODULE)
+	&ax88180_device,
+#endif
+
 #if defined(CONFIG_USB_NET2272) || defined(CONFIG_USB_NET2272_MODULE)
 	&net2272_bfin_device,
 #endif
@@ -441,9 +438,7 @@ static struct platform_device *ezkit_devices[] __initdata = {
 #endif
 
 #if defined(CONFIG_SERIAL_BFIN) || defined(CONFIG_SERIAL_BFIN_MODULE)
-#ifdef CONFIG_SERIAL_BFIN_UART0
-	&bfin_uart0_device,
-#endif
+	&bfin_uart_device,
 #endif
 
 #if defined(CONFIG_BFIN_SIR) || defined(CONFIG_BFIN_SIR_MODULE)
@@ -489,18 +484,3 @@ static int __init ezkit_init(void)
 }
 
 arch_initcall(ezkit_init);
-
-static struct platform_device *ezkit_early_devices[] __initdata = {
-#if defined(CONFIG_SERIAL_BFIN_CONSOLE) || defined(CONFIG_EARLY_PRINTK)
-#ifdef CONFIG_SERIAL_BFIN_UART0
-	&bfin_uart0_device,
-#endif
-#endif
-};
-
-void __init native_machine_early_platform_add_devices(void)
-{
-	printk(KERN_INFO "register early platform devices\n");
-	early_platform_add_devices(ezkit_early_devices,
-		ARRAY_SIZE(ezkit_early_devices));
-}

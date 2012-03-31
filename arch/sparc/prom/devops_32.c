@@ -84,4 +84,6 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 	};
 	restore_current();
 	spin_unlock_irqrestore(&prom_lock, flags);
+
+	return;
 }

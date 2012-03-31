@@ -105,7 +105,6 @@
  *
  *  PXA935	A0	0x56056931	0x1E653013
  *  PXA935	B0	0x56056936	0x6E653013
- *  PXA935	B1	0x56056938	0x8E653013
  */
 #ifdef CONFIG_PXA25x
 #define __cpu_is_pxa210(id)				\
@@ -202,7 +201,7 @@
 #define __cpu_is_pxa950(id)                             \
 	({                                              \
 		unsigned int _id = (id) >> 4 & 0xfff;	\
-		_id == 0x697;				\
+		id == 0x697;				\
 	 })
 #else
 #define __cpu_is_pxa950(id)	(0)
@@ -250,17 +249,20 @@
 
 #define cpu_is_pxa930()					\
 	({						\
-		__cpu_is_pxa930(read_cpuid_id());	\
+		unsigned int id = read_cpuid(CPUID_ID);	\
+		__cpu_is_pxa930(id);			\
 	 })
 
 #define cpu_is_pxa935()					\
 	({						\
-		__cpu_is_pxa935(read_cpuid_id());	\
+		unsigned int id = read_cpuid(CPUID_ID);	\
+		__cpu_is_pxa935(id);			\
 	 })
 
 #define cpu_is_pxa950()					\
 	({						\
-		__cpu_is_pxa950(read_cpuid_id());	\
+		unsigned int id = read_cpuid(CPUID_ID);	\
+		__cpu_is_pxa950(id);			\
 	 })
 
 
@@ -281,7 +283,7 @@
 		_id == 0x3;				\
 	 })
 
-#define __cpu_is_pxa93x(id)				\
+#define __cpu_is_pxa9xx(id)				\
 	({						\
 		unsigned int _id = (id) >> 4 & 0xfff;	\
 		_id == 0x683 || _id == 0x693;		\
@@ -297,9 +299,9 @@
 		__cpu_is_pxa3xx(read_cpuid_id());	\
 	 })
 
-#define cpu_is_pxa93x()					\
+#define cpu_is_pxa9xx()					\
 	({						\
-		__cpu_is_pxa93x(read_cpuid_id());	\
+		__cpu_is_pxa9xx(read_cpuid_id());	\
 	 })
 /*
  * return current memory and LCD clock frequency in units of 10kHz
@@ -314,6 +316,7 @@ extern unsigned long get_clock_tick_rate(void);
 #define PCIBIOS_MIN_IO		0
 #define PCIBIOS_MIN_MEM		0
 #define pcibios_assign_all_busses()	1
+#define HAVE_ARCH_PCI_SET_DMA_MASK	1
 #endif
 
 

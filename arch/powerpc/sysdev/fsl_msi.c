@@ -16,7 +16,6 @@
 #include <linux/bootmem.h>
 #include <linux/msi.h>
 #include <linux/pci.h>
-#include <linux/slab.h>
 #include <linux/of_platform.h>
 #include <sysdev/fsl_soc.h>
 #include <asm/prom.h>
@@ -48,7 +47,7 @@ static struct irq_chip fsl_msi_chip = {
 	.mask		= mask_msi_irq,
 	.unmask		= unmask_msi_irq,
 	.ack		= fsl_msi_end_irq,
-	.name		= "FSL-MSI",
+	.typename	= " FSL-MSI  ",
 };
 
 static int fsl_msi_host_map(struct irq_host *h, unsigned int virq,
@@ -56,7 +55,7 @@ static int fsl_msi_host_map(struct irq_host *h, unsigned int virq,
 {
 	struct irq_chip *chip = &fsl_msi_chip;
 
-	irq_to_desc(virq)->status |= IRQ_TYPE_EDGE_FALLING;
+	get_irq_desc(virq)->status |= IRQ_TYPE_EDGE_FALLING;
 
 	set_irq_chip_and_handler(virq, chip, handle_edge_irq);
 
@@ -174,7 +173,7 @@ static void fsl_msi_cascade(unsigned int irq, struct irq_desc *desc)
 	u32 intr_index;
 	u32 have_shift = 0;
 
-	raw_spin_lock(&desc->lock);
+	spin_lock(&desc->lock);
 	if ((msi_data->feature &  FSL_PIC_IP_MASK) == FSL_PIC_IP_IPIC) {
 		if (desc->chip->mask_ack)
 			desc->chip->mask_ack(irq);
@@ -226,7 +225,7 @@ static void fsl_msi_cascade(unsigned int irq, struct irq_desc *desc)
 		break;
 	}
 unlock:
-	raw_spin_unlock(&desc->lock);
+	spin_unlock(&desc->lock);
 }
 
 static int __devinit fsl_of_msi_probe(struct of_device *dev,

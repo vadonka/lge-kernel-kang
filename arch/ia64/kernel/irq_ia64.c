@@ -22,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/ioport.h>
 #include <linux/kernel_stat.h>
+#include <linux/slab.h>
 #include <linux/ptrace.h>
 #include <linux/random.h>	/* for rand_initialize_irq() */
 #include <linux/signal.h>
@@ -259,6 +260,7 @@ void __setup_vector_irq(int cpu)
 }
 
 #if defined(CONFIG_SMP) && (defined(CONFIG_IA64_GENERIC) || defined(CONFIG_IA64_DIG))
+#define IA64_IRQ_MOVE_VECTOR	IA64_DEF_FIRST_DEVICE_VECTOR
 
 static enum vector_domain_type {
 	VECTOR_DOMAIN_NONE,
@@ -343,7 +345,7 @@ static irqreturn_t smp_irq_move_cleanup_interrupt(int irq, void *dev_id)
 
 		desc = irq_desc + irq;
 		cfg = irq_cfg + irq;
-		raw_spin_lock(&desc->lock);
+		spin_lock(&desc->lock);
 		if (!cfg->move_cleanup_count)
 			goto unlock;
 
@@ -356,7 +358,7 @@ static irqreturn_t smp_irq_move_cleanup_interrupt(int irq, void *dev_id)
 		spin_unlock_irqrestore(&vector_lock, flags);
 		cfg->move_cleanup_count--;
 	unlock:
-		raw_spin_unlock(&desc->lock);
+		spin_unlock(&desc->lock);
 	}
 	return IRQ_HANDLED;
 }
@@ -657,8 +659,11 @@ init_IRQ (void)
 	register_percpu_irq(IA64_SPURIOUS_INT_VECTOR, NULL);
 #ifdef CONFIG_SMP
 #if defined(CONFIG_IA64_GENERIC) || defined(CONFIG_IA64_DIG)
-	if (vector_domain_type != VECTOR_DOMAIN_NONE)
+	if (vector_domain_type != VECTOR_DOMAIN_NONE) {
+		BUG_ON(IA64_FIRST_DEVICE_VECTOR != IA64_IRQ_MOVE_VECTOR);
+		IA64_FIRST_DEVICE_VECTOR++;
 		register_percpu_irq(IA64_IRQ_MOVE_VECTOR, &irq_move_irqaction);
+	}
 #endif
 #endif
 #ifdef CONFIG_PERFMON

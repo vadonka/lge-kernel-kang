@@ -301,16 +301,17 @@ static struct sys_timer realview_pb11mp_timer = {
 
 static void realview_pb11mp_reset(char mode)
 {
-	void __iomem *reset_ctrl = __io_address(REALVIEW_SYS_RESETCTL);
-	void __iomem *lock_ctrl = __io_address(REALVIEW_SYS_LOCK);
+	void __iomem *hdr_ctrl = __io_address(REALVIEW_SYS_BASE) +
+		REALVIEW_SYS_RESETCTL_OFFSET;
+	unsigned int val;
 
 	/*
 	 * To reset, we hit the on-board reset register
 	 * in the system FPGA
 	 */
-	__raw_writel(REALVIEW_SYS_LOCK_VAL, lock_ctrl);
-	__raw_writel(0x0000, reset_ctrl);
-	__raw_writel(0x0004, reset_ctrl);
+	val = __raw_readl(hdr_ctrl);
+	val |= REALVIEW_PB11MP_SYS_CTRL_RESET_CONFIGCLR;
+	__raw_writel(val, hdr_ctrl);
 }
 
 static void __init realview_pb11mp_init(void)

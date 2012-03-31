@@ -19,7 +19,8 @@
 
 #include "call_hpt.h"
 
-static spinlock_t iSeries_hlocks[64] __cacheline_aligned_in_smp;
+static spinlock_t iSeries_hlocks[64] __cacheline_aligned_in_smp =
+	{ [0 ... 63] = SPIN_LOCK_UNLOCKED};
 
 /*
  * Very primitive algorithm for picking up a lock
@@ -244,11 +245,6 @@ static void iSeries_hpte_invalidate(unsigned long slot, unsigned long va,
 
 void __init hpte_init_iSeries(void)
 {
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(iSeries_hlocks); i++)
-		spin_lock_init(&iSeries_hlocks[i]);
-
 	ppc_md.hpte_invalidate	= iSeries_hpte_invalidate;
 	ppc_md.hpte_updatepp	= iSeries_hpte_updatepp;
 	ppc_md.hpte_updateboltedpp = iSeries_hpte_updateboltedpp;

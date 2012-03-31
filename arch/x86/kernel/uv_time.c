@@ -19,7 +19,6 @@
  *  Copyright (c) Dimitri Sivanich
  */
 #include <linux/clockchips.h>
-#include <linux/slab.h>
 
 #include <asm/uv/uv_mmrs.h>
 #include <asm/uv/uv_hub.h>
@@ -75,7 +74,7 @@ struct uv_rtc_timer_head {
  */
 static struct uv_rtc_timer_head		**blade_info __read_mostly;
 
-static int				uv_rtc_evt_enable;
+static int				uv_rtc_enable;
 
 /*
  * Hardware interface routines
@@ -91,7 +90,7 @@ static void uv_rtc_send_IPI(int cpu)
 	pnode = uv_apicid_to_pnode(apicid);
 	val = (1UL << UVH_IPI_INT_SEND_SHFT) |
 	      (apicid << UVH_IPI_INT_APIC_ID_SHFT) |
-	      (X86_PLATFORM_IPI_VECTOR << UVH_IPI_INT_VECTOR_SHFT);
+	      (GENERIC_INTERRUPT_VECTOR << UVH_IPI_INT_VECTOR_SHFT);
 
 	uv_write_global_mmr64(pnode, UVH_IPI_INT, val);
 }
@@ -116,7 +115,7 @@ static int uv_setup_intr(int cpu, u64 expires)
 	uv_write_global_mmr64(pnode, UVH_EVENT_OCCURRED0_ALIAS,
 		UVH_EVENT_OCCURRED0_RTC1_MASK);
 
-	val = (X86_PLATFORM_IPI_VECTOR << UVH_RTC1_INT_CONFIG_VECTOR_SHFT) |
+	val = (GENERIC_INTERRUPT_VECTOR << UVH_RTC1_INT_CONFIG_VECTOR_SHFT) |
 		((u64)cpu_physical_id(cpu) << UVH_RTC1_INT_CONFIG_APIC_ID_SHFT);
 
 	/* Set configuration */
@@ -124,10 +123,7 @@ static int uv_setup_intr(int cpu, u64 expires)
 	/* Initialize comparator value */
 	uv_write_global_mmr64(pnode, UVH_INT_CMPB, expires);
 
-	if (uv_read_rtc(NULL) <= expires)
-		return 0;
-
-	return !uv_intr_pending(pnode);
+	return (expires < uv_read_rtc(NULL) && !uv_intr_pending(pnode));
 }
 
 /*
@@ -227,7 +223,6 @@ static int uv_rtc_set_timer(int cpu, u64 expires)
 
 	next_cpu = head->next_cpu;
 	*t = expires;
-
 	/* Will this one be next to go off? */
 	if (next_cpu < 0 || bcpu == next_cpu ||
 			expires < head->cpu[next_cpu].expires) {
@@ -236,7 +231,7 @@ static int uv_rtc_set_timer(int cpu, u64 expires)
 			*t = ULLONG_MAX;
 			uv_rtc_find_next_timer(head, pnode);
 			spin_unlock_irqrestore(&head->lock, flags);
-			return -ETIME;
+			return 1;
 		}
 	}
 
@@ -249,7 +244,7 @@ static int uv_rtc_set_timer(int cpu, u64 expires)
  *
  * Returns 1 if this timer was pending.
  */
-static int uv_rtc_unset_timer(int cpu, int force)
+static int uv_rtc_unset_timer(int cpu)
 {
 	int pnode = uv_cpu_to_pnode(cpu);
 	int bid = uv_cpu_to_blade_id(cpu);
@@ -261,15 +256,14 @@ static int uv_rtc_unset_timer(int cpu, int force)
 
 	spin_lock_irqsave(&head->lock, flags);
 
-	if ((head->next_cpu == bcpu && uv_read_rtc(NULL) >= *t) || force)
+	if (head->next_cpu == bcpu && uv_read_rtc(NULL) >= *t)
 		rc = 1;
 
-	if (rc) {
-		*t = ULLONG_MAX;
-		/* Was the hardware setup for this timer? */
-		if (head->next_cpu == bcpu)
-			uv_rtc_find_next_timer(head, pnode);
-	}
+	*t = ULLONG_MAX;
+
+	/* Was the hardware setup for this timer? */
+	if (head->next_cpu == bcpu)
+		uv_rtc_find_next_timer(head, pnode);
 
 	spin_unlock_irqrestore(&head->lock, flags);
 
@@ -283,21 +277,10 @@ static int uv_rtc_unset_timer(int cpu, int force)
 
 /*
  * Read the RTC.
- *
- * Starting with HUB rev 2.0, the UV RTC register is replicated across all
- * cachelines of it's own page.  This allows faster simultaneous reads
- * from a given socket.
  */
 static cycle_t uv_read_rtc(struct clocksource *cs)
 {
-	unsigned long offset;
-
-	if (uv_get_min_hub_revision_id() == 1)
-		offset = 0;
-	else
-		offset = (uv_blade_processor_id() * L1_CACHE_BYTES) % PAGE_SIZE;
-
-	return (cycle_t)uv_read_local_mmr(UVH_RTC | offset);
+	return (cycle_t)uv_read_local_mmr(UVH_RTC);
 }
 
 /*
@@ -327,32 +310,32 @@ static void uv_rtc_timer_setup(enum clock_event_mode mode,
 		break;
 	case CLOCK_EVT_MODE_UNUSED:
 	case CLOCK_EVT_MODE_SHUTDOWN:
-		uv_rtc_unset_timer(ced_cpu, 1);
+		uv_rtc_unset_timer(ced_cpu);
 		break;
 	}
 }
 
 static void uv_rtc_interrupt(void)
 {
+	struct clock_event_device *ced = &__get_cpu_var(cpu_ced);
 	int cpu = smp_processor_id();
-	struct clock_event_device *ced = &per_cpu(cpu_ced, cpu);
 
 	if (!ced || !ced->event_handler)
 		return;
 
-	if (uv_rtc_unset_timer(cpu, 0) != 1)
+	if (uv_rtc_unset_timer(cpu) != 1)
 		return;
 
 	ced->event_handler(ced);
 }
 
-static int __init uv_enable_evt_rtc(char *str)
+static int __init uv_enable_rtc(char *str)
 {
-	uv_rtc_evt_enable = 1;
+	uv_rtc_enable = 1;
 
 	return 1;
 }
-__setup("uvrtcevt", uv_enable_evt_rtc);
+__setup("uvrtc", uv_enable_rtc);
 
 static __init void uv_rtc_register_clockevents(struct work_struct *dummy)
 {
@@ -367,32 +350,27 @@ static __init int uv_rtc_setup_clock(void)
 {
 	int rc;
 
-	if (!is_uv_system())
+	if (!uv_rtc_enable || !is_uv_system() || generic_interrupt_extension)
 		return -ENODEV;
+
+	generic_interrupt_extension = uv_rtc_interrupt;
 
 	clocksource_uv.mult = clocksource_hz2mult(sn_rtc_cycles_per_second,
 				clocksource_uv.shift);
 
-	/* If single blade, prefer tsc */
-	if (uv_num_possible_blades() == 1)
-		clocksource_uv.rating = 250;
-
 	rc = clocksource_register(&clocksource_uv);
-	if (rc)
-		printk(KERN_INFO "UV RTC clocksource failed rc %d\n", rc);
-	else
-		printk(KERN_INFO "UV RTC clocksource registered freq %lu MHz\n",
-			sn_rtc_cycles_per_second/(unsigned long)1E6);
-
-	if (rc || !uv_rtc_evt_enable || x86_platform_ipi_callback)
+	if (rc) {
+		generic_interrupt_extension = NULL;
 		return rc;
+	}
 
 	/* Setup and register clockevents */
 	rc = uv_rtc_allocate_timers();
-	if (rc)
-		goto error;
-
-	x86_platform_ipi_callback = uv_rtc_interrupt;
+	if (rc) {
+		clocksource_unregister(&clocksource_uv);
+		generic_interrupt_extension = NULL;
+		return rc;
+	}
 
 	clock_event_device_uv.mult = div_sc(sn_rtc_cycles_per_second,
 				NSEC_PER_SEC, clock_event_device_uv.shift);
@@ -405,18 +383,10 @@ static __init int uv_rtc_setup_clock(void)
 
 	rc = schedule_on_each_cpu(uv_rtc_register_clockevents);
 	if (rc) {
-		x86_platform_ipi_callback = NULL;
+		clocksource_unregister(&clocksource_uv);
+		generic_interrupt_extension = NULL;
 		uv_rtc_deallocate_timers();
-		goto error;
 	}
-
-	printk(KERN_INFO "UV RTC clockevents registered\n");
-
-	return 0;
-
-error:
-	clocksource_unregister(&clocksource_uv);
-	printk(KERN_INFO "UV RTC clockevents failed rc %d\n", rc);
 
 	return rc;
 }

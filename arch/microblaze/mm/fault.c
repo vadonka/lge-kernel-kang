@@ -106,7 +106,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	regs->esr = error_code;
 
 	/* On a kernel SLB miss we can only check for a valid exception entry */
-	if (unlikely(kernel_mode(regs) && (address >= TASK_SIZE))) {
+	if (kernel_mode(regs) && (address >= TASK_SIZE)) {
 		printk(KERN_WARNING "kernel task_size exceed");
 		_exception(SIGSEGV, regs, code, address);
 	}
@@ -122,7 +122,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	}
 #endif /* CONFIG_KGDB */
 
-	if (unlikely(in_atomic() || !mm)) {
+	if (in_atomic() || !mm) {
 		if (kernel_mode(regs))
 			goto bad_area_nosemaphore;
 
@@ -150,7 +150,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * source.  If this is invalid we can skip the address space check,
 	 * thus avoiding the deadlock.
 	 */
-	if (unlikely(!down_read_trylock(&mm->mmap_sem))) {
+	if (!down_read_trylock(&mm->mmap_sem)) {
 		if (kernel_mode(regs) && !search_exception_tables(regs->pc))
 			goto bad_area_nosemaphore;
 
@@ -158,16 +158,16 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	}
 
 	vma = find_vma(mm, address);
-	if (unlikely(!vma))
+	if (!vma)
 		goto bad_area;
 
 	if (vma->vm_start <= address)
 		goto good_area;
 
-	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN)))
+	if (!(vma->vm_flags & VM_GROWSDOWN))
 		goto bad_area;
 
-	if (unlikely(!is_write))
+	if (!is_write)
 		goto bad_area;
 
 	/*
@@ -179,7 +179,7 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	 * before setting the user r1.  Thus we allow the stack to
 	 * expand to 1MB without further checks.
 	 */
-	if (unlikely(address + 0x100000 < vma->vm_end)) {
+	if (address + 0x100000 < vma->vm_end) {
 
 		/* get user regs even if this fault is in kernel mode */
 		struct pt_regs *uregs = current->thread.regs;
@@ -209,15 +209,15 @@ good_area:
 	code = SEGV_ACCERR;
 
 	/* a write */
-	if (unlikely(is_write)) {
-		if (unlikely(!(vma->vm_flags & VM_WRITE)))
+	if (is_write) {
+		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
 	/* a read */
 	} else {
 		/* protection fault */
-		if (unlikely(error_code & 0x08000000))
+		if (error_code & 0x08000000)
 			goto bad_area;
-		if (unlikely(!(vma->vm_flags & (VM_READ | VM_EXEC))))
+		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
 			goto bad_area;
 	}
 
@@ -235,7 +235,7 @@ survive:
 			goto do_sigbus;
 		BUG();
 	}
-	if (unlikely(fault & VM_FAULT_MAJOR))
+	if (fault & VM_FAULT_MAJOR)
 		current->maj_flt++;
 	else
 		current->min_flt++;
@@ -273,11 +273,16 @@ bad_area_nosemaphore:
  * us unable to handle the page fault gracefully.
  */
 out_of_memory:
+	if (current->pid == 1) {
+		yield();
+		down_read(&mm->mmap_sem);
+		goto survive;
+	}
 	up_read(&mm->mmap_sem);
-	if (!user_mode(regs))
-		bad_page_fault(regs, address, SIGKILL);
-	else
-		pagefault_out_of_memory();
+	printk(KERN_WARNING "VM: killing process %s\n", current->comm);
+	if (user_mode(regs))
+		do_exit(SIGKILL);
+	bad_page_fault(regs, address, SIGKILL);
 	return;
 
 do_sigbus:

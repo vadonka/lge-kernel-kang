@@ -13,6 +13,7 @@
 #include <linux/init.h>
 #include <linux/sysdev.h>
 #include <linux/platform_device.h>
+#include <linux/module.h>
 #include <linux/err.h>
 #include <linux/string.h>
 #include <asm/dma.h>
@@ -20,6 +21,7 @@
 static struct sysdev_class dma_sysclass = {
 	.name = "dma",
 };
+EXPORT_SYMBOL(dma_sysclass);
 
 static ssize_t dma_show_devices(struct sys_device *dev,
 				struct sysdev_attribute *attr, char *buf)

@@ -24,7 +24,7 @@
  *
  *  This driver programs the PCX-U/PCX-W performance counters
  *  on the PA-RISC 2.0 chips.  The driver keeps all images now
- *  internally to the kernel to hopefully eliminate the possibility
+ *  internally to the kernel to hopefully eliminate the possiblity
  *  of a bad image halting the CPU.  Also, there are different
  *  images for the PCX-W and later chips vs the PCX-U chips.
  *

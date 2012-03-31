@@ -30,17 +30,6 @@
 #include <asm/elf.h>
 #include <asm/coprocessor.h>
 
-
-void user_enable_single_step(struct task_struct *child)
-{
-	child->ptrace |= PT_SINGLESTEP;
-}
-
-void user_disable_single_step(struct task_struct *child)
-{
-	child->ptrace &= ~PT_SINGLESTEP;
-}
-
 /*
  * Called by kernel/ptrace.c when detaching to disable single stepping.
  */
@@ -146,6 +135,9 @@ int ptrace_setxregs(struct task_struct *child, void __user *uregs)
 	struct pt_regs *regs = task_pt_regs(child);
 	elf_xtregs_t *xtregs = uregs;
 	int ret = 0;
+
+	if (!access_ok(VERIFY_READ, uregs, sizeof(elf_xtregs_t)))
+		return -EFAULT;
 
 #if XTENSA_HAVE_COPROCESSORS
 	/* Flush all coprocessors before we overwrite them. */
@@ -277,6 +269,51 @@ long arch_ptrace(struct task_struct *child, long request, long addr, long data)
 
 	case PTRACE_POKEUSR:	/* write register specified by addr. */
 		ret = ptrace_pokeusr(child, addr, data);
+		break;
+
+	/* continue and stop at next (return from) syscall */
+
+	case PTRACE_SYSCALL:
+	case PTRACE_CONT: /* restart after signal. */
+	{
+		ret = -EIO;
+		if (!valid_signal(data))
+			break;
+		if (request == PTRACE_SYSCALL)
+			set_tsk_thread_flag(child, TIF_SYSCALL_TRACE);
+		else
+			clear_tsk_thread_flag(child, TIF_SYSCALL_TRACE);
+		child->exit_code = data;
+		/* Make sure the single step bit is not set. */
+		child->ptrace &= ~PT_SINGLESTEP;
+		wake_up_process(child);
+		ret = 0;
+		break;
+	}
+
+	/*
+	 * make the child exit.  Best I can do is send it a sigkill.
+	 * perhaps it should be put in the status that it wants to
+	 * exit.
+	 */
+	case PTRACE_KILL:
+		ret = 0;
+		if (child->exit_state == EXIT_ZOMBIE)	/* already dead */
+			break;
+		child->exit_code = SIGKILL;
+		child->ptrace &= ~PT_SINGLESTEP;
+		wake_up_process(child);
+		break;
+
+	case PTRACE_SINGLESTEP:
+		ret = -EIO;
+		if (!valid_signal(data))
+			break;
+		clear_tsk_thread_flag(child, TIF_SYSCALL_TRACE);
+		child->ptrace |= PT_SINGLESTEP;
+		child->exit_code = data;
+		wake_up_process(child);
+		ret = 0;
 		break;
 
 	case PTRACE_GETREGS:

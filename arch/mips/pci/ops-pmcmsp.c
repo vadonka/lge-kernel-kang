@@ -206,7 +206,7 @@ static void pci_proc_init(void)
 }
 #endif /* CONFIG_PROC_FS && PCI_COUNTERS */
 
-static DEFINE_SPINLOCK(bpci_lock);
+DEFINE_SPINLOCK(bpci_lock);
 
 /*****************************************************************************
  *

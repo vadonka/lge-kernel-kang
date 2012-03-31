@@ -17,7 +17,9 @@
 #include <linux/serial.h>
 #include <linux/tty.h>
 #include <linux/serial_8250.h>
+#include <linux/slab.h>
 #include <linux/i2c-gpio.h>
+
 #include <asm/types.h>
 #include <asm/setup.h>
 #include <asm/memory.h>
@@ -26,9 +28,6 @@
 #include <asm/irq.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/flash.h>
-
-#define AVILA_SDA_PIN	7
-#define AVILA_SCL_PIN	6
 
 static struct flash_platform_data avila_flash_data = {
 	.map_name	= "cfi_probe",

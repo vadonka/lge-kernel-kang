@@ -13,6 +13,7 @@
 #include <linux/linkage.h>
 #include <linux/init.h>
 #include <asm/cache.h>
+#include <asm/lowcore.h>
 #include <asm/errno.h>
 #include <asm/ptrace.h>
 #include <asm/thread_info.h>
@@ -964,7 +965,7 @@ cleanup_critical:
 	clc	4(4,%r12),BASED(cleanup_table_io_work_loop)
 	bl	BASED(0f)
 	clc	4(4,%r12),BASED(cleanup_table_io_work_loop+4)
-	bl	BASED(cleanup_io_work_loop)
+	bl	BASED(cleanup_io_return)
 0:
 	br	%r14
 
@@ -1038,12 +1039,6 @@ cleanup_sysc_leave_insn:
 	.long	sysc_done - 8 + 0x80000000
 
 cleanup_io_return:
-	mvc	__LC_RETURN_PSW(4),0(%r12)
-	mvc	__LC_RETURN_PSW+4(4),BASED(cleanup_table_io_return)
-	la	%r12,__LC_RETURN_PSW
-	br	%r14
-
-cleanup_io_work_loop:
 	mvc	__LC_RETURN_PSW(4),0(%r12)
 	mvc	__LC_RETURN_PSW+4(4),BASED(cleanup_table_io_work_loop)
 	la	%r12,__LC_RETURN_PSW

@@ -45,14 +45,12 @@ static int __platform_pm_runtime_resume(struct platform_device *pdev)
 
 	dev_dbg(d, "__platform_pm_runtime_resume() [%d]\n", hwblk);
 
-	if (d->driver) {
+	if (d->driver && d->driver->pm && d->driver->pm->runtime_resume) {
 		hwblk_enable(hwblk_info, hwblk);
 		ret = 0;
 
 		if (test_bit(PDEV_ARCHDATA_FLAG_SUSP, &ad->flags)) {
-			if (d->driver->pm && d->driver->pm->runtime_resume)
-				ret = d->driver->pm->runtime_resume(d);
-
+			ret = d->driver->pm->runtime_resume(d);
 			if (!ret)
 				clear_bit(PDEV_ARCHDATA_FLAG_SUSP, &ad->flags);
 			else
@@ -75,15 +73,12 @@ static int __platform_pm_runtime_suspend(struct platform_device *pdev)
 
 	dev_dbg(d, "__platform_pm_runtime_suspend() [%d]\n", hwblk);
 
-	if (d->driver) {
+	if (d->driver && d->driver->pm && d->driver->pm->runtime_suspend) {
 		BUG_ON(!test_bit(PDEV_ARCHDATA_FLAG_IDLE, &ad->flags));
-		ret = 0;
 
-		if (d->driver->pm && d->driver->pm->runtime_suspend) {
-			hwblk_enable(hwblk_info, hwblk);
-			ret = d->driver->pm->runtime_suspend(d);
-			hwblk_disable(hwblk_info, hwblk);
-		}
+		hwblk_enable(hwblk_info, hwblk);
+		ret = d->driver->pm->runtime_suspend(d);
+		hwblk_disable(hwblk_info, hwblk);
 
 		if (!ret) {
 			set_bit(PDEV_ARCHDATA_FLAG_SUSP, &ad->flags);

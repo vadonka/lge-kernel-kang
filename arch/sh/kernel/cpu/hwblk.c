@@ -1,5 +1,6 @@
 #include <linux/clk.h>
 #include <linux/compiler.h>
+#include <linux/slab.h>
 #include <linux/io.h>
 #include <linux/spinlock.h>
 #include <asm/suspend.h>

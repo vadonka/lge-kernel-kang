@@ -108,10 +108,7 @@ struct mce_log {
 #define K8_MCE_THRESHOLD_BANK_5    (MCE_THRESHOLD_BASE + 5 * 9)
 #define K8_MCE_THRESHOLD_DRAM_ECC  (MCE_THRESHOLD_BANK_4 + 0)
 
-
 #ifdef __KERNEL__
-
-extern struct atomic_notifier_head x86_mce_decoder_chain;
 
 #include <linux/percpu.h>
 #include <linux/init.h>
@@ -121,11 +118,9 @@ extern int mce_disabled;
 extern int mce_p5_enabled;
 
 #ifdef CONFIG_X86_MCE
-int mcheck_init(void);
-void mcheck_cpu_init(struct cpuinfo_x86 *c);
+void mcheck_init(struct cpuinfo_x86 *c);
 #else
-static inline int mcheck_init(void) { return 0; }
-static inline void mcheck_cpu_init(struct cpuinfo_x86 *c) {}
+static inline void mcheck_init(struct cpuinfo_x86 *c) {}
 #endif
 
 #ifdef CONFIG_X86_ANCIENT_MCE

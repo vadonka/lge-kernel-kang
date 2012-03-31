@@ -13,6 +13,7 @@
 #include <linux/list.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
+#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/sysdev.h>
 #include <linux/amba/bus.h>
@@ -20,7 +21,6 @@
 #include <linux/amba/clcd.h>
 #include <linux/amba/mmci.h>
 #include <linux/io.h>
-#include <linux/gfp.h>
 
 #include <asm/clkdev.h>
 #include <mach/clkdev.h>
@@ -558,7 +558,9 @@ static void __init intcp_init(void)
 {
 	int i;
 
-	clkdev_add_table(cp_lookups, ARRAY_SIZE(cp_lookups));
+	for (i = 0; i < ARRAY_SIZE(cp_lookups); i++)
+		clkdev_add(&cp_lookups[i]);
+
 	platform_add_devices(intcp_devs, ARRAY_SIZE(intcp_devs));
 
 	for (i = 0; i < ARRAY_SIZE(amba_devs); i++) {

@@ -127,6 +127,9 @@ static inline int dma_supported(struct device *dev, u64 mask)
 	return dma_ops->dma_supported(dev, mask);
 }
 
+/* We have our own implementation of pci_set_dma_mask() */
+#define HAVE_ARCH_PCI_SET_DMA_MASK
+
 static inline int dma_set_mask(struct device *dev, u64 dma_mask)
 {
 	struct dma_map_ops *dma_ops = get_dma_ops(dev);
@@ -194,7 +197,7 @@ static inline bool dma_capable(struct device *dev, dma_addr_t addr, size_t size)
 	if (!dev->dma_mask)
 		return 0;
 
-	return addr + size - 1 <= *dev->dma_mask;
+	return addr + size <= *dev->dma_mask;
 }
 
 static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)

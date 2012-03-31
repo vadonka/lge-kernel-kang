@@ -13,13 +13,12 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>
 
-#include <plat/iommu.h>
-#include <plat/iovmm.h>
+#include <mach/iommu.h>
+#include <mach/iovmm.h>
 
 #include "iopgtable.h"
 

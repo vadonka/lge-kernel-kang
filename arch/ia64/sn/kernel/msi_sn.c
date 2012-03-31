@@ -11,7 +11,6 @@
 #include <linux/pci.h>
 #include <linux/cpumask.h>
 #include <linux/msi.h>
-#include <linux/slab.h>
 
 #include <asm/sn/addrs.h>
 #include <asm/sn/intr.h>

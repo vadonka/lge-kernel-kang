@@ -100,7 +100,7 @@ const struct of_device_id mpc52xx_pci_ids[] __initdata = {
 };
 
 /* ======================================================================== */
-/* PCI configuration access                                                 */
+/* PCI configuration acess                                                  */
 /* ======================================================================== */
 
 static int

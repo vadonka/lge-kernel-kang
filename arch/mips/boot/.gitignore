@@ -1,5 +1,4 @@
 mkboot
 elf2ecoff
-vmlinux.*
 zImage
 zImage.tmp

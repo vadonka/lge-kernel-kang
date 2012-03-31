@@ -14,6 +14,7 @@
 #include <linux/sched.h>
 #include <linux/console.h>
 #include <linux/init.h>
+#include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/major.h>
 #include <linux/param.h>
@@ -195,7 +196,7 @@ static const struct file_operations rs_proc_fops = {
 	.release	= single_release,
 };
 
-static const struct tty_operations serial_ops = {
+static struct tty_operations serial_ops = {
 	.open = rs_open,
 	.close = rs_close,
 	.write = rs_write,

@@ -1,9 +1,9 @@
 /*
  * Loongson2 performance counter driver for oprofile
  *
- * Copyright (C) 2009 Lemote Inc.
+ * Copyright (C) 2009 Lemote Inc. & Insititute of Computing Technology
  * Author: Yanhua <yanh@lemote.com>
- * Author: Wu Zhangjin <wuzhangjin@gmail.com>
+ * Author: Wu Zhangjin <wuzj@lemote.com>
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -46,6 +46,8 @@ static struct loongson2_register_config {
 	unsigned long long reset_counter2;
 	int cnt1_enabled, cnt2_enabled;
 } reg;
+
+DEFINE_SPINLOCK(sample_lock);
 
 static char *oprofid = "LoongsonPerf";
 static irqreturn_t loongson2_perfcount_handler(int irq, void *dev_id);
@@ -113,6 +115,7 @@ static irqreturn_t loongson2_perfcount_handler(int irq, void *dev_id)
 	uint64_t counter, counter1, counter2;
 	struct pt_regs *regs = get_irq_regs();
 	int enabled;
+	unsigned long flags;
 
 	/*
 	 * LOONGSON2 defines two 32-bit performance counters.
@@ -122,9 +125,6 @@ static irqreturn_t loongson2_perfcount_handler(int irq, void *dev_id)
 	 */
 
 	/* Check whether the irq belongs to me */
-	enabled = read_c0_perfctrl() & LOONGSON2_PERFCNT_INT_EN;
-	if (!enabled)
-		return IRQ_NONE;
 	enabled = reg.cnt1_enabled | reg.cnt2_enabled;
 	if (!enabled)
 		return IRQ_NONE;
@@ -132,6 +132,8 @@ static irqreturn_t loongson2_perfcount_handler(int irq, void *dev_id)
 	counter = read_c0_perfcnt();
 	counter1 = counter & 0xffffffff;
 	counter2 = counter >> 32;
+
+	spin_lock_irqsave(&sample_lock, flags);
 
 	if (counter1 & LOONGSON2_PERFCNT_OVERFLOW) {
 		if (reg.cnt1_enabled)
@@ -143,6 +145,8 @@ static irqreturn_t loongson2_perfcount_handler(int irq, void *dev_id)
 			oprofile_add_sample(regs, 1);
 		counter2 = reg.reset_counter2;
 	}
+
+	spin_unlock_irqrestore(&sample_lock, flags);
 
 	write_c0_perfcnt((counter2 << 32) | counter1);
 

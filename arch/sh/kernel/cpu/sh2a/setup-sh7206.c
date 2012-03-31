@@ -133,63 +133,37 @@ static struct intc_mask_reg mask_registers[] __initdata = {
 static DECLARE_INTC_DESC(intc_desc, "sh7206", vectors, groups,
 			 mask_registers, prio_registers, NULL);
 
-static struct plat_sci_port scif0_platform_data = {
-	.mapbase	= 0xfffe8000,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 240, 240, 240, 240 },
+static struct plat_sci_port sci_platform_data[] = {
+	{
+		.mapbase	= 0xfffe8000,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 240, 240, 240, 240 },
+	}, {
+		.mapbase	= 0xfffe8800,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 244, 244, 244, 244 },
+	}, {
+		.mapbase	= 0xfffe9000,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 248, 248, 248, 248 },
+	}, {
+		.mapbase	= 0xfffe9800,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 252, 252, 252, 252 },
+	}, {
+		.flags = 0,
+	}
 };
 
-static struct platform_device scif0_device = {
+static struct platform_device sci_device = {
 	.name		= "sh-sci",
-	.id		= 0,
+	.id		= -1,
 	.dev		= {
-		.platform_data	= &scif0_platform_data,
-	},
-};
-
-static struct plat_sci_port scif1_platform_data = {
-	.mapbase	= 0xfffe8800,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 244, 244, 244, 244 },
-};
-
-static struct platform_device scif1_device = {
-	.name		= "sh-sci",
-	.id		= 1,
-	.dev		= {
-		.platform_data	= &scif1_platform_data,
-	},
-};
-
-static struct plat_sci_port scif2_platform_data = {
-	.mapbase	= 0xfffe9000,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 248, 248, 248, 248 },
-};
-
-static struct platform_device scif2_device = {
-	.name		= "sh-sci",
-	.id		= 2,
-	.dev		= {
-		.platform_data	= &scif2_platform_data,
-	},
-};
-
-static struct plat_sci_port scif3_platform_data = {
-	.mapbase	= 0xfffe9800,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 252, 252, 252, 252 },
-};
-
-static struct platform_device scif3_device = {
-	.name		= "sh-sci",
-	.id		= 3,
-	.dev		= {
-		.platform_data	= &scif3_platform_data,
+		.platform_data	= sci_platform_data,
 	},
 };
 
@@ -351,10 +325,7 @@ static struct platform_device mtu2_2_device = {
 };
 
 static struct platform_device *sh7206_devices[] __initdata = {
-	&scif0_device,
-	&scif1_device,
-	&scif2_device,
-	&scif3_device,
+	&sci_device,
 	&cmt0_device,
 	&cmt1_device,
 	&mtu2_0_device,
@@ -375,10 +346,6 @@ void __init plat_irq_setup(void)
 }
 
 static struct platform_device *sh7206_early_devices[] __initdata = {
-	&scif0_device,
-	&scif1_device,
-	&scif2_device,
-	&scif3_device,
 	&cmt0_device,
 	&cmt1_device,
 	&mtu2_0_device,

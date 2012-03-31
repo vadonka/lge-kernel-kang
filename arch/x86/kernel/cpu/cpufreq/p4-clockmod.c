@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/smp.h>
 #include <linux/cpufreq.h>
+#include <linux/slab.h>
 #include <linux/cpumask.h>
 #include <linux/timex.h>
 

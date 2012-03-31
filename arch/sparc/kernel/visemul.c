@@ -5,7 +5,6 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/thread_info.h>
-#include <linux/perf_event.h>
 
 #include <asm/ptrace.h>
 #include <asm/pstate.h>
@@ -801,8 +800,6 @@ int vis_emul(struct pt_regs *regs, unsigned int insn)
 	unsigned int opf;
 
 	BUG_ON(regs->tstate & TSTATE_PRIV);
-
-	perf_sw_event(PERF_COUNT_SW_EMULATION_FAULTS, 1, 0, regs, 0);
 
 	if (test_thread_flag(TIF_32BIT))
 		pc = (u32)pc;

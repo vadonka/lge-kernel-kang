@@ -1,3 +1,5 @@
+# arch/arm/mach-s3c2412/Kconfig
+#
 # Copyright 2007 Simtec Electronics
 #
 # Licensed under GPLv2
@@ -88,4 +90,6 @@ config MACH_VSTMS
 	help
 	  Say Y here if you are using an VSTMS board
 
+
 endmenu
+

@@ -1,7 +1,3 @@
-/*
- * arch/arm/mach-ep93xx/include/mach/dma.h
- */
-
 #ifndef __ASM_ARCH_DMA_H
 #define __ASM_ARCH_DMA_H
 

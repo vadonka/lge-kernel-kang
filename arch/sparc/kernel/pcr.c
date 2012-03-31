@@ -8,7 +8,6 @@
 #include <linux/irq.h>
 
 #include <linux/perf_event.h>
-#include <linux/ftrace.h>
 
 #include <asm/pil.h>
 #include <asm/pcr.h>
@@ -35,7 +34,7 @@ unsigned int picl_shift;
  * Therefore in such situations we defer the work by signalling
  * a lower level cpu IRQ.
  */
-void __irq_entry deferred_pcr_work_irq(int irq, struct pt_regs *regs)
+void deferred_pcr_work_irq(int irq, struct pt_regs *regs)
 {
 	struct pt_regs *old_regs;
 

@@ -11,7 +11,6 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <asm/ebcdic.h>
 #include <asm/sysinfo.h>
 #include <asm/cpcmd.h>

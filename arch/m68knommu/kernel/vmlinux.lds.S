@@ -8,8 +8,6 @@
  */
 
 #include <asm-generic/vmlinux.lds.h>
-#include <asm/page.h>
-#include <asm/thread_info.h>
 
 #if defined(CONFIG_RAMKERNEL)
 #define	RAM_START	CONFIG_KERNELBASE
@@ -17,7 +15,7 @@
 #define	TEXT		ram
 #define	DATA		ram
 #define	INIT		ram
-#define	BSSS		ram
+#define	BSS		ram
 #endif
 #if defined(CONFIG_ROMKERNEL) || defined(CONFIG_HIMEMKERNEL)
 #define	RAM_START	CONFIG_RAMBASE
@@ -29,7 +27,7 @@
 #define	TEXT		rom
 #define	DATA		ram
 #define	INIT		ram
-#define	BSSS		ram
+#define	BSS		ram
 #endif
 
 #ifndef DATA_ADDR
@@ -149,19 +147,40 @@ SECTIONS {
 		. = ALIGN(4);
 		_sdata = . ;
 		DATA_DATA
-		CACHELINE_ALIGNED_DATA(32)
-		INIT_TASK_DATA(THREAD_SIZE)
+		. = ALIGN(32);
+		*(.data.cacheline_aligned)
+		. = ALIGN(8192) ;
+		*(.data.init_task)
 		_edata = . ;
 	} > DATA
 
-	.init.text : {
-		. = ALIGN(PAGE_SIZE);
+	.init : {
+		. = ALIGN(4096);
 		__init_begin = .;
-	} > INIT
-	INIT_TEXT_SECTION(PAGE_SIZE) > INIT
-	INIT_DATA_SECTION(16) > INIT
-	.init.data : {
-		. = ALIGN(PAGE_SIZE);
+		_sinittext = .;
+		INIT_TEXT
+		_einittext = .;
+		INIT_DATA
+		. = ALIGN(16);
+		__setup_start = .;
+		*(.init.setup)
+		__setup_end = .;
+		__initcall_start = .;
+		INITCALLS
+		__initcall_end = .;
+		__con_initcall_start = .;
+		*(.con_initcall.init)
+		__con_initcall_end = .;
+		__security_initcall_start = .;
+		*(.security_initcall.init)
+		__security_initcall_end = .;
+#ifdef CONFIG_BLK_DEV_INITRD
+		. = ALIGN(4);
+		__initramfs_start = .;
+		*(.init.ramfs)
+		__initramfs_end = .;
+#endif
+		. = ALIGN(4096);
 		__init_end = .;
 	} > INIT
 
@@ -173,7 +192,7 @@ SECTIONS {
 		. = ALIGN(4) ;
 		_ebss = . ;
 	 	_end = . ;
-	} > BSSS
+	} > BSS
 
 	DISCARDS
 }

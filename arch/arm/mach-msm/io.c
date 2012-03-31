@@ -42,9 +42,6 @@ static struct map_desc msm_io_desc[] __initdata = {
 	MSM_DEVICE(GPIO1),
 	MSM_DEVICE(GPIO2),
 	MSM_DEVICE(CLK_CTL),
-#ifdef CONFIG_MSM_DEBUG_UART
-	MSM_DEVICE(DEBUG_UART),
-#endif
 	{
 		.virtual =  (unsigned long) MSM_SHARED_RAM_BASE,
 		.pfn =      __phys_to_pfn(MSM_SHARED_RAM_PHYS),
@@ -76,6 +73,5 @@ __msm_ioremap(unsigned long phys_addr, size_t size, unsigned int mtype)
 			mtype = MT_DEVICE_NONSHARED;
 	}
 
-	return __arm_ioremap_caller(phys_addr, size, mtype,
-		__builtin_return_address(0));
+	return __arm_ioremap(phys_addr, size, mtype);
 }

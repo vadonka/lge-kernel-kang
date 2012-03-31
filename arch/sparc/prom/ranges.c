@@ -87,6 +87,8 @@ void __init prom_ranges_init(void)
 
 	if(num_obio_ranges)
 		prom_printf("PROMLIB: obio_ranges %d\n", num_obio_ranges);
+
+	return;
 }
 
 void

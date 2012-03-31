@@ -11,7 +11,7 @@
  * published by the Free Software Foundation.
  */
 
-		.macro	addruart, rx, tmp
+		.macro	addruart, rx
 		mrc	p15, 0, \rx, c1, c0
 		tst	\rx, #1			@ mmu enabled?
 		moveq	\rx, #0xff000000	@ physical

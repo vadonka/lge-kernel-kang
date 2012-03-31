@@ -18,23 +18,22 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/physmap.h>
 #include <linux/input.h>
-#include <linux/smc91x.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
+#include <asm/mach/flash.h>
 #include <asm/mach/map.h>
 
-#include <plat/tc.h>
+#include <mach/tc.h>
 #include <mach/gpio.h>
-#include <plat/mux.h>
-#include <plat/flash.h>
-#include <plat/fpga.h>
-#include <plat/keypad.h>
-#include <plat/common.h>
-#include <plat/board.h>
+#include <mach/mux.h>
+#include <mach/fpga.h>
+#include <mach/nand.h>
+#include <mach/keypad.h>
+#include <mach/common.h>
+#include <mach/board.h>
 
 /* fsample is pretty close to p2-sample */
 
@@ -101,12 +100,6 @@ static int fsample_keymap[] = {
 	0
 };
 
-static struct smc91x_platdata smc91x_info = {
-	.flags	= SMC91X_USE_16BIT | SMC91X_NOWAIT,
-	.leda	= RPC_LED_100_10,
-	.ledb	= RPC_LED_TX_RX,
-};
-
 static struct resource smc91x_resources[] = {
 	[0] = {
 		.start	= H2P2_DBG_FPGA_ETHR_START,	/* Physical */
@@ -114,7 +107,7 @@ static struct resource smc91x_resources[] = {
 		.flags	= IORESOURCE_MEM,
 	},
 	[1] = {
-		.start	= INT_7XX_MPU_EXT_NIRQ,
+		.start	= INT_730_MPU_EXT_NIRQ,
 		.end	= 0,
 		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHEDGE,
 	},
@@ -151,9 +144,9 @@ static struct mtd_partition nor_partitions[] = {
 	},
 };
 
-static struct physmap_flash_data nor_data = {
+static struct flash_platform_data nor_data = {
+	.map_name	= "cfi_probe",
 	.width		= 2,
-	.set_vpp	= omap1_set_vpp,
 	.parts		= nor_partitions,
 	.nr_parts	= ARRAY_SIZE(nor_partitions),
 };
@@ -165,7 +158,7 @@ static struct resource nor_resource = {
 };
 
 static struct platform_device nor_device = {
-	.name		= "physmap-flash",
+	.name		= "omapflash",
 	.id		= 0,
 	.dev		= {
 		.platform_data	= &nor_data,
@@ -174,40 +167,8 @@ static struct platform_device nor_device = {
 	.resource	= &nor_resource,
 };
 
-static void nand_cmd_ctl(struct mtd_info *mtd, int cmd,	unsigned int ctrl)
-{
-	struct nand_chip *this = mtd->priv;
-	unsigned long mask;
-
-	if (cmd == NAND_CMD_NONE)
-		return;
-
-	mask = (ctrl & NAND_CLE) ? 0x02 : 0;
-	if (ctrl & NAND_ALE)
-		mask |= 0x04;
-	writeb(cmd, (unsigned long)this->IO_ADDR_W | mask);
-}
-
-#define FSAMPLE_NAND_RB_GPIO_PIN	62
-
-static int nand_dev_ready(struct mtd_info *mtd)
-{
-	return gpio_get_value(FSAMPLE_NAND_RB_GPIO_PIN);
-}
-
-static const char *part_probes[] = { "cmdlinepart", NULL };
-
-static struct platform_nand_data nand_data = {
-	.chip	= {
-		.nr_chips		= 1,
-		.chip_offset		= 0,
-		.options		= NAND_SAMSUNG_LP_OPTIONS,
-		.part_probe_types	= part_probes,
-	},
-	.ctrl	= {
-		.cmd_ctrl	= nand_cmd_ctl,
-		.dev_ready	= nand_dev_ready,
-	},
+static struct omap_nand_platform_data nand_data = {
+	.options	= NAND_SAMSUNG_LP_OPTIONS,
 };
 
 static struct resource nand_resource = {
@@ -217,7 +178,7 @@ static struct resource nand_resource = {
 };
 
 static struct platform_device nand_device = {
-	.name		= "gen_nand",
+	.name		= "omapnand",
 	.id		= 0,
 	.dev		= {
 		.platform_data	= &nand_data,
@@ -229,17 +190,14 @@ static struct platform_device nand_device = {
 static struct platform_device smc91x_device = {
 	.name		= "smc91x",
 	.id		= 0,
-	.dev	= {
-		.platform_data	= &smc91x_info,
-	},
 	.num_resources	= ARRAY_SIZE(smc91x_resources),
 	.resource	= smc91x_resources,
 };
 
 static struct resource kp_resources[] = {
 	[0] = {
-		.start	= INT_7XX_MPUIO_KEYPAD,
-		.end	= INT_7XX_MPUIO_KEYPAD,
+		.start	= INT_730_MPUIO_KEYPAD,
+		.end	= INT_730_MPUIO_KEYPAD,
 		.flags	= IORESOURCE_IRQ,
 	},
 };
@@ -275,6 +233,13 @@ static struct platform_device *devices[] __initdata = {
 	&lcd_device,
 };
 
+#define P2_NAND_RB_GPIO_PIN	62
+
+static int nand_dev_ready(struct omap_nand_platform_data *data)
+{
+	return gpio_get_value(P2_NAND_RB_GPIO_PIN);
+}
+
 static struct omap_lcd_config fsample_lcd_config __initdata = {
 	.ctrl_name	= "internal",
 };
@@ -285,9 +250,9 @@ static struct omap_board_config_kernel fsample_config[] = {
 
 static void __init omap_fsample_init(void)
 {
-	if (gpio_request(FSAMPLE_NAND_RB_GPIO_PIN, "NAND ready") < 0)
+	if (gpio_request(P2_NAND_RB_GPIO_PIN, "NAND ready") < 0)
 		BUG();
-	gpio_direction_input(FSAMPLE_NAND_RB_GPIO_PIN);
+	nand_data.dev_ready = nand_dev_ready;
 
 	omap_cfg_reg(L3_1610_FLASH_CS2B_OE);
 	omap_cfg_reg(M8_1610_FLASH_CS2B_WE);
@@ -344,7 +309,7 @@ static void __init omap_fsample_map_io(void)
 	/*
 	 * Hold GSM Reset until needed
 	 */
-	omap_writew(omap_readw(OMAP7XX_DSP_M_CTL) & ~1, OMAP7XX_DSP_M_CTL);
+	omap_writew(omap_readw(OMAP730_DSP_M_CTL) & ~1, OMAP730_DSP_M_CTL);
 
 	/*
 	 * UARTs -> done automagically by 8250 driver
@@ -355,21 +320,21 @@ static void __init omap_fsample_map_io(void)
 	 */
 
 	/* Flash: CS0 timings setup */
-	omap_writel(0x0000fff3, OMAP7XX_FLASH_CFG_0);
-	omap_writel(0x00000088, OMAP7XX_FLASH_ACFG_0);
+	omap_writel(0x0000fff3, OMAP730_FLASH_CFG_0);
+	omap_writel(0x00000088, OMAP730_FLASH_ACFG_0);
 
 	/*
 	 * Ethernet support through the debug board
 	 * CS1 timings setup
 	 */
-	omap_writel(0x0000fff3, OMAP7XX_FLASH_CFG_1);
-	omap_writel(0x00000000, OMAP7XX_FLASH_ACFG_1);
+	omap_writel(0x0000fff3, OMAP730_FLASH_CFG_1);
+	omap_writel(0x00000000, OMAP730_FLASH_ACFG_1);
 
 	/*
 	 * Configure MPU_EXT_NIRQ IO in IO_CONF9 register,
 	 * It is used as the Ethernet controller interrupt
 	 */
-	omap_writel(omap_readl(OMAP7XX_IO_CONF_9) & 0x1FFFFFFF, OMAP7XX_IO_CONF_9);
+	omap_writel(omap_readl(OMAP730_IO_CONF_9) & 0x1FFFFFFF, OMAP730_IO_CONF_9);
 }
 
 MACHINE_START(OMAP_FSAMPLE, "OMAP730 F-Sample")

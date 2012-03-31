@@ -62,6 +62,12 @@ unsigned int boot_cpu_physical_apicid = -1U;
 
 /*
  * The highest APIC ID seen during enumeration.
+ *
+ * On AMD, this determines the messaging protocol we can use: if all APIC IDs
+ * are in the 0 ... 7 range, then we can use logical addressing which
+ * has some performance advantages (better broadcasting).
+ *
+ * If there's an APIC ID above 8, we use physical addressing.
  */
 unsigned int max_physical_apicid;
 
@@ -236,13 +242,28 @@ static int modern_apic(void)
 }
 
 /*
- * right after this call apic become NOOP driven
- * so apic->write/read doesn't do anything
+ * bare function to substitute write operation
+ * and it's _that_ fast :)
+ */
+static void native_apic_write_dummy(u32 reg, u32 v)
+{
+	WARN_ON_ONCE(cpu_has_apic && !disable_apic);
+}
+
+static u32 native_apic_read_dummy(u32 reg)
+{
+	WARN_ON_ONCE((cpu_has_apic && !disable_apic));
+	return 0;
+}
+
+/*
+ * right after this call apic->write/read doesn't do anything
+ * note that there is no restore operation it works one way
  */
 void apic_disable(void)
 {
-	pr_info("APIC: switched to apic NOOP\n");
-	apic = &apic_noop;
+	apic->read = native_apic_read_dummy;
+	apic->write = native_apic_write_dummy;
 }
 
 void native_apic_wait_icr_idle(void)
@@ -439,7 +460,7 @@ static void lapic_timer_setup(enum clock_event_mode mode,
 		v = apic_read(APIC_LVTT);
 		v |= (APIC_LVT_MASKED | LOCAL_TIMER_VECTOR);
 		apic_write(APIC_LVTT, v);
-		apic_write(APIC_TMICT, 0);
+		apic_write(APIC_TMICT, 0xffffffff);
 		break;
 	case CLOCK_EVT_MODE_RESUME:
 		/* Nothing to do here */
@@ -582,7 +603,7 @@ calibrate_by_pmtimer(long deltapm, long *delta, long *deltatsc)
 		res = (((u64)(*deltatsc)) * pm_100ms);
 		do_div(res, deltapm);
 		apic_printk(APIC_VERBOSE, "TSC delta adjusted to "
-					  "PM-Timer: %lu (%ld)\n",
+					  "PM-Timer: %lu (%ld) \n",
 					(unsigned long)res, *deltatsc);
 		*deltatsc = (long)res;
 	}
@@ -642,7 +663,7 @@ static int __init calibrate_APIC_clock(void)
 	calibration_result = (delta * APIC_DIVISOR) / LAPIC_CAL_LOOPS;
 
 	apic_printk(APIC_VERBOSE, "..... delta %ld\n", delta);
-	apic_printk(APIC_VERBOSE, "..... mult: %u\n", lapic_clockevent.mult);
+	apic_printk(APIC_VERBOSE, "..... mult: %ld\n", lapic_clockevent.mult);
 	apic_printk(APIC_VERBOSE, "..... calibration result: %u\n",
 		    calibration_result);
 
@@ -1368,7 +1389,7 @@ void enable_x2apic(void)
 
 	rdmsr(MSR_IA32_APICBASE, msr, msr2);
 	if (!(msr & X2APIC_ENABLE)) {
-		printk_once(KERN_INFO "Enabling x2apic\n");
+		pr_info("Enabling x2apic\n");
 		wrmsr(MSR_IA32_APICBASE, msr | X2APIC_ENABLE, 0);
 	}
 }
@@ -1404,11 +1425,14 @@ void __init enable_IR_x2apic(void)
 	unsigned long flags;
 	struct IO_APIC_route_entry **ioapic_entries = NULL;
 	int ret, x2apic_enabled = 0;
-	int dmar_table_init_ret;
+	int dmar_table_init_ret = 0;
 
+#ifdef CONFIG_INTR_REMAP
 	dmar_table_init_ret = dmar_table_init();
-	if (dmar_table_init_ret && !x2apic_supported())
-		return;
+	if (dmar_table_init_ret)
+		pr_debug("dmar_table_init() failed with %d:\n",
+				dmar_table_init_ret);
+#endif
 
 	ioapic_entries = alloc_ioapic_entries();
 	if (!ioapic_entries) {
@@ -1423,7 +1447,7 @@ void __init enable_IR_x2apic(void)
 	}
 
 	local_irq_save(flags);
-	legacy_pic->mask_all();
+	mask_8259A();
 	mask_IO_APIC_setup(ioapic_entries);
 
 	if (dmar_table_init_ret)
@@ -1455,7 +1479,7 @@ void __init enable_IR_x2apic(void)
 nox2apic:
 	if (!ret) /* IR enabling failed */
 		restore_IO_APIC_setup(ioapic_entries);
-	legacy_pic->restore_mask();
+	unmask_8259A();
 	local_irq_restore(flags);
 
 out:
@@ -2053,7 +2077,7 @@ static int lapic_resume(struct sys_device *dev)
 		}
 
 		mask_IO_APIC_setup(ioapic_entries);
-		legacy_pic->mask_all();
+		mask_8259A();
 	}
 
 	if (x2apic_mode)
@@ -2097,7 +2121,7 @@ static int lapic_resume(struct sys_device *dev)
 
 	if (intr_remapping_enabled) {
 		reenable_intr_remapping(x2apic_mode);
-		legacy_pic->restore_mask();
+		unmask_8259A();
 		restore_IO_APIC_setup(ioapic_entries);
 		free_ioapic_entries(ioapic_entries);
 	}

@@ -214,12 +214,12 @@ void __init iSeries_activate_IRQs()
 	unsigned long flags;
 
 	for_each_irq (irq) {
-		struct irq_desc *desc = irq_to_desc(irq);
+		struct irq_desc *desc = get_irq_desc(irq);
 
 		if (desc && desc->chip && desc->chip->startup) {
-			raw_spin_lock_irqsave(&desc->lock, flags);
+			spin_lock_irqsave(&desc->lock, flags);
 			desc->chip->startup(irq);
-			raw_spin_unlock_irqrestore(&desc->lock, flags);
+			spin_unlock_irqrestore(&desc->lock, flags);
 		}
 	}
 }
@@ -273,7 +273,7 @@ static void iseries_end_IRQ(unsigned int irq)
 }
 
 static struct irq_chip iseries_pic = {
-	.name		= "iSeries",
+	.typename	= "iSeries irq controller",
 	.startup	= iseries_startup_IRQ,
 	.shutdown	= iseries_shutdown_IRQ,
 	.unmask		= iseries_enable_IRQ,

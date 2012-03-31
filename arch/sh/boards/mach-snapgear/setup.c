@@ -30,7 +30,7 @@
 
 static irqreturn_t eraseconfig_interrupt(int irq, void *dev_id)
 {
-	(void)__raw_readb(0xb8000000);	/* dummy read */
+	(void)ctrl_inb(0xb8000000);	/* dummy read */
 
 	printk("SnapGear: erase switch interrupt!\n");
 

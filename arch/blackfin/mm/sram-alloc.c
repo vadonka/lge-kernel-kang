@@ -17,7 +17,6 @@
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
 #include <linux/rtc.h>
-#include <linux/slab.h>
 #include <asm/blackfin.h>
 #include <asm/mem_map.h>
 #include "blackfin_sram.h"
@@ -403,7 +402,7 @@ void *l1_data_A_sram_alloc(size_t size)
 	void *addr;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_data_sram_lock, cpu), flags);
 
@@ -412,6 +411,7 @@ void *l1_data_A_sram_alloc(size_t size)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_data_sram_lock, cpu), flags);
+	put_cpu();
 
 	pr_debug("Allocated address in l1_data_A_sram_alloc is 0x%lx+0x%lx\n",
 		 (long unsigned int)addr, size);
@@ -430,7 +430,7 @@ int l1_data_A_sram_free(const void *addr)
 	int ret;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_data_sram_lock, cpu), flags);
 
@@ -439,6 +439,7 @@ int l1_data_A_sram_free(const void *addr)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_data_sram_lock, cpu), flags);
+	put_cpu();
 
 	return ret;
 #else
@@ -454,7 +455,7 @@ void *l1_data_B_sram_alloc(size_t size)
 	void *addr;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_data_sram_lock, cpu), flags);
 
@@ -463,6 +464,7 @@ void *l1_data_B_sram_alloc(size_t size)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_data_sram_lock, cpu), flags);
+	put_cpu();
 
 	pr_debug("Allocated address in l1_data_B_sram_alloc is 0x%lx+0x%lx\n",
 		 (long unsigned int)addr, size);
@@ -481,7 +483,7 @@ int l1_data_B_sram_free(const void *addr)
 	int ret;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_data_sram_lock, cpu), flags);
 
@@ -490,6 +492,7 @@ int l1_data_B_sram_free(const void *addr)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_data_sram_lock, cpu), flags);
+	put_cpu();
 
 	return ret;
 #else
@@ -537,7 +540,7 @@ void *l1_inst_sram_alloc(size_t size)
 	void *addr;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_inst_sram_lock, cpu), flags);
 
@@ -546,6 +549,7 @@ void *l1_inst_sram_alloc(size_t size)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_inst_sram_lock, cpu), flags);
+	put_cpu();
 
 	pr_debug("Allocated address in l1_inst_sram_alloc is 0x%lx+0x%lx\n",
 		 (long unsigned int)addr, size);
@@ -564,7 +568,7 @@ int l1_inst_sram_free(const void *addr)
 	int ret;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1_inst_sram_lock, cpu), flags);
 
@@ -573,6 +577,7 @@ int l1_inst_sram_free(const void *addr)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1_inst_sram_lock, cpu), flags);
+	put_cpu();
 
 	return ret;
 #else
@@ -588,7 +593,7 @@ void *l1sram_alloc(size_t size)
 	void *addr;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1sram_lock, cpu), flags);
 
@@ -597,6 +602,7 @@ void *l1sram_alloc(size_t size)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1sram_lock, cpu), flags);
+	put_cpu();
 
 	return addr;
 }
@@ -608,7 +614,7 @@ void *l1sram_alloc_max(size_t *psize)
 	void *addr;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1sram_lock, cpu), flags);
 
@@ -617,6 +623,7 @@ void *l1sram_alloc_max(size_t *psize)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1sram_lock, cpu), flags);
+	put_cpu();
 
 	return addr;
 }
@@ -628,7 +635,7 @@ int l1sram_free(const void *addr)
 	int ret;
 	unsigned int cpu;
 
-	cpu = smp_processor_id();
+	cpu = get_cpu();
 	/* add mutex operation */
 	spin_lock_irqsave(&per_cpu(l1sram_lock, cpu), flags);
 
@@ -637,6 +644,7 @@ int l1sram_free(const void *addr)
 
 	/* add mutex operation */
 	spin_unlock_irqrestore(&per_cpu(l1sram_lock, cpu), flags);
+	put_cpu();
 
 	return ret;
 }

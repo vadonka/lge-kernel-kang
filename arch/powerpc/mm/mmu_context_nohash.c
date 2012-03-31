@@ -47,7 +47,6 @@
 #include <linux/bootmem.h>
 #include <linux/notifier.h>
 #include <linux/cpu.h>
-#include <linux/slab.h>
 
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
@@ -57,7 +56,7 @@ static unsigned int next_context, nr_free_contexts;
 static unsigned long *context_map;
 static unsigned long *stale_map[NR_CPUS];
 static struct mm_struct **context_mm;
-static DEFINE_RAW_SPINLOCK(context_lock);
+static DEFINE_SPINLOCK(context_lock);
 
 #define CTX_MAP_SIZE	\
 	(sizeof(unsigned long) * (last_context / BITS_PER_LONG + 1))
@@ -122,9 +121,9 @@ static unsigned int steal_context_smp(unsigned int id)
 	/* This will happen if you have more CPUs than available contexts,
 	 * all we can do here is wait a bit and try again
 	 */
-	raw_spin_unlock(&context_lock);
+	spin_unlock(&context_lock);
 	cpu_relax();
-	raw_spin_lock(&context_lock);
+	spin_lock(&context_lock);
 
 	/* This will cause the caller to try again */
 	return MMU_NO_CONTEXT;
@@ -195,7 +194,7 @@ void switch_mmu_context(struct mm_struct *prev, struct mm_struct *next)
 	unsigned long *map;
 
 	/* No lockless fast path .. yet */
-	raw_spin_lock(&context_lock);
+	spin_lock(&context_lock);
 
 	pr_hard("[%d] activating context for mm @%p, active=%d, id=%d",
 		cpu, next, next->context.active, next->context.id);
@@ -279,7 +278,7 @@ void switch_mmu_context(struct mm_struct *prev, struct mm_struct *next)
 	/* Flick the MMU and release lock */
 	pr_hardcont(" -> %d\n", id);
 	set_context(id, next->pgd);
-	raw_spin_unlock(&context_lock);
+	spin_unlock(&context_lock);
 }
 
 /*
@@ -308,7 +307,7 @@ void destroy_context(struct mm_struct *mm)
 
 	WARN_ON(mm->context.active != 0);
 
-	raw_spin_lock_irqsave(&context_lock, flags);
+	spin_lock_irqsave(&context_lock, flags);
 	id = mm->context.id;
 	if (id != MMU_NO_CONTEXT) {
 		__clear_bit(id, context_map);
@@ -319,7 +318,7 @@ void destroy_context(struct mm_struct *mm)
 		context_mm[id] = NULL;
 		nr_free_contexts++;
 	}
-	raw_spin_unlock_irqrestore(&context_lock, flags);
+	spin_unlock_irqrestore(&context_lock, flags);
 }
 
 #ifdef CONFIG_SMP
@@ -354,7 +353,7 @@ static int __cpuinit mmu_context_cpu_notify(struct notifier_block *self,
 		read_lock(&tasklist_lock);
 		for_each_process(p) {
 			if (p->mm)
-				cpumask_clear_cpu(cpu, mm_cpumask(p->mm));
+				cpu_mask_clear_cpu(cpu, mm_cpumask(p->mm));
 		}
 		read_unlock(&tasklist_lock);
 	break;

@@ -94,4 +94,5 @@ void
 prom_putchar(char c)
 {
 	while(prom_nbputchar(c) == -1) ;
+	return;
 }

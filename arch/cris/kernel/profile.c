@@ -2,7 +2,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
-#include <linux/slab.h>
 #include <linux/types.h>
 #include <asm/ptrace.h>
 #include <asm/uaccess.h>

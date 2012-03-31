@@ -114,7 +114,7 @@ static void add_cpus_to_core(struct tl_cpu *tl_cpu, struct core_info *core)
 
 		rcpu = CPU_BITS - 1 - cpu + tl_cpu->origin;
 		for_each_present_cpu(lcpu) {
-			if (cpu_logical_map(lcpu) == rcpu) {
+			if (__cpu_logical_map[lcpu] == rcpu) {
 				cpu_set(lcpu, core->mask);
 				smp_cpu_polarization[lcpu] = tl_cpu->pp;
 			}
@@ -165,11 +165,10 @@ static void tl_to_cores(struct tl_info *info)
 		default:
 			clear_cores();
 			machine_has_topology = 0;
-			goto out;
+			return;
 		}
 		tle = next_tle(tle);
 	}
-out:
 	spin_unlock_irq(&topology_lock);
 }
 

@@ -13,6 +13,7 @@
 #include <linux/bootmem.h>
 #include <linux/mm.h>
 #include <linux/hugetlb.h>
+#include <linux/slab.h>
 #include <linux/initrd.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
@@ -25,7 +26,6 @@
 #include <linux/percpu.h>
 #include <linux/lmb.h>
 #include <linux/mmzone.h>
-#include <linux/gfp.h>
 
 #include <asm/head.h>
 #include <asm/system.h>
@@ -289,13 +289,12 @@ static void flush_dcache(unsigned long pfn)
 	}
 }
 
-void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t *ptep)
+void update_mmu_cache(struct vm_area_struct *vma, unsigned long address, pte_t pte)
 {
 	struct mm_struct *mm;
 	struct tsb *tsb;
 	unsigned long tag, flags;
 	unsigned long tsb_index, tsb_hash_shift;
-	pte_t pte = *ptep;
 
 	if (tlb_type != hypervisor) {
 		unsigned long pfn = pte_pfn(pte);
@@ -2117,7 +2116,7 @@ int __meminit vmemmap_populate(struct page *start, unsigned long nr, int node)
 			       "node=%d entry=%lu/%lu\n", start, block, nr,
 			       node,
 			       addr >> VMEMMAP_CHUNK_SHIFT,
-			       VMEMMAP_SIZE);
+			       VMEMMAP_SIZE >> VMEMMAP_CHUNK_SHIFT);
 		}
 	}
 	return 0;

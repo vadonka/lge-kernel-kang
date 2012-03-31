@@ -11,7 +11,7 @@
  * published by the Free Software Foundation.
  */
 
-		.macro	addruart, rx, tmp
+		.macro	addruart, rx
 		mov	\rx, #0xfe000000	@ physical as well as virtual
 		orr	\rx, \rx, #0x00800000	@ location of the UART
 		.endm

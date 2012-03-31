@@ -44,6 +44,7 @@
 #include <asm/cache.h>
 #include <asm/current.h>
 #include <asm/delay.h>
+#include <asm/ia32.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/machvec.h>
@@ -441,6 +442,10 @@ smp_callin (void)
 	    last_cpuinfo->model != this_cpuinfo->model)
 		calibrate_delay();
 	local_cpu_data->loops_per_jiffy = loops_per_jiffy;
+
+#ifdef CONFIG_IA32_SUPPORT
+	ia32_gdt_init();
+#endif
 
 	/*
 	 * Allow the master to continue.

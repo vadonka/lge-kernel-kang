@@ -16,7 +16,6 @@
 #include <linux/platform_device.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/physmap.h>
 #include <linux/delay.h>
 #include <linux/workqueue.h>
 #include <linux/i2c.h>
@@ -30,17 +29,18 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <asm/mach/flash.h>
 
-#include <plat/control.h>
+#include <mach/control.h>
 #include <mach/gpio.h>
-#include <plat/mux.h>
-#include <plat/usb.h>
-#include <plat/board.h>
-#include <plat/common.h>
-#include <plat/keypad.h>
-#include <plat/menelaus.h>
-#include <plat/dma.h>
-#include <plat/gpmc.h>
+#include <mach/mux.h>
+#include <mach/usb.h>
+#include <mach/board.h>
+#include <mach/common.h>
+#include <mach/keypad.h>
+#include <mach/menelaus.h>
+#include <mach/dma.h>
+#include <mach/gpmc.h>
 
 #define H4_FLASH_CS	0
 #define H4_SMC91X_CS	1
@@ -115,7 +115,8 @@ static struct mtd_partition h4_partitions[] = {
 	}
 };
 
-static struct physmap_flash_data h4_flash_data = {
+static struct flash_platform_data h4_flash_data = {
+	.map_name	= "cfi_probe",
 	.width		= 2,
 	.parts		= h4_partitions,
 	.nr_parts	= ARRAY_SIZE(h4_partitions),
@@ -126,7 +127,7 @@ static struct resource h4_flash_resource = {
 };
 
 static struct platform_device h4_flash_device = {
-	.name		= "physmap-flash",
+	.name		= "omapflash",
 	.id		= 0,
 	.dev		= {
 		.platform_data	= &h4_flash_data,
@@ -369,13 +370,13 @@ static void __init omap_h4_init(void)
 static void __init omap_h4_map_io(void)
 {
 	omap2_set_globals_242x();
-	omap242x_map_common_io();
+	omap2_map_common_io();
 }
 
 MACHINE_START(OMAP_H4, "OMAP2420 H4 board")
 	/* Maintainer: Paul Mundt <paul.mundt@nokia.com> */
 	.phys_io	= 0x48000000,
-	.io_pg_offst	= ((0xfa000000) >> 18) & 0xfffc,
+	.io_pg_offst	= ((0xd8000000) >> 18) & 0xfffc,
 	.boot_params	= 0x80000100,
 	.map_io		= omap_h4_map_io,
 	.init_irq	= omap_h4_init_irq,

@@ -4,7 +4,6 @@
 
 #include <linux/sched.h>
 #include <linux/mm.h>
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
 #include <linux/errno.h>

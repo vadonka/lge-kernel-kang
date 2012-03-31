@@ -1078,7 +1078,7 @@ int sys_debug_setcontext(struct ucontext __user *ctx,
 	int i;
 	unsigned char tmp;
 	unsigned long new_msr = regs->msr;
-#ifdef CONFIG_PPC_ADV_DEBUG_REGS
+#if defined(CONFIG_4xx) || defined(CONFIG_BOOKE)
 	unsigned long new_dbcr0 = current->thread.dbcr0;
 #endif
 
@@ -1087,17 +1087,13 @@ int sys_debug_setcontext(struct ucontext __user *ctx,
 			return -EFAULT;
 		switch (op.dbg_type) {
 		case SIG_DBG_SINGLE_STEPPING:
-#ifdef CONFIG_PPC_ADV_DEBUG_REGS
+#if defined(CONFIG_4xx) || defined(CONFIG_BOOKE)
 			if (op.dbg_value) {
 				new_msr |= MSR_DE;
 				new_dbcr0 |= (DBCR0_IDM | DBCR0_IC);
 			} else {
-				new_dbcr0 &= ~DBCR0_IC;
-				if (!DBCR_ACTIVE_EVENTS(new_dbcr0,
-						current->thread.dbcr1)) {
-					new_msr &= ~MSR_DE;
-					new_dbcr0 &= ~DBCR0_IDM;
-				}
+				new_msr &= ~MSR_DE;
+				new_dbcr0 &= ~(DBCR0_IDM | DBCR0_IC);
 			}
 #else
 			if (op.dbg_value)
@@ -1107,7 +1103,7 @@ int sys_debug_setcontext(struct ucontext __user *ctx,
 #endif
 			break;
 		case SIG_DBG_BRANCH_TRACING:
-#ifdef CONFIG_PPC_ADV_DEBUG_REGS
+#if defined(CONFIG_4xx) || defined(CONFIG_BOOKE)
 			return -EINVAL;
 #else
 			if (op.dbg_value)
@@ -1128,7 +1124,7 @@ int sys_debug_setcontext(struct ucontext __user *ctx,
 	   failure is a problem, anyway, and it's very unlikely unless
 	   the user is really doing something wrong. */
 	regs->msr = new_msr;
-#ifdef CONFIG_PPC_ADV_DEBUG_REGS
+#if defined(CONFIG_4xx) || defined(CONFIG_BOOKE)
 	current->thread.dbcr0 = new_dbcr0;
 #endif
 

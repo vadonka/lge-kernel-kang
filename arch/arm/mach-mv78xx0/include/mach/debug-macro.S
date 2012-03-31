@@ -8,7 +8,7 @@
 
 #include <mach/mv78xx0.h>
 
-	.macro	addruart, rx, tmp
+	.macro	addruart,rx
 	mrc	p15, 0, \rx, c1, c0
 	tst	\rx, #1					@ MMU enabled?
 	ldreq	\rx, =MV78XX0_REGS_PHYS_BASE

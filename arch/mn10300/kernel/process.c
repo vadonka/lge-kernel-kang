@@ -18,6 +18,7 @@
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
+#include <linux/slab.h>
 #include <linux/user.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -25,7 +26,6 @@
 #include <linux/percpu.h>
 #include <linux/err.h>
 #include <linux/fs.h>
-#include <linux/slab.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
@@ -275,12 +275,16 @@ asmlinkage long sys_execve(char __user *name,
 	char *filename;
 	int error;
 
+	lock_kernel();
+
 	filename = getname(name);
 	error = PTR_ERR(filename);
-	if (IS_ERR(filename))
-		return error;
-	error = do_execve(filename, argv, envp, __frame);
-	putname(filename);
+	if (!IS_ERR(filename)) {
+		error = do_execve(filename, argv, envp, __frame);
+		putname(filename);
+	}
+
+	unlock_kernel();
 	return error;
 }
 

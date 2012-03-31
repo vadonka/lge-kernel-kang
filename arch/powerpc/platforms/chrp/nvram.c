@@ -12,6 +12,7 @@
 
 #include <linux/kernel.h>
 #include <linux/init.h>
+#include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <asm/uaccess.h>
 #include <asm/prom.h>

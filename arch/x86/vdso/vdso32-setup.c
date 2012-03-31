@@ -393,6 +393,7 @@ static ctl_table abi_table2[] = {
 
 static ctl_table abi_root_table2[] = {
 	{
+		.ctl_name = CTL_ABI,
 		.procname = "abi",
 		.mode = 0555,
 		.child = abi_table2

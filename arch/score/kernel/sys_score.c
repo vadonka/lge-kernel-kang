@@ -28,7 +28,6 @@
 #include <linux/mm.h>
 #include <linux/mman.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/unistd.h>
 #include <linux/syscalls.h>
 #include <asm/syscalls.h>

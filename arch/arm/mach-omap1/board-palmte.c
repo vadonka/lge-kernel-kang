@@ -23,7 +23,6 @@
 #include <linux/platform_device.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/physmap.h>
 #include <linux/spi/spi.h>
 #include <linux/interrupt.h>
 #include <linux/apm-emulation.h>
@@ -32,17 +31,17 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <asm/mach/flash.h>
 
 #include <mach/gpio.h>
-#include <plat/flash.h>
-#include <plat/mux.h>
-#include <plat/usb.h>
-#include <plat/tc.h>
-#include <plat/dma.h>
-#include <plat/board.h>
-#include <plat/irda.h>
-#include <plat/keypad.h>
-#include <plat/common.h>
+#include <mach/mux.h>
+#include <mach/usb.h>
+#include <mach/tc.h>
+#include <mach/dma.h>
+#include <mach/board.h>
+#include <mach/irda.h>
+#include <mach/keypad.h>
+#include <mach/common.h>
 
 #define PALMTE_USBDETECT_GPIO	0
 #define PALMTE_USB_OR_DC_GPIO	1
@@ -127,9 +126,9 @@ static struct mtd_partition palmte_rom_partitions[] = {
 	},
 };
 
-static struct physmap_flash_data palmte_rom_data = {
+static struct flash_platform_data palmte_rom_data = {
+	.map_name	= "map_rom",
 	.width		= 2,
-	.set_vpp	= omap1_set_vpp,
 	.parts		= palmte_rom_partitions,
 	.nr_parts	= ARRAY_SIZE(palmte_rom_partitions),
 };
@@ -141,7 +140,7 @@ static struct resource palmte_rom_resource = {
 };
 
 static struct platform_device palmte_rom_device = {
-	.name		= "physmap-flash",
+	.name		= "omapflash",
 	.id		= -1,
 	.dev		= {
 		.platform_data	= &palmte_rom_data,

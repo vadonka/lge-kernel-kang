@@ -28,7 +28,6 @@
 #include <linux/console.h>
 #include <linux/pci.h>
 #include <linux/of_platform.h>
-#include <linux/gfp.h>
 
 #include <asm/prom.h>
 #include <asm/system.h>
@@ -72,7 +71,7 @@ static void pas_restart(char *cmd)
 }
 
 #ifdef CONFIG_SMP
-static arch_spinlock_t timebase_lock;
+static raw_spinlock_t timebase_lock;
 static unsigned long timebase;
 
 static void __devinit pas_give_timebase(void)
@@ -81,11 +80,11 @@ static void __devinit pas_give_timebase(void)
 
 	local_irq_save(flags);
 	hard_irq_disable();
-	arch_spin_lock(&timebase_lock);
+	__raw_spin_lock(&timebase_lock);
 	mtspr(SPRN_TBCTL, TBCTL_FREEZE);
 	isync();
 	timebase = get_tb();
-	arch_spin_unlock(&timebase_lock);
+	__raw_spin_unlock(&timebase_lock);
 
 	while (timebase)
 		barrier();
@@ -98,10 +97,10 @@ static void __devinit pas_take_timebase(void)
 	while (!timebase)
 		smp_rmb();
 
-	arch_spin_lock(&timebase_lock);
+	__raw_spin_lock(&timebase_lock);
 	set_tb(timebase >> 32, timebase & 0xffffffff);
 	timebase = 0;
-	arch_spin_unlock(&timebase_lock);
+	__raw_spin_unlock(&timebase_lock);
 }
 
 struct smp_ops_t pas_smp_ops = {

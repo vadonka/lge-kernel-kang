@@ -12,7 +12,7 @@
 #include <linux/interrupt.h>
 #include <asm/reboot_fixups.h>
 #include <asm/msr.h>
-#include <linux/cs5535.h>
+#include <asm/geode.h>
 
 static void cs5530a_warm_reset(struct pci_dev *dev)
 {
@@ -80,7 +80,6 @@ void mach_reboot_fixups(void)
 			continue;
 
 		cur->reboot_fixup(dev);
-		pci_dev_put(dev);
 	}
 }
 

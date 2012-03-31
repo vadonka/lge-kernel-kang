@@ -27,10 +27,18 @@ static int mmcfg_last_accessed_cpu;
  */
 static u32 get_base_addr(unsigned int seg, int bus, unsigned devfn)
 {
-	struct pci_mmcfg_region *cfg = pci_mmconfig_lookup(seg, bus);
+	struct acpi_mcfg_allocation *cfg;
+	int cfg_num;
 
-	if (cfg)
-		return cfg->address;
+	for (cfg_num = 0; cfg_num < pci_mmcfg_config_num; cfg_num++) {
+		cfg = &pci_mmcfg_config[cfg_num];
+		if (cfg->pci_segment == seg &&
+		    (cfg->start_bus_number <= bus) &&
+		    (cfg->end_bus_number >= bus))
+			return cfg->address;
+	}
+
+	/* Fall back to type 0 */
 	return 0;
 }
 
@@ -39,7 +47,7 @@ static u32 get_base_addr(unsigned int seg, int bus, unsigned devfn)
  */
 static void pci_exp_set_dev_base(unsigned int base, int bus, int devfn)
 {
-	u32 dev_base = base | PCI_MMCFG_BUS_OFFSET(bus) | (devfn << 12);
+	u32 dev_base = base | (bus << 20) | (devfn << 12);
 	int cpu = smp_processor_id();
 	if (dev_base != mmcfg_last_accessed_device ||
 	    cpu != mmcfg_last_accessed_cpu) {

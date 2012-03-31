@@ -15,7 +15,6 @@
 #include <linux/fsl_devices.h>
 #include <linux/mdio-bitbang.h>
 #include <linux/of_mdio.h>
-#include <linux/slab.h>
 #include <linux/of_platform.h>
 
 #include <asm/io.h>

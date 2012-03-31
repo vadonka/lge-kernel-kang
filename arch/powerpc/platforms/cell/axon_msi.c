@@ -15,7 +15,6 @@
 #include <linux/msi.h>
 #include <linux/of_platform.h>
 #include <linux/debugfs.h>
-#include <linux/slab.h>
 
 #include <asm/dcr.h>
 #include <asm/machdep.h>
@@ -313,7 +312,7 @@ static struct irq_chip msic_irq_chip = {
 	.mask		= mask_msi_irq,
 	.unmask		= unmask_msi_irq,
 	.shutdown	= unmask_msi_irq,
-	.name		= "AXON-MSI",
+	.typename	= "AXON-MSI",
 };
 
 static int msic_host_map(struct irq_host *h, unsigned int virq,

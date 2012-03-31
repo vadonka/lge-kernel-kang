@@ -95,8 +95,6 @@ static inline unsigned long __xchg_u32(volatile int * m, unsigned int val)
 {
 	__u32 retval;
 
-	smp_mb__before_llsc();
-
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
 		unsigned long dummy;
 
@@ -148,8 +146,6 @@ static inline unsigned long __xchg_u32(volatile int * m, unsigned int val)
 static inline __u64 __xchg_u64(volatile __u64 * m, __u64 val)
 {
 	__u64 retval;
-
-	smp_mb__before_llsc();
 
 	if (kernel_uses_llsc && R10000_LLSC_WAR) {
 		unsigned long dummy;

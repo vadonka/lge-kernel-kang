@@ -4,7 +4,6 @@ OUTPUT_FORMAT(CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT, CONFIG_OUTPUT_FORMAT)
 
 #undef i386
 
-#include <asm/cache.h>
 #include <asm/page_types.h>
 
 #ifdef CONFIG_X86_64
@@ -47,7 +46,7 @@ SECTIONS
 		*(.data.*)
 		_edata = . ;
 	}
-	. = ALIGN(L1_CACHE_BYTES);
+	. = ALIGN(CONFIG_X86_L1_CACHE_BYTES);
 	.bss : {
 		_bss = . ;
 		*(.bss)

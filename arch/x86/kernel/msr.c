@@ -37,7 +37,6 @@
 #include <linux/cpu.h>
 #include <linux/notifier.h>
 #include <linux/uaccess.h>
-#include <linux/gfp.h>
 
 #include <asm/processor.h>
 #include <asm/msr.h>
@@ -173,18 +172,23 @@ static long msr_ioctl(struct file *file, unsigned int ioc, unsigned long arg)
 
 static int msr_open(struct inode *inode, struct file *file)
 {
-	unsigned int cpu;
-	struct cpuinfo_x86 *c;
+	unsigned int cpu = iminor(file->f_path.dentry->d_inode);
+	struct cpuinfo_x86 *c = &cpu_data(cpu);
+	int ret = 0;
 
+	lock_kernel();
 	cpu = iminor(file->f_path.dentry->d_inode);
-	if (cpu >= nr_cpu_ids || !cpu_online(cpu))
-		return -ENXIO;	/* No such CPU */
 
+	if (cpu >= nr_cpu_ids || !cpu_online(cpu)) {
+		ret = -ENXIO;	/* No such CPU */
+		goto out;
+	}
 	c = &cpu_data(cpu);
 	if (!cpu_has(c, X86_FEATURE_MSR))
-		return -EIO;	/* MSR not supported */
-
-	return 0;
+		ret = -EIO;	/* MSR not supported */
+out:
+	unlock_kernel();
+	return ret;
 }
 
 /*

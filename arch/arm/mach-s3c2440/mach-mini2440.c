@@ -288,7 +288,7 @@ static struct s3c2410_platform_nand mini2440_nand_info __initdata = {
 
 /* DM9000AEP 10/100 ethernet controller */
 
-static struct resource mini2440_dm9k_resource[] = {
+static struct resource mini2440_dm9k_resource[] __initdata = {
 	[0] = {
 		.start = MACH_MINI2440_DM9K_BASE,
 		.end   = MACH_MINI2440_DM9K_BASE + 3,
@@ -310,11 +310,11 @@ static struct resource mini2440_dm9k_resource[] = {
  * The DM9000 has no eeprom, and it's MAC address is set by
  * the bootloader before starting the kernel.
  */
-static struct dm9000_plat_data mini2440_dm9k_pdata = {
+static struct dm9000_plat_data mini2440_dm9k_pdata __initdata = {
 	.flags		= (DM9000_PLATF_16BITONLY | DM9000_PLATF_NO_EEPROM),
 };
 
-static struct platform_device mini2440_device_eth = {
+static struct platform_device mini2440_device_eth __initdata = {
 	.name		= "dm9000",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(mini2440_dm9k_resource),
@@ -341,7 +341,7 @@ static struct platform_device mini2440_device_eth = {
  *	|  |  +----+  +----+
  *	  .....
  */
-static struct gpio_keys_button mini2440_buttons[] = {
+static struct gpio_keys_button mini2440_buttons[] __initdata = {
 	{
 		.gpio		= S3C2410_GPG(0),		/* K1 */
 		.code		= KEY_F1,
@@ -384,12 +384,12 @@ static struct gpio_keys_button mini2440_buttons[] = {
 #endif
 };
 
-static struct gpio_keys_platform_data mini2440_button_data = {
+static struct gpio_keys_platform_data mini2440_button_data __initdata = {
 	.buttons	= mini2440_buttons,
 	.nbuttons	= ARRAY_SIZE(mini2440_buttons),
 };
 
-static struct platform_device mini2440_button_device = {
+static struct platform_device mini2440_button_device __initdata = {
 	.name		= "gpio-keys",
 	.id		= -1,
 	.dev		= {
@@ -399,41 +399,41 @@ static struct platform_device mini2440_button_device = {
 
 /* LEDS */
 
-static struct s3c24xx_led_platdata mini2440_led1_pdata = {
+static struct s3c24xx_led_platdata mini2440_led1_pdata __initdata = {
 	.name		= "led1",
 	.gpio		= S3C2410_GPB(5),
 	.flags		= S3C24XX_LEDF_ACTLOW | S3C24XX_LEDF_TRISTATE,
 	.def_trigger	= "heartbeat",
 };
 
-static struct s3c24xx_led_platdata mini2440_led2_pdata = {
+static struct s3c24xx_led_platdata mini2440_led2_pdata __initdata = {
 	.name		= "led2",
 	.gpio		= S3C2410_GPB(6),
 	.flags		= S3C24XX_LEDF_ACTLOW | S3C24XX_LEDF_TRISTATE,
 	.def_trigger	= "nand-disk",
 };
 
-static struct s3c24xx_led_platdata mini2440_led3_pdata = {
+static struct s3c24xx_led_platdata mini2440_led3_pdata __initdata = {
 	.name		= "led3",
 	.gpio		= S3C2410_GPB(7),
 	.flags		= S3C24XX_LEDF_ACTLOW | S3C24XX_LEDF_TRISTATE,
 	.def_trigger	= "mmc0",
 };
 
-static struct s3c24xx_led_platdata mini2440_led4_pdata = {
+static struct s3c24xx_led_platdata mini2440_led4_pdata __initdata = {
 	.name		= "led4",
 	.gpio		= S3C2410_GPB(8),
 	.flags		= S3C24XX_LEDF_ACTLOW | S3C24XX_LEDF_TRISTATE,
 	.def_trigger	= "",
 };
 
-static struct s3c24xx_led_platdata mini2440_led_backlight_pdata = {
+static struct s3c24xx_led_platdata mini2440_led_backlight_pdata __initdata = {
 	.name		= "backlight",
 	.gpio		= S3C2410_GPG(4),
 	.def_trigger	= "backlight",
 };
 
-static struct platform_device mini2440_led1 = {
+static struct platform_device mini2440_led1 __initdata = {
 	.name		= "s3c24xx_led",
 	.id		= 1,
 	.dev		= {
@@ -441,7 +441,7 @@ static struct platform_device mini2440_led1 = {
 	},
 };
 
-static struct platform_device mini2440_led2 = {
+static struct platform_device mini2440_led2 __initdata = {
 	.name		= "s3c24xx_led",
 	.id		= 2,
 	.dev		= {
@@ -449,7 +449,7 @@ static struct platform_device mini2440_led2 = {
 	},
 };
 
-static struct platform_device mini2440_led3 = {
+static struct platform_device mini2440_led3 __initdata = {
 	.name		= "s3c24xx_led",
 	.id		= 3,
 	.dev		= {
@@ -457,7 +457,7 @@ static struct platform_device mini2440_led3 = {
 	},
 };
 
-static struct platform_device mini2440_led4 = {
+static struct platform_device mini2440_led4 __initdata = {
 	.name		= "s3c24xx_led",
 	.id		= 4,
 	.dev		= {
@@ -465,7 +465,7 @@ static struct platform_device mini2440_led4 = {
 	},
 };
 
-static struct platform_device mini2440_led_backlight = {
+static struct platform_device mini2440_led_backlight __initdata = {
 	.name		= "s3c24xx_led",
 	.id		= 5,
 	.dev		= {
@@ -475,14 +475,14 @@ static struct platform_device mini2440_led_backlight = {
 
 /* AUDIO */
 
-static struct s3c24xx_uda134x_platform_data mini2440_audio_pins = {
+static struct s3c24xx_uda134x_platform_data mini2440_audio_pins __initdata = {
 	.l3_clk = S3C2410_GPB(4),
 	.l3_mode = S3C2410_GPB(2),
 	.l3_data = S3C2410_GPB(3),
 	.model = UDA134X_UDA1341
 };
 
-static struct platform_device mini2440_audio = {
+static struct platform_device mini2440_audio __initdata = {
 	.name		= "s3c24xx_uda134x",
 	.id		= 0,
 	.dev		= {
@@ -506,8 +506,9 @@ static struct i2c_board_info mini2440_i2c_devs[] __initdata = {
 };
 
 static struct platform_device *mini2440_devices[] __initdata = {
-	&s3c_device_ohci,
+	&s3c_device_usb,
 	&s3c_device_wdt,
+/*	&s3c_device_adc,*/ /* ADC doesn't like living with touchscreen ! */
 	&s3c_device_i2c0,
 	&s3c_device_rtc,
 	&s3c_device_usbgadget,
@@ -521,6 +522,8 @@ static struct platform_device *mini2440_devices[] __initdata = {
 	&s3c_device_sdi,
 	&s3c_device_iis,
 	&mini2440_audio,
+/*	&s3c_device_timer[0],*/	/* buzzer pwm, no API for it */
+	/* remaining devices are optional */
 };
 
 static void __init mini2440_map_io(void)
@@ -528,6 +531,9 @@ static void __init mini2440_map_io(void)
 	s3c24xx_init_io(mini2440_iodesc, ARRAY_SIZE(mini2440_iodesc));
 	s3c24xx_init_clocks(12000000);
 	s3c24xx_init_uarts(mini2440_uartcfgs, ARRAY_SIZE(mini2440_uartcfgs));
+
+	s3c_device_nand.dev.platform_data = &mini2440_nand_info;
+	s3c_device_sdi.dev.platform_data = &mini2440_mmc_cfg;
 }
 
 /*
@@ -671,12 +677,8 @@ static void __init mini2440_init(void)
 		printk("\n");
 		s3c24xx_fb_set_platdata(&mini2440_fb_info);
 	}
-
 	s3c24xx_udc_set_platdata(&mini2440_udc_cfg);
-	s3c24xx_mci_set_platdata(&mini2440_mmc_cfg);
-	s3c_nand_set_platdata(&mini2440_nand_info);
 	s3c_i2c0_set_platdata(NULL);
-
 	i2c_register_board_info(0, mini2440_i2c_devs,
 				ARRAY_SIZE(mini2440_i2c_devs));
 

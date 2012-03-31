@@ -14,7 +14,7 @@
 #include <mach/hardware.h>
 #include <mach/regs-uart.h>
 
-	.macro	addruart, rx, tmp
+	.macro	addruart, rx
 		mrc	p15, 0, \rx, c1, c0
 		tst	\rx, #1				@ MMU enabled?
 		ldreq	\rx, =KS8695_UART_PA		@ physical base address

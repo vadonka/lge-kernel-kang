@@ -92,7 +92,6 @@ struct mmu_psize_def mmu_psize_defs[MMU_PAGE_COUNT];
 struct hash_pte *htab_address;
 unsigned long htab_size_bytes;
 unsigned long htab_hash_mask;
-EXPORT_SYMBOL_GPL(htab_hash_mask);
 int mmu_linear_psize = MMU_PAGE_4K;
 int mmu_virtual_psize = MMU_PAGE_4K;
 int mmu_vmalloc_psize = MMU_PAGE_4K;
@@ -103,7 +102,6 @@ int mmu_io_psize = MMU_PAGE_4K;
 int mmu_kernel_ssize = MMU_SEGSIZE_256M;
 int mmu_highuser_ssize = MMU_SEGSIZE_256M;
 u16 mmu_slb_size = 64;
-EXPORT_SYMBOL_GPL(mmu_slb_size);
 #ifdef CONFIG_HUGETLB_PAGE
 unsigned int HPAGE_SHIFT;
 #endif
@@ -340,7 +338,7 @@ static int __init htab_dt_scan_page_sizes(unsigned long node,
 			else
 				def->tlbiel = 0;
 
-			DBG(" %d: shift=%02x, sllp=%04lx, avpnm=%08lx, "
+			DBG(" %d: shift=%02x, sllp=%04x, avpnm=%08x, "
 			    "tlbiel=%d, penc=%d\n",
 			    idx, shift, def->sllp, def->avpnm, def->tlbiel,
 			    def->penc);
@@ -483,6 +481,16 @@ static void __init htab_init_page_sizes(void)
 #ifdef CONFIG_HUGETLB_PAGE
 	/* Reserve 16G huge page memory sections for huge pages */
 	of_scan_flat_dt(htab_dt_scan_hugepage_blocks, NULL);
+
+/* Set default large page size. Currently, we pick 16M or 1M depending
+	 * on what is available
+	 */
+	if (mmu_psize_defs[MMU_PAGE_16M].shift)
+		HPAGE_SHIFT = mmu_psize_defs[MMU_PAGE_16M].shift;
+	/* With 4k/4level pagetables, we can't (for now) cope with a
+	 * huge page size < PMD_SIZE */
+	else if (mmu_psize_defs[MMU_PAGE_1M].shift)
+		HPAGE_SHIFT = mmu_psize_defs[MMU_PAGE_1M].shift;
 #endif /* CONFIG_HUGETLB_PAGE */
 }
 
@@ -663,7 +671,7 @@ static void __init htab_initialize(void)
 		base = (unsigned long)__va(lmb.memory.region[i].base);
 		size = lmb.memory.region[i].size;
 
-		DBG("creating mapping for region: %lx..%lx (prot: %lx)\n",
+		DBG("creating mapping for region: %lx..%lx (prot: %x)\n",
 		    base, size, prot);
 
 #ifdef CONFIG_U3_DART
@@ -777,7 +785,7 @@ unsigned int hash_page_do_lazy_icache(unsigned int pp, pte_t pte, int trap)
 	/* page is dirty */
 	if (!test_bit(PG_arch_1, &page->flags) && !PageReserved(page)) {
 		if (trap == 0x400) {
-			flush_dcache_icache_page(page);
+			__flush_dcache_icache(page_address(page));
 			set_bit(PG_arch_1, &page->flags);
 		} else
 			pp |= HPTE_R_N;
@@ -835,9 +843,9 @@ void demote_segment_4k(struct mm_struct *mm, unsigned long addr)
  * Result is 0: full permissions, _PAGE_RW: read-only,
  * _PAGE_USER or _PAGE_USER|_PAGE_RW: no access.
  */
-static int subpage_protection(struct mm_struct *mm, unsigned long ea)
+static int subpage_protection(pgd_t *pgdir, unsigned long ea)
 {
-	struct subpage_prot_table *spt = &mm->context.spt;
+	struct subpage_prot_table *spt = pgd_subpage_prot(pgdir);
 	u32 spp = 0;
 	u32 **sbpm, *sbpp;
 
@@ -865,7 +873,7 @@ static int subpage_protection(struct mm_struct *mm, unsigned long ea)
 }
 
 #else /* CONFIG_PPC_SUBPAGE_PROT */
-static inline int subpage_protection(struct mm_struct *mm, unsigned long ea)
+static inline int subpage_protection(pgd_t *pgdir, unsigned long ea)
 {
 	return 0;
 }
@@ -879,11 +887,10 @@ static inline int subpage_protection(struct mm_struct *mm, unsigned long ea)
  */
 int hash_page(unsigned long ea, unsigned long access, unsigned long trap)
 {
-	pgd_t *pgdir;
+	void *pgdir;
 	unsigned long vsid;
 	struct mm_struct *mm;
 	pte_t *ptep;
-	unsigned hugeshift;
 	const struct cpumask *tmp;
 	int rc, user_region = 0, local = 0;
 	int psize, ssize;
@@ -936,30 +943,29 @@ int hash_page(unsigned long ea, unsigned long access, unsigned long trap)
 	if (user_region && cpumask_equal(mm_cpumask(mm), tmp))
 		local = 1;
 
+#ifdef CONFIG_HUGETLB_PAGE
+	/* Handle hugepage regions */
+	if (HPAGE_SHIFT && mmu_huge_psizes[psize]) {
+		DBG_LOW(" -> huge page !\n");
+		return hash_huge_page(mm, access, ea, vsid, local, trap);
+	}
+#endif /* CONFIG_HUGETLB_PAGE */
+
 #ifndef CONFIG_PPC_64K_PAGES
-	/* If we use 4K pages and our psize is not 4K, then we might
-	 * be hitting a special driver mapping, and need to align the
-	 * address before we fetch the PTE.
-	 *
-	 * It could also be a hugepage mapping, in which case this is
-	 * not necessary, but it's not harmful, either.
+	/* If we use 4K pages and our psize is not 4K, then we are hitting
+	 * a special driver mapping, we need to align the address before
+	 * we fetch the PTE
 	 */
 	if (psize != MMU_PAGE_4K)
 		ea &= ~((1ul << mmu_psize_defs[psize].shift) - 1);
 #endif /* CONFIG_PPC_64K_PAGES */
 
 	/* Get PTE and page size from page tables */
-	ptep = find_linux_pte_or_hugepte(pgdir, ea, &hugeshift);
+	ptep = find_linux_pte(pgdir, ea);
 	if (ptep == NULL || !pte_present(*ptep)) {
 		DBG_LOW(" no PTE !\n");
 		return 1;
 	}
-
-#ifdef CONFIG_HUGETLB_PAGE
-	if (hugeshift)
-		return __hash_page_huge(ea, access, vsid, ptep, trap, local,
-					ssize, hugeshift, psize);
-#endif /* CONFIG_HUGETLB_PAGE */
 
 #ifndef CONFIG_PPC_64K_PAGES
 	DBG_LOW(" i-pte: %016lx\n", pte_val(*ptep));
@@ -1025,7 +1031,7 @@ int hash_page(unsigned long ea, unsigned long access, unsigned long trap)
 	else
 #endif /* CONFIG_PPC_HAS_HASH_64K */
 	{
-		int spp = subpage_protection(mm, ea);
+		int spp = subpage_protection(pgdir, ea);
 		if (access & spp)
 			rc = -2;
 		else
@@ -1115,7 +1121,7 @@ void flush_hash_page(unsigned long va, real_pte_t pte, int psize, int ssize,
 {
 	unsigned long hash, index, shift, hidx, slot;
 
-	DBG_LOW("flush_hash_page(va=%016lx)\n", va);
+	DBG_LOW("flush_hash_page(va=%016x)\n", va);
 	pte_iterate_hashed_subpages(pte, psize, va, index, shift) {
 		hash = hpt_hash(va, shift, ssize);
 		hidx = __rpte_to_hidx(pte, index);
@@ -1123,7 +1129,7 @@ void flush_hash_page(unsigned long va, real_pte_t pte, int psize, int ssize,
 			hash = ~hash;
 		slot = (hash & htab_hash_mask) * HPTES_PER_GROUP;
 		slot += hidx & _PTEIDX_GROUP_IX;
-		DBG_LOW(" sub %ld: hash=%lx, hidx=%lx\n", index, slot, hidx);
+		DBG_LOW(" sub %d: hash=%x, hidx=%x\n", index, slot, hidx);
 		ppc_md.hpte_invalidate(slot, va, psize, ssize, local);
 	} pte_iterate_hashed_end();
 }

@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/pci.h>
 #include <linux/mtd/physmap.h>
 #include <linux/mv643xx_eth.h>
 #include <linux/leds.h>
@@ -18,13 +19,12 @@
 #include <linux/input.h>
 #include <linux/i2c.h>
 #include <linux/ata_platform.h>
-#include <linux/gpio.h>
 #include <asm/mach-types.h>
+#include <linux/gpio.h>
 #include <asm/mach/arch.h>
-#include <asm/system.h>
-#include <mach/orion5x.h>
 #include "common.h"
 #include "mpp.h"
+#include "include/mach/system.h"
 
 /*****************************************************************************
  * Linkstation Mini Info
@@ -186,7 +186,7 @@ static struct mv_sata_platform_data lsmini_sata_data = {
 
 static void lsmini_power_off(void)
 {
-	arm_machine_restart('h', NULL);
+	arch_reset(0, NULL);
 }
 
 

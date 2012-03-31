@@ -1,7 +1,6 @@
 /* Glue code to lib/swiotlb.c */
 
 #include <linux/pci.h>
-#include <linux/gfp.h>
 #include <linux/cache.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
@@ -42,7 +41,7 @@ struct dma_map_ops swiotlb_dma_ops = {
 void __init swiotlb_dma_init(void)
 {
 	dma_ops = &swiotlb_dma_ops;
-	swiotlb_init(1);
+	swiotlb_init();
 }
 
 void __init pci_swiotlb_init(void)
@@ -52,7 +51,7 @@ void __init pci_swiotlb_init(void)
 		swiotlb = 1;
 		printk(KERN_INFO "PCI-DMA: Re-initialize machine vector.\n");
 		machvec_init("dig");
-		swiotlb_init(1);
+		swiotlb_init();
 		dma_ops = &swiotlb_dma_ops;
 #else
 		panic("Unable to find Intel IOMMU");

@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/list.h>
 #include <linux/hugetlb.h>
-#include <linux/slab.h>
 #include <asm/pgalloc.h>
 #include <asm/pgtable.h>
 #include <asm/setup.h>

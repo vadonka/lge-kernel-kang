@@ -8,7 +8,6 @@
 
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
-#include <asm/cache.h>
 #include <asm/apic.h>
 #include <asm/uv/uv.h>
 
@@ -41,10 +40,10 @@ union smp_flush_state {
 	struct {
 		struct mm_struct *flush_mm;
 		unsigned long flush_va;
-		raw_spinlock_t tlbstate_lock;
+		spinlock_t tlbstate_lock;
 		DECLARE_BITMAP(flush_cpumask, NR_CPUS);
 	};
-	char pad[INTERNODE_CACHE_BYTES];
+	char pad[CONFIG_X86_INTERNODE_CACHE_BYTES];
 } ____cacheline_internodealigned_in_smp;
 
 /* State is put into the per CPU data section, but padded
@@ -181,7 +180,7 @@ static void flush_tlb_others_ipi(const struct cpumask *cpumask,
 	 * num_online_cpus() <= NUM_INVALIDATE_TLB_VECTORS, but it is
 	 * probably not worth checking this for a cache-hot lock.
 	 */
-	raw_spin_lock(&f->tlbstate_lock);
+	spin_lock(&f->tlbstate_lock);
 
 	f->flush_mm = mm;
 	f->flush_va = va;
@@ -199,7 +198,7 @@ static void flush_tlb_others_ipi(const struct cpumask *cpumask,
 
 	f->flush_mm = NULL;
 	f->flush_va = 0;
-	raw_spin_unlock(&f->tlbstate_lock);
+	spin_unlock(&f->tlbstate_lock);
 }
 
 void native_flush_tlb_others(const struct cpumask *cpumask,
@@ -223,7 +222,7 @@ static int __cpuinit init_smp_flush(void)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(flush_state); i++)
-		raw_spin_lock_init(&flush_state[i].tlbstate_lock);
+		spin_lock_init(&flush_state[i].tlbstate_lock);
 
 	return 0;
 }

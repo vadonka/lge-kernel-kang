@@ -19,7 +19,6 @@
 
 #include <linux/of.h>
 #include <linux/kernel.h>
-#include <linux/slab.h>
 #include <linux/of_gpio.h>
 #include <linux/io.h>
 #include <linux/of_platform.h>

@@ -1,7 +1,7 @@
 #ifndef __ASM_SH_SCATTERLIST_H
 #define __ASM_SH_SCATTERLIST_H
 
-#define ISA_DMA_THRESHOLD	phys_addr_mask()
+#define ISA_DMA_THRESHOLD	PHYS_ADDR_MASK
 
 #include <asm-generic/scatterlist.h>
 

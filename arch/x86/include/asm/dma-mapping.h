@@ -20,8 +20,7 @@
 # define ISA_DMA_BIT_MASK DMA_BIT_MASK(32)
 #endif
 
-#define DMA_ERROR_CODE	0
-
+extern dma_addr_t bad_dma_address;
 extern int iommu_merge;
 extern struct device x86_dma_fallback_dev;
 extern int panic_on_overflow;
@@ -49,7 +48,7 @@ static inline int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
 	if (ops->mapping_error)
 		return ops->mapping_error(dev, dma_addr);
 
-	return (dma_addr == DMA_ERROR_CODE);
+	return (dma_addr == bad_dma_address);
 }
 
 #define dma_alloc_noncoherent(d, s, h, f) dma_alloc_coherent(d, s, h, f)
@@ -67,7 +66,7 @@ static inline bool dma_capable(struct device *dev, dma_addr_t addr, size_t size)
 	if (!dev->dma_mask)
 		return 0;
 
-	return addr + size - 1 <= *dev->dma_mask;
+	return addr + size <= *dev->dma_mask;
 }
 
 static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)

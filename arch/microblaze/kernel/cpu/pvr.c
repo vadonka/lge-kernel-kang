@@ -45,7 +45,7 @@
 
 int cpu_has_pvr(void)
 {
-	unsigned long flags;
+	unsigned flags;
 	unsigned pvr0;
 
 	local_save_flags(flags);

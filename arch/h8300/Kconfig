@@ -10,10 +10,6 @@ config H8300
 	default y
 	select HAVE_IDE
 
-config SYMBOL_PREFIX
-	string
-	default "_"
-
 config MMU
 	bool
 	default n

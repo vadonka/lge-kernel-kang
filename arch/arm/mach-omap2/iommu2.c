@@ -15,10 +15,9 @@
 #include <linux/device.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/stringify.h>
 
-#include <plat/iommu.h>
+#include <mach/iommu.h>
 
 /*
  * omap2 architecture specific register bit definitions

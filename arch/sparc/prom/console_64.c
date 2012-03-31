@@ -80,6 +80,7 @@ void
 prom_putchar(char c)
 {
 	prom_nbputchar(c);
+	return;
 }
 
 void

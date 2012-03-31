@@ -191,6 +191,15 @@ do {								\
 
 #ifdef __KERNEL__
 
+#ifdef CONFIG_IA32_SUPPORT
+# define IS_IA32_PROCESS(regs)	(ia64_psr(regs)->is != 0)
+#else
+# define IS_IA32_PROCESS(regs)		0
+struct task_struct;
+static inline void ia32_save_state(struct task_struct *t __attribute__((unused))){}
+static inline void ia32_load_state(struct task_struct *t __attribute__((unused))){}
+#endif
+
 /*
  * Context switch from one thread to another.  If the two threads have
  * different address spaces, schedule() has already taken care of
@@ -224,7 +233,7 @@ extern void ia64_account_on_switch (struct task_struct *prev, struct task_struct
 
 #define IA64_HAS_EXTRA_STATE(t)							\
 	((t)->thread.flags & (IA64_THREAD_DBG_VALID|IA64_THREAD_PM_VALID)	\
-	 || PERFMON_IS_SYSWIDE())
+	 || IS_IA32_PROCESS(task_pt_regs(t)) || PERFMON_IS_SYSWIDE())
 
 #define __switch_to(prev,next,last) do {							 \
 	IA64_ACCOUNT_ON_SWITCH(prev, next);							 \
@@ -271,10 +280,6 @@ void cpu_idle_wait(void);
 #define arch_align_stack(x) (x)
 
 void default_idle(void);
-
-#ifdef CONFIG_VIRT_CPU_ACCOUNTING
-extern void account_system_vtime(struct task_struct *);
-#endif
 
 #endif /* __KERNEL__ */
 

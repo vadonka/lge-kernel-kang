@@ -22,9 +22,6 @@
 #include <asm/ptrace.h>
 #include <asm/msr.h>
 #include <asm/nmi.h>
-#include <asm/apic.h>
-#include <asm/processor.h>
-#include <asm/cpufeature.h>
 
 #include "op_x86_model.h"
 #include "op_counter.h"
@@ -46,10 +43,23 @@
 
 static unsigned long reset_value[NUM_VIRT_COUNTERS];
 
+#ifdef CONFIG_OPROFILE_IBS
+
+/* IbsFetchCtl bits/masks */
+#define IBS_FETCH_RAND_EN		(1ULL<<57)
+#define IBS_FETCH_VAL			(1ULL<<49)
+#define IBS_FETCH_ENABLE		(1ULL<<48)
+#define IBS_FETCH_CNT_MASK		0xFFFF0000ULL
+
+/*IbsOpCtl bits */
+#define IBS_OP_CNT_CTL			(1ULL<<19)
+#define IBS_OP_VAL			(1ULL<<18)
+#define IBS_OP_ENABLE			(1ULL<<17)
+
 #define IBS_FETCH_SIZE			6
 #define IBS_OP_SIZE			12
 
-static u32 ibs_caps;
+static int has_ibs;	/* AMD Family10h and later */
 
 struct op_ibs_config {
 	unsigned long op_enabled;
@@ -61,49 +71,8 @@ struct op_ibs_config {
 };
 
 static struct op_ibs_config ibs_config;
-static u64 ibs_op_ctl;
 
-/*
- * IBS cpuid feature detection
- */
-
-#define IBS_CPUID_FEATURES      0x8000001b
-
-/*
- * Same bit mask as for IBS cpuid feature flags (Fn8000_001B_EAX), but
- * bit 0 is used to indicate the existence of IBS.
- */
-#define IBS_CAPS_AVAIL			(1LL<<0)
-#define IBS_CAPS_RDWROPCNT		(1LL<<3)
-#define IBS_CAPS_OPCNT			(1LL<<4)
-
-/*
- * IBS randomization macros
- */
-#define IBS_RANDOM_BITS			12
-#define IBS_RANDOM_MASK			((1ULL << IBS_RANDOM_BITS) - 1)
-#define IBS_RANDOM_MAXCNT_OFFSET	(1ULL << (IBS_RANDOM_BITS - 5))
-
-static u32 get_ibs_caps(void)
-{
-	u32 ibs_caps;
-	unsigned int max_level;
-
-	if (!boot_cpu_has(X86_FEATURE_IBS))
-		return 0;
-
-	/* check IBS cpuid feature flags */
-	max_level = cpuid_eax(0x80000000);
-	if (max_level < IBS_CPUID_FEATURES)
-		return IBS_CAPS_AVAIL;
-
-	ibs_caps = cpuid_eax(IBS_CPUID_FEATURES);
-	if (!(ibs_caps & IBS_CAPS_AVAIL))
-		/* cpuid flags not valid */
-		return IBS_CAPS_AVAIL;
-
-	return ibs_caps;
-}
+#endif
 
 #ifdef CONFIG_OPROFILE_EVENT_MULTIPLEX
 
@@ -161,18 +130,9 @@ static void op_amd_setup_ctrs(struct op_x86_model_spec const *model,
 
 	/* clear all counters */
 	for (i = 0; i < NUM_CONTROLS; ++i) {
-		if (unlikely(!msrs->controls[i].addr)) {
-			if (counter_config[i].enabled && !smp_processor_id())
-				/*
-				 * counter is reserved, this is on all
-				 * cpus, so report only for cpu #0
-				 */
-				op_x86_warn_reserved(i);
+		if (unlikely(!msrs->controls[i].addr))
 			continue;
-		}
 		rdmsrl(msrs->controls[i].addr, val);
-		if (val & ARCH_PERFMON_EVENTSEL_ENABLE)
-			op_x86_warn_in_use(i);
 		val &= model->reserved;
 		wrmsrl(msrs->controls[i].addr, val);
 	}
@@ -201,60 +161,7 @@ static void op_amd_setup_ctrs(struct op_x86_model_spec const *model,
 	}
 }
 
-/*
- * 16-bit Linear Feedback Shift Register (LFSR)
- *
- *                       16   14   13    11
- * Feedback polynomial = X  + X  + X  +  X  + 1
- */
-static unsigned int lfsr_random(void)
-{
-	static unsigned int lfsr_value = 0xF00D;
-	unsigned int bit;
-
-	/* Compute next bit to shift in */
-	bit = ((lfsr_value >> 0) ^
-	       (lfsr_value >> 2) ^
-	       (lfsr_value >> 3) ^
-	       (lfsr_value >> 5)) & 0x0001;
-
-	/* Advance to next register value */
-	lfsr_value = (lfsr_value >> 1) | (bit << 15);
-
-	return lfsr_value;
-}
-
-/*
- * IBS software randomization
- *
- * The IBS periodic op counter is randomized in software. The lower 12
- * bits of the 20 bit counter are randomized. IbsOpCurCnt is
- * initialized with a 12 bit random value.
- */
-static inline u64 op_amd_randomize_ibs_op(u64 val)
-{
-	unsigned int random = lfsr_random();
-
-	if (!(ibs_caps & IBS_CAPS_RDWROPCNT))
-		/*
-		 * Work around if the hw can not write to IbsOpCurCnt
-		 *
-		 * Randomize the lower 8 bits of the 16 bit
-		 * IbsOpMaxCnt [15:0] value in the range of -128 to
-		 * +127 by adding/subtracting an offset to the
-		 * maximum count (IbsOpMaxCnt).
-		 *
-		 * To avoid over or underflows and protect upper bits
-		 * starting at bit 16, the initial value for
-		 * IbsOpMaxCnt must fit in the range from 0x0081 to
-		 * 0xff80.
-		 */
-		val += (s8)(random >> 4);
-	else
-		val |= (u64)(random & IBS_RANDOM_MASK) << 32;
-
-	return val;
-}
+#ifdef CONFIG_OPROFILE_IBS
 
 static inline void
 op_amd_handle_ibs(struct pt_regs * const regs,
@@ -263,7 +170,7 @@ op_amd_handle_ibs(struct pt_regs * const regs,
 	u64 val, ctl;
 	struct op_entry entry;
 
-	if (!ibs_caps)
+	if (!has_ibs)
 		return;
 
 	if (ibs_config.fetch_enabled) {
@@ -279,7 +186,7 @@ op_amd_handle_ibs(struct pt_regs * const regs,
 			oprofile_write_commit(&entry);
 
 			/* reenable the IRQ */
-			ctl &= ~(IBS_FETCH_VAL | IBS_FETCH_CNT);
+			ctl &= ~(IBS_FETCH_VAL | IBS_FETCH_CNT_MASK);
 			ctl |= IBS_FETCH_ENABLE;
 			wrmsrl(MSR_AMD64_IBSFETCHCTL, ctl);
 		}
@@ -305,7 +212,8 @@ op_amd_handle_ibs(struct pt_regs * const regs,
 			oprofile_write_commit(&entry);
 
 			/* reenable the IRQ */
-			ctl = op_amd_randomize_ibs_op(ibs_op_ctl);
+			ctl &= ~IBS_OP_VAL & 0xFFFFFFFF;
+			ctl |= IBS_OP_ENABLE;
 			wrmsrl(MSR_AMD64_IBSOPCTL, ctl);
 		}
 	}
@@ -314,56 +222,40 @@ op_amd_handle_ibs(struct pt_regs * const regs,
 static inline void op_amd_start_ibs(void)
 {
 	u64 val;
-
-	if (!ibs_caps)
-		return;
-
-	if (ibs_config.fetch_enabled) {
-		val = (ibs_config.max_cnt_fetch >> 4) & IBS_FETCH_MAX_CNT;
+	if (has_ibs && ibs_config.fetch_enabled) {
+		val = (ibs_config.max_cnt_fetch >> 4) & 0xFFFF;
 		val |= ibs_config.rand_en ? IBS_FETCH_RAND_EN : 0;
 		val |= IBS_FETCH_ENABLE;
 		wrmsrl(MSR_AMD64_IBSFETCHCTL, val);
 	}
 
-	if (ibs_config.op_enabled) {
-		ibs_op_ctl = ibs_config.max_cnt_op >> 4;
-		if (!(ibs_caps & IBS_CAPS_RDWROPCNT)) {
-			/*
-			 * IbsOpCurCnt not supported.  See
-			 * op_amd_randomize_ibs_op() for details.
-			 */
-			ibs_op_ctl = clamp(ibs_op_ctl, 0x0081ULL, 0xFF80ULL);
-		} else {
-			/*
-			 * The start value is randomized with a
-			 * positive offset, we need to compensate it
-			 * with the half of the randomized range. Also
-			 * avoid underflows.
-			 */
-			ibs_op_ctl = min(ibs_op_ctl + IBS_RANDOM_MAXCNT_OFFSET,
-					 IBS_OP_MAX_CNT);
-		}
-		if (ibs_caps & IBS_CAPS_OPCNT && ibs_config.dispatched_ops)
-			ibs_op_ctl |= IBS_OP_CNT_CTL;
-		ibs_op_ctl |= IBS_OP_ENABLE;
-		val = op_amd_randomize_ibs_op(ibs_op_ctl);
+	if (has_ibs && ibs_config.op_enabled) {
+		val = (ibs_config.max_cnt_op >> 4) & 0xFFFF;
+		val |= ibs_config.dispatched_ops ? IBS_OP_CNT_CTL : 0;
+		val |= IBS_OP_ENABLE;
 		wrmsrl(MSR_AMD64_IBSOPCTL, val);
 	}
 }
 
 static void op_amd_stop_ibs(void)
 {
-	if (!ibs_caps)
-		return;
-
-	if (ibs_config.fetch_enabled)
+	if (has_ibs && ibs_config.fetch_enabled)
 		/* clear max count and enable */
 		wrmsrl(MSR_AMD64_IBSFETCHCTL, 0);
 
-	if (ibs_config.op_enabled)
+	if (has_ibs && ibs_config.op_enabled)
 		/* clear max count and enable */
 		wrmsrl(MSR_AMD64_IBSOPCTL, 0);
 }
+
+#else
+
+static inline void op_amd_handle_ibs(struct pt_regs * const regs,
+				    struct op_msrs const * const msrs) { }
+static inline void op_amd_start_ibs(void) { }
+static inline void op_amd_stop_ibs(void) { }
+
+#endif
 
 static int op_amd_check_ctrs(struct pt_regs * const regs,
 			     struct op_msrs const * const msrs)
@@ -398,7 +290,7 @@ static void op_amd_start(struct op_msrs const * const msrs)
 		if (!reset_value[op_x86_phys_to_virt(i)])
 			continue;
 		rdmsrl(msrs->controls[i].addr, val);
-		val |= ARCH_PERFMON_EVENTSEL_ENABLE;
+		val |= ARCH_PERFMON_EVENTSEL0_ENABLE;
 		wrmsrl(msrs->controls[i].addr, val);
 	}
 
@@ -418,7 +310,7 @@ static void op_amd_stop(struct op_msrs const * const msrs)
 		if (!reset_value[op_x86_phys_to_virt(i)])
 			continue;
 		rdmsrl(msrs->controls[i].addr, val);
-		val &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
+		val &= ~ARCH_PERFMON_EVENTSEL0_ENABLE;
 		wrmsrl(msrs->controls[i].addr, val);
 	}
 
@@ -438,6 +330,8 @@ static void op_amd_shutdown(struct op_msrs const * const msrs)
 			release_evntsel_nmi(MSR_K7_EVNTSEL0 + i);
 	}
 }
+
+#ifdef CONFIG_OPROFILE_IBS
 
 static u8 ibs_eilvt_off;
 
@@ -493,30 +387,29 @@ static int init_ibs_nmi(void)
 /* uninitialize the APIC for the IBS interrupts if needed */
 static void clear_ibs_nmi(void)
 {
-	if (ibs_caps)
+	if (has_ibs)
 		on_each_cpu(apic_clear_ibs_nmi_per_cpu, NULL, 1);
 }
 
 /* initialize the APIC for the IBS interrupts if available */
 static void ibs_init(void)
 {
-	ibs_caps = get_ibs_caps();
+	has_ibs = boot_cpu_has(X86_FEATURE_IBS);
 
-	if (!ibs_caps)
+	if (!has_ibs)
 		return;
 
 	if (init_ibs_nmi()) {
-		ibs_caps = 0;
+		has_ibs = 0;
 		return;
 	}
 
-	printk(KERN_INFO "oprofile: AMD IBS detected (0x%08x)\n",
-	       (unsigned)ibs_caps);
+	printk(KERN_INFO "oprofile: AMD IBS detected\n");
 }
 
 static void ibs_exit(void)
 {
-	if (!ibs_caps)
+	if (!has_ibs)
 		return;
 
 	clear_ibs_nmi();
@@ -536,7 +429,7 @@ static int setup_ibs_files(struct super_block *sb, struct dentry *root)
 	if (ret)
 		return ret;
 
-	if (!ibs_caps)
+	if (!has_ibs)
 		return ret;
 
 	/* model specific files */
@@ -546,7 +439,7 @@ static int setup_ibs_files(struct super_block *sb, struct dentry *root)
 	ibs_config.fetch_enabled = 0;
 	ibs_config.max_cnt_op = 250000;
 	ibs_config.op_enabled = 0;
-	ibs_config.dispatched_ops = 0;
+	ibs_config.dispatched_ops = 1;
 
 	dir = oprofilefs_mkdir(sb, root, "ibs_fetch");
 	oprofilefs_create_ulong(sb, dir, "enable",
@@ -561,9 +454,8 @@ static int setup_ibs_files(struct super_block *sb, struct dentry *root)
 				&ibs_config.op_enabled);
 	oprofilefs_create_ulong(sb, dir, "max_count",
 				&ibs_config.max_cnt_op);
-	if (ibs_caps & IBS_CAPS_OPCNT)
-		oprofilefs_create_ulong(sb, dir, "dispatched_ops",
-					&ibs_config.dispatched_ops);
+	oprofilefs_create_ulong(sb, dir, "dispatched_ops",
+				&ibs_config.dispatched_ops);
 
 	return 0;
 }
@@ -580,6 +472,19 @@ static void op_amd_exit(void)
 {
 	ibs_exit();
 }
+
+#else
+
+/* no IBS support */
+
+static int op_amd_init(struct oprofile_operations *ops)
+{
+	return 0;
+}
+
+static void op_amd_exit(void) {}
+
+#endif /* CONFIG_OPROFILE_IBS */
 
 struct op_x86_model_spec op_amd_spec = {
 	.num_counters		= NUM_COUNTERS,

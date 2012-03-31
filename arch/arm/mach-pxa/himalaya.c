@@ -150,9 +150,6 @@ static void __init himalaya_lcd_init(void)
 
 static void __init himalaya_init(void)
 {
-	pxa_set_ffuart_info(NULL);
-	pxa_set_btuart_info(NULL);
-	pxa_set_stuart_info(NULL);
 	himalaya_lcd_init();
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }

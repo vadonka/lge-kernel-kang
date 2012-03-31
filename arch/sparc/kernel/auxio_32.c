@@ -28,7 +28,6 @@ void __init auxio_probe(void)
 	struct resource r;
 
 	switch (sparc_cpu_model) {
-	case sparc_leon:
 	case sun4d:
 	case sun4:
 		return;

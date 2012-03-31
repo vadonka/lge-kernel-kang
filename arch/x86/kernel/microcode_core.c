@@ -70,12 +70,10 @@
  *		Fix sigmatch() macro to handle old CPUs with pf == 0.
  *		Thanks to Stuart Swales for pointing out this bug.
  */
-
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/platform_device.h>
 #include <linux/miscdevice.h>
 #include <linux/capability.h>
+#include <linux/smp_lock.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -203,6 +201,7 @@ static int do_microcode_update(const void __user *buf, size_t size)
 
 static int microcode_open(struct inode *unused1, struct file *unused2)
 {
+	cycle_kernel_lock();
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
 
@@ -212,7 +211,7 @@ static ssize_t microcode_write(struct file *file, const char __user *buf,
 	ssize_t ret = -EINVAL;
 
 	if ((len >> PAGE_SHIFT) > totalram_pages) {
-		pr_err("too much data (max %ld pages)\n", totalram_pages);
+		pr_err("microcode: too much data (max %ld pages)\n", totalram_pages);
 		return ret;
 	}
 
@@ -247,7 +246,7 @@ static int __init microcode_dev_init(void)
 
 	error = misc_register(&microcode_dev);
 	if (error) {
-		pr_err("can't misc_register on minor=%d\n", MICROCODE_MINOR);
+		pr_err("microcode: can't misc_register on minor=%d\n", MICROCODE_MINOR);
 		return error;
 	}
 
@@ -362,7 +361,7 @@ static enum ucode_state microcode_resume_cpu(int cpu)
 	if (!uci->mc)
 		return UCODE_NFOUND;
 
-	pr_debug("CPU%d updated upon resume\n", cpu);
+	pr_debug("microcode: CPU%d updated upon resume\n", cpu);
 	apply_microcode_on_target(cpu);
 
 	return UCODE_OK;
@@ -382,7 +381,7 @@ static enum ucode_state microcode_init_cpu(int cpu)
 	ustate = microcode_ops->request_microcode_fw(cpu, &microcode_pdev->dev);
 
 	if (ustate == UCODE_OK) {
-		pr_debug("CPU%d updated upon init\n", cpu);
+		pr_debug("microcode: CPU%d updated upon init\n", cpu);
 		apply_microcode_on_target(cpu);
 	}
 
@@ -409,7 +408,7 @@ static int mc_sysdev_add(struct sys_device *sys_dev)
 	if (!cpu_online(cpu))
 		return 0;
 
-	pr_debug("CPU%d added\n", cpu);
+	pr_debug("microcode: CPU%d added\n", cpu);
 
 	err = sysfs_create_group(&sys_dev->kobj, &mc_attr_group);
 	if (err)
@@ -428,7 +427,7 @@ static int mc_sysdev_remove(struct sys_device *sys_dev)
 	if (!cpu_online(cpu))
 		return 0;
 
-	pr_debug("CPU%d removed\n", cpu);
+	pr_debug("microcode: CPU%d removed\n", cpu);
 	microcode_fini_cpu(cpu);
 	sysfs_remove_group(&sys_dev->kobj, &mc_attr_group);
 	return 0;
@@ -476,15 +475,15 @@ mc_cpu_callback(struct notifier_block *nb, unsigned long action, void *hcpu)
 		microcode_update_cpu(cpu);
 	case CPU_DOWN_FAILED:
 	case CPU_DOWN_FAILED_FROZEN:
-		pr_debug("CPU%d added\n", cpu);
+		pr_debug("microcode: CPU%d added\n", cpu);
 		if (sysfs_create_group(&sys_dev->kobj, &mc_attr_group))
-			pr_err("Failed to create group for CPU%d\n", cpu);
+			pr_err("microcode: Failed to create group for CPU%d\n", cpu);
 		break;
 	case CPU_DOWN_PREPARE:
 	case CPU_DOWN_PREPARE_FROZEN:
 		/* Suspend is in progress, only remove the interface */
 		sysfs_remove_group(&sys_dev->kobj, &mc_attr_group);
-		pr_debug("CPU%d removed\n", cpu);
+		pr_debug("microcode: CPU%d removed\n", cpu);
 		break;
 	case CPU_DEAD:
 	case CPU_UP_CANCELED_FROZEN:
@@ -510,7 +509,7 @@ static int __init microcode_init(void)
 		microcode_ops = init_amd_microcode();
 
 	if (!microcode_ops) {
-		pr_err("no support for this CPU vendor\n");
+		pr_err("microcode: no support for this CPU vendor\n");
 		return -ENODEV;
 	}
 
@@ -541,7 +540,8 @@ static int __init microcode_init(void)
 	register_hotcpu_notifier(&mc_cpu_notifier);
 
 	pr_info("Microcode Update Driver: v" MICROCODE_VERSION
-		" <tigran@aivazian.fsnet.co.uk>, Peter Oruba\n");
+	       " <tigran@aivazian.fsnet.co.uk>,"
+	       " Peter Oruba\n");
 
 	return 0;
 }

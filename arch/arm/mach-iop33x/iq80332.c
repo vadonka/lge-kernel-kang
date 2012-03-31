@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 #include <linux/serial_core.h>
 #include <linux/serial_8250.h>
 #include <linux/mtd/physmap.h>
@@ -47,6 +48,7 @@ static void __init iq80332_timer_init(void)
 
 static struct sys_timer iq80332_timer = {
 	.init		= iq80332_timer_init,
+	.offset		= iop_gettimeoffset,
 };
 
 

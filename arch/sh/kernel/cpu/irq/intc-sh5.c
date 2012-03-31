@@ -123,7 +123,7 @@ static void enable_intc_irq(unsigned int irq)
 		bitmask = 1 << (irq - 32);
 	}
 
-	__raw_writel(bitmask, reg);
+	ctrl_outl(bitmask, reg);
 }
 
 static void disable_intc_irq(unsigned int irq)
@@ -139,7 +139,7 @@ static void disable_intc_irq(unsigned int irq)
 		bitmask = 1 << (irq - 32);
 	}
 
-	__raw_writel(bitmask, reg);
+	ctrl_outl(bitmask, reg);
 }
 
 static void mask_and_ack_intc(unsigned int irq)
@@ -170,11 +170,11 @@ void __init plat_irq_setup(void)
 
 
 	/* Disable all interrupts and set all priorities to 0 to avoid trouble */
-	__raw_writel(-1, INTC_INTDSB_0);
-	__raw_writel(-1, INTC_INTDSB_1);
+	ctrl_outl(-1, INTC_INTDSB_0);
+	ctrl_outl(-1, INTC_INTDSB_1);
 
 	for (reg = INTC_INTPRI_0, i = 0; i < INTC_INTPRI_PREGS; i++, reg += 8)
-		__raw_writel( NO_PRIORITY, reg);
+		ctrl_outl( NO_PRIORITY, reg);
 
 
 #ifdef CONFIG_SH_CAYMAN
@@ -199,7 +199,7 @@ void __init plat_irq_setup(void)
 			reg = INTC_ICR_SET;
 			i = IRQ_IRL0;
 		}
-		__raw_writel(INTC_ICR_IRLM, reg);
+		ctrl_outl(INTC_ICR_IRLM, reg);
 
 		/* Set interrupt priorities according to platform description */
 		for (data = 0, reg = INTC_INTPRI_0; i < NR_INTC_IRQS; i++) {
@@ -207,7 +207,7 @@ void __init plat_irq_setup(void)
 				((i % INTC_INTPRI_PPREG) * 4);
 			if ((i % INTC_INTPRI_PPREG) == (INTC_INTPRI_PPREG - 1)) {
 				/* Upon the 7th, set Priority Register */
-				__raw_writel(data, reg);
+				ctrl_outl(data, reg);
 				data = 0;
 				reg += 8;
 			}

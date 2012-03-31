@@ -27,10 +27,7 @@
 #include <linux/page-flags.h>
 #include <linux/highmem.h>
 #include <linux/console.h>
-#include <linux/pci.h>
-#include <linux/gfp.h>
 
-#include <xen/xen.h>
 #include <xen/interface/xen.h>
 #include <xen/interface/version.h>
 #include <xen/interface/physdev.h>
@@ -1098,8 +1095,10 @@ asmlinkage void __init xen_start_kernel(void)
 	 */
 	__userpte_alloc_gfp &= ~__GFP_HIGHMEM;
 
+#ifdef CONFIG_X86_64
 	/* Work out if we support NX */
-	x86_configure_nx();
+	check_efer();
+#endif
 
 	xen_setup_features();
 
@@ -1155,13 +1154,9 @@ asmlinkage void __init xen_start_kernel(void)
 
 	/* keep using Xen gdt for now; no urgent need to change it */
 
-#ifdef CONFIG_X86_32
 	pv_info.kernel_rpl = 1;
 	if (xen_feature(XENFEAT_supervisor_mode_kernel))
 		pv_info.kernel_rpl = 0;
-#else
-	pv_info.kernel_rpl = 0;
-#endif
 
 	/* set the limit of our address space */
 	xen_reserve_top();
@@ -1185,11 +1180,7 @@ asmlinkage void __init xen_start_kernel(void)
 		add_preferred_console("xenboot", 0, NULL);
 		add_preferred_console("tty", 0, NULL);
 		add_preferred_console("hvc", 0, NULL);
-	} else {
-		/* Make sure ACS will be enabled */
-		pci_request_acs();
 	}
-		
 
 	xen_raw_console_write("about to get started...\n");
 

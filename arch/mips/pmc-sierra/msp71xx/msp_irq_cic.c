@@ -131,3 +131,4 @@ void msp_cic_irq_dispatch(void)
 	else
 		do_IRQ(ffs(pending) + intbase - 1);
 }
+

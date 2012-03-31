@@ -8,6 +8,7 @@
  * the kernel has booted.
  */
 
+#include <linux/autoconf.h>
 #include <asm-generic/vmlinux.lds.h>
 #include <asm/page.h>
 

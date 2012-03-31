@@ -12,6 +12,7 @@
 
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/gfp.h>
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
@@ -163,7 +164,7 @@ static inline void part_hdr__part_name(enum diag204_format type, void *hdr,
 		       LPAR_NAME_LEN);
 	EBCASC(name, LPAR_NAME_LEN);
 	name[LPAR_NAME_LEN] = 0;
-	strim(name);
+	strstrip(name);
 }
 
 struct cpu_info {
@@ -487,7 +488,7 @@ out:
 
 static int diag224(void *ptr)
 {
-	int rc = -EOPNOTSUPP;
+	int rc = -ENOTSUPP;
 
 	asm volatile(
 		"	diag	%1,%2,0x224\n"
@@ -506,7 +507,7 @@ static int diag224_get_name_table(void)
 		return -ENOMEM;
 	if (diag224(diag224_cpu_names)) {
 		kfree(diag224_cpu_names);
-		return -EOPNOTSUPP;
+		return -ENOTSUPP;
 	}
 	EBCASC(diag224_cpu_names + 16, (*diag224_cpu_names + 1) * 16);
 	return 0;
@@ -522,7 +523,7 @@ static int diag224_idx2name(int index, char *name)
 	memcpy(name, diag224_cpu_names + ((index + 1) * CPU_NAME_LEN),
 		CPU_NAME_LEN);
 	name[CPU_NAME_LEN] = 0;
-	strim(name);
+	strstrip(name);
 	return 0;
 }
 

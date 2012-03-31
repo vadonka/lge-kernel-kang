@@ -15,18 +15,22 @@
 #include <linux/sh_timer.h>
 #include <linux/io.h>
 
-static struct plat_sci_port scif0_platform_data = {
-	.mapbase	= 0xffe80000,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 40, 41, 43, 42 },
+static struct plat_sci_port sci_platform_data[] = {
+	{
+		.mapbase	= 0xffe80000,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 40, 41, 43, 42 },
+	}, {
+		.flags = 0,
+	}
 };
 
-static struct platform_device scif0_device = {
+static struct platform_device sci_device = {
 	.name		= "sh-sci",
-	.id		= 0,
+	.id		= -1,
 	.dev		= {
-		.platform_data	= &scif0_platform_data,
+		.platform_data	= sci_platform_data,
 	},
 };
 
@@ -123,7 +127,7 @@ static struct platform_device tmu2_device = {
 };
 
 static struct platform_device *sh4202_devices[] __initdata = {
-	&scif0_device,
+	&sci_device,
 	&tmu0_device,
 	&tmu1_device,
 	&tmu2_device,
@@ -137,7 +141,6 @@ static int __init sh4202_devices_setup(void)
 arch_initcall(sh4202_devices_setup);
 
 static struct platform_device *sh4202_early_devices[] __initdata = {
-	&scif0_device,
 	&tmu0_device,
 	&tmu1_device,
 	&tmu2_device,
@@ -198,7 +201,7 @@ void __init plat_irq_setup_pins(int mode)
 {
 	switch (mode) {
 	case IRQ_MODE_IRQ: /* individual interrupt mode for IRL3-0 */
-		__raw_writew(__raw_readw(INTC_ICR) | INTC_ICR_IRLM, INTC_ICR);
+		ctrl_outw(ctrl_inw(INTC_ICR) | INTC_ICR_IRLM, INTC_ICR);
 		register_intc_controller(&intc_desc_irlm);
 		break;
 	default:

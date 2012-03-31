@@ -32,7 +32,6 @@
 #include <linux/clockchips.h>
 #include <linux/cnt32_to_63.h>
 #include <linux/io.h>
-#include <linux/gfp.h>
 
 #include <asm/clkdev.h>
 #include <asm/system.h>
@@ -852,7 +851,8 @@ void __init versatile_init(void)
 {
 	int i;
 
-	clkdev_add_table(lookups, ARRAY_SIZE(lookups));
+	for (i = 0; i < ARRAY_SIZE(lookups); i++)
+		clkdev_add(&lookups[i]);
 
 	platform_device_register(&versatile_flash_device);
 	platform_device_register(&versatile_i2c_device);

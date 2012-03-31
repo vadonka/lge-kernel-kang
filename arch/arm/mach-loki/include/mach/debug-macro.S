@@ -8,7 +8,7 @@
 
 #include <mach/loki.h>
 
-	.macro	addruart, rx, tmp
+	.macro	addruart,rx
 	mrc	p15, 0, \rx, c1, c0
 	tst	\rx, #1					@ MMU enabled?
 	ldreq	\rx, =LOKI_REGS_PHYS_BASE

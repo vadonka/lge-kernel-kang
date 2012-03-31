@@ -28,6 +28,7 @@
 #include <asm/reboot.h>
 #include <asm/virtext.h>
 
+
 #if defined(CONFIG_SMP) && defined(CONFIG_X86_LOCAL_APIC)
 
 static void kdump_nmi_callback(int cpu, struct die_args *args)

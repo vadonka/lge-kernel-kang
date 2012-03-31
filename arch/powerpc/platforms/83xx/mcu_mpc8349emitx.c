@@ -20,7 +20,6 @@
 #include <linux/gpio.h>
 #include <linux/of.h>
 #include <linux/of_gpio.h>
-#include <linux/slab.h>
 #include <asm/prom.h>
 #include <asm/machdep.h>
 

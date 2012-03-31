@@ -8,6 +8,7 @@
  * is licensed "as is" without any warranty of any kind, whether express
  * or implied.
  */
+#include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/clk.h>
 #include <linux/serial_8250.h>
@@ -17,6 +18,7 @@
 #include <asm/mach/map.h>
 
 #include <mach/dm644x.h>
+#include <mach/clock.h>
 #include <mach/cputype.h>
 #include <mach/edma.h>
 #include <mach/irqs.h>
@@ -277,7 +279,7 @@ static struct clk timer2_clk = {
 	.usecount = 1,              /* REVISIT: why cant' this be disabled? */
 };
 
-struct clk_lookup dm644x_clks[] = {
+struct davinci_clk dm644x_clks[] = {
 	CLK(NULL, "ref", &ref_clk),
 	CLK(NULL, "pll1", &pll1_clk),
 	CLK(NULL, "pll1_sysclk1", &pll1_sysclk1),
@@ -368,11 +370,6 @@ MUX_CFG(DM644X, ATAEN_DISABLE,	0,   17,    1,	  0,	 true)
 MUX_CFG(DM644X, HPIEN_DISABLE,	0,   29,    1,	  0,	 true)
 
 MUX_CFG(DM644X, AEAW,		0,   0,     31,	  31,	 true)
-MUX_CFG(DM644X, AEAW0,		0,   0,     1,	  0,	 true)
-MUX_CFG(DM644X, AEAW1,		0,   1,     1,	  0,	 true)
-MUX_CFG(DM644X, AEAW2,		0,   2,     1,	  0,	 true)
-MUX_CFG(DM644X, AEAW3,		0,   3,     1,	  0,	 true)
-MUX_CFG(DM644X, AEAW4,		0,   4,     1,	  0,	 true)
 
 MUX_CFG(DM644X, MSTK,		1,   9,     1,	  0,	 false)
 
@@ -479,6 +476,15 @@ static u8 dm644x_default_priorities[DAVINCI_N_AINTC_IRQ] = {
 
 /*----------------------------------------------------------------------*/
 
+static const s8 dma_chan_dm644x_no_event[] = {
+	 0,  1, 12, 13, 14,
+	15, 25, 30, 31, 45,
+	46, 47, 55, 56, 57,
+	58, 59, 60, 61, 62,
+	63,
+	-1
+};
+
 static const s8
 queue_tc_mapping[][2] = {
 	/* {event queue no, TC no} */
@@ -502,6 +508,7 @@ static struct edma_soc_info dm644x_edma_info[] = {
 		.n_slot			= 128,
 		.n_tc			= 2,
 		.n_cc			= 1,
+		.noevent		= dma_chan_dm644x_no_event,
 		.queue_tc_mapping	= queue_tc_mapping,
 		.queue_priority_mapping	= queue_priority_mapping,
 	},
@@ -602,11 +609,6 @@ static struct resource vpfe_resources[] = {
 		.end            = IRQ_VDINT1,
 		.flags          = IORESOURCE_IRQ,
 	},
-};
-
-static u64 vpfe_capture_dma_mask = DMA_BIT_MASK(32);
-static struct resource dm644x_ccdc_resource[] = {
-	/* CCDC Base address */
 	{
 		.start          = 0x01c70400,
 		.end            = 0x01c70400 + 0xff,
@@ -614,17 +616,7 @@ static struct resource dm644x_ccdc_resource[] = {
 	},
 };
 
-static struct platform_device dm644x_ccdc_dev = {
-	.name           = "dm644x_ccdc",
-	.id             = -1,
-	.num_resources  = ARRAY_SIZE(dm644x_ccdc_resource),
-	.resource       = dm644x_ccdc_resource,
-	.dev = {
-		.dma_mask               = &vpfe_capture_dma_mask,
-		.coherent_dma_mask      = DMA_BIT_MASK(32),
-	},
-};
-
+static u64 vpfe_capture_dma_mask = DMA_BIT_MASK(32);
 static struct platform_device vpfe_capture_dev = {
 	.name		= CAPTURE_DRV_NAME,
 	.id		= -1,
@@ -774,13 +766,9 @@ static int __init dm644x_init_devices(void)
 	if (!cpu_is_davinci_dm644x())
 		return 0;
 
-	/* Add ccdc clock aliases */
-	clk_add_alias("master", dm644x_ccdc_dev.name, "vpss_master", NULL);
-	clk_add_alias("slave", dm644x_ccdc_dev.name, "vpss_slave", NULL);
 	platform_device_register(&dm644x_edma_device);
 	platform_device_register(&dm644x_emac_device);
 	platform_device_register(&dm644x_vpss_device);
-	platform_device_register(&dm644x_ccdc_dev);
 	platform_device_register(&vpfe_capture_dev);
 
 	return 0;

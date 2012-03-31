@@ -9,7 +9,7 @@
  * It is based on demo code originally Copyright 2001 by Intel Corp, taken from
  * http://www.embedded.com/showArticle.jhtml?articleID=19205567
  *
- * Attempts were made, unsuccessfully, to contact the original
+ * Attempts were made, unsuccesfully, to contact the original
  * author of this code (Michael Morrow, Intel).  Below is the original
  * copyright notice.
  *
@@ -33,23 +33,22 @@
 #ifdef __HAVE_ARCH_MEMSET
 void *memset(void *v_src, int c, __kernel_size_t n)
 {
+
 	char *src = v_src;
 #ifdef CONFIG_OPT_LIB_FUNCTION
 	uint32_t *i_src;
-	uint32_t w32 = 0;
+	uint32_t w32;
 #endif
 	/* Truncate c to 8 bits */
 	c = (c & 0xFF);
 
 #ifdef CONFIG_OPT_LIB_FUNCTION
-	if (unlikely(c)) {
-		/* Make a repeating word out of it */
-		w32 = c;
-		w32 |= w32 << 8;
-		w32 |= w32 << 16;
-	}
+	/* Make a repeating word out of it */
+	w32 = c;
+	w32 |= w32 << 8;
+	w32 |= w32 << 16;
 
-	if (likely(n >= 4)) {
+	if (n >= 4) {
 		/* Align the destination to a word boundary */
 		/* This is done in an endian independant manner */
 		switch ((unsigned) src & 3) {

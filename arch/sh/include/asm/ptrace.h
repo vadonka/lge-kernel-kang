@@ -102,15 +102,13 @@ struct pt_dspregs {
 #define	PTRACE_GETDSPREGS	55	/* DSP registers */
 #define	PTRACE_SETDSPREGS	56
 
-#define PT_TEXT_END_ADDR	240
-#define PT_TEXT_ADDR		244	/* &(struct user)->start_code */
-#define PT_DATA_ADDR		248	/* &(struct user)->start_data */
+#define PT_TEXT_END_ADDR 	240
+#define PT_TEXT_ADDR 		244	/* &(struct user)->start_code */
+#define PT_DATA_ADDR 		248	/* &(struct user)->start_data */
 #define PT_TEXT_LEN		252
 
 #ifdef __KERNEL__
 #include <asm/addrspace.h>
-#include <asm/page.h>
-#include <asm/system.h>
 
 #define user_mode(regs)			(((regs)->sr & 0x40000000)==0)
 #define instruction_pointer(regs)	((unsigned long)(regs)->pc)
@@ -123,12 +121,8 @@ extern void show_regs(struct pt_regs *);
 struct task_struct;
 
 #define arch_has_single_step()	(1)
-
-struct perf_event;
-struct perf_sample_data;
-
-extern void ptrace_triggered(struct perf_event *bp, int nmi,
-		      struct perf_sample_data *data, struct pt_regs *regs);
+extern void user_enable_single_step(struct task_struct *);
+extern void user_disable_single_step(struct task_struct *);
 
 #define task_pt_regs(task) \
 	((struct pt_regs *) (task_stack_page(task) + THREAD_SIZE) - 1)
@@ -137,8 +131,10 @@ static inline unsigned long profile_pc(struct pt_regs *regs)
 {
 	unsigned long pc = instruction_pointer(regs);
 
-	if (virt_addr_uncached(pc))
-		return CAC_ADDR(pc);
+#ifdef P2SEG
+	if (pc >= P2SEG && pc < P3SEG)
+		pc -= 0x20000000;
+#endif
 
 	return pc;
 }

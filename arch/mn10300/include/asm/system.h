@@ -143,7 +143,6 @@ do {									\
 		"	mov	%0,epsw		\n"			\
 		: "=&d"(tmp)						\
 		: "i"(~EPSW_IM), "r"(__mn10300_irq_enabled_epsw)	\
-		: "cc"							\
 		);							\
 } while (0)
 

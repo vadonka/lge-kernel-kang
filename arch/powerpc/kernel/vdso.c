@@ -721,7 +721,7 @@ static int __init vdso_init(void)
 
 #ifdef CONFIG_PPC64
 	/*
-	 * Fill up the "systemcfg" stuff for backward compatibility
+	 * Fill up the "systemcfg" stuff for backward compatiblity
 	 */
 	strcpy((char *)vdso_data->eye_catcher, "SYSTEMCFG:PPC64");
 	vdso_data->version.major = SYSTEMCFG_MAJOR;

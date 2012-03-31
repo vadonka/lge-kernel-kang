@@ -52,7 +52,7 @@
 #define BUG()								\
 	do {								\
 		_BUG_OR_WARN(0);					\
-		unreachable();						\
+		for (;;);						\
 	} while (0)
 
 #define WARN_ON(condition)							\

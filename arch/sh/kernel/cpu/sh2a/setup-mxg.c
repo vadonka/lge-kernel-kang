@@ -207,23 +207,27 @@ static struct platform_device mtu2_2_device = {
 	.num_resources	= ARRAY_SIZE(mtu2_2_resources),
 };
 
-static struct plat_sci_port scif0_platform_data = {
-	.mapbase	= 0xff804000,
-	.flags		= UPF_BOOT_AUTOCONF,
-	.type		= PORT_SCIF,
-	.irqs		= { 220, 220, 220, 220 },
+static struct plat_sci_port sci_platform_data[] = {
+	{
+		.mapbase	= 0xff804000,
+		.flags		= UPF_BOOT_AUTOCONF,
+		.type		= PORT_SCIF,
+		.irqs		= { 220, 220, 220, 220 },
+	}, {
+		.flags = 0,
+	}
 };
 
-static struct platform_device scif0_device = {
+static struct platform_device sci_device = {
 	.name		= "sh-sci",
-	.id		= 0,
+	.id		= -1,
 	.dev		= {
-		.platform_data	= &scif0_platform_data,
+		.platform_data	= sci_platform_data,
 	},
 };
 
 static struct platform_device *mxg_devices[] __initdata = {
-	&scif0_device,
+	&sci_device,
 	&mtu2_0_device,
 	&mtu2_1_device,
 	&mtu2_2_device,
@@ -242,7 +246,6 @@ void __init plat_irq_setup(void)
 }
 
 static struct platform_device *mxg_early_devices[] __initdata = {
-	&scif0_device,
 	&mtu2_0_device,
 	&mtu2_1_device,
 	&mtu2_2_device,

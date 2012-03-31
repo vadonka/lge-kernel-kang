@@ -148,6 +148,7 @@ ieee754dp ieee754dp_format(int sn, int xe, u64 xm)
 
 			switch(ieee754_csr.rm) {
 			case IEEE754_RN:
+				return ieee754dp_zero(sn);
 			case IEEE754_RZ:
 				return ieee754dp_zero(sn);
 			case IEEE754_RU:    /* toward +Infinity */

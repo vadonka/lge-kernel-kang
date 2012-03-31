@@ -62,3 +62,9 @@ char __init *prom_getenv(char *envname)
 void __init prom_free_prom_memory(void)
 {
 }
+
+char * __init prom_getcmdline(void)
+{
+	return arcs_cmdline;
+}
+

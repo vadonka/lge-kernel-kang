@@ -28,7 +28,6 @@
 #include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/slab.h>
 #include <linux/lmb.h>
 
 #include <asm/prom.h>

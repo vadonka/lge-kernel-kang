@@ -26,7 +26,6 @@
 #include <linux/syscalls.h>
 #include <linux/irq.h>
 #include <linux/vmalloc.h>
-#include <linux/slab.h>
 
 #include <asm/processor.h>
 #include <asm/io.h>
@@ -63,6 +62,21 @@ struct dma_map_ops *get_pci_dma_ops(void)
 	return pci_dma_ops;
 }
 EXPORT_SYMBOL(get_pci_dma_ops);
+
+int pci_set_dma_mask(struct pci_dev *dev, u64 mask)
+{
+	return dma_set_mask(&dev->dev, mask);
+}
+
+int pci_set_consistent_dma_mask(struct pci_dev *dev, u64 mask)
+{
+	int rc;
+
+	rc = dma_set_mask(&dev->dev, mask);
+	dev->dev.coherent_dma_mask = dev->dma_mask;
+
+	return rc;
+}
 
 struct pci_controller *pcibios_alloc_controller(struct device_node *dev)
 {
@@ -1033,8 +1047,10 @@ static void __devinit pcibios_fixup_bridge(struct pci_bus *bus)
 
 	struct pci_dev *dev = bus->self;
 
-	pci_bus_for_each_resource(bus, res, i) {
-		if (!res || !res->flags)
+	for (i = 0; i < PCI_BUS_NUM_RESOURCES; ++i) {
+		if ((res = bus->resource[i]) == NULL)
+			continue;
+		if (!res->flags)
 			continue;
 		if (i >= 3 && bus->self->transparent)
 			continue;
@@ -1165,20 +1181,21 @@ static int skip_isa_ioresource_align(struct pci_dev *dev)
  * but we want to try to avoid allocating at 0x2900-0x2bff
  * which might have be mirrored at 0x0100-0x03ff..
  */
-resource_size_t pcibios_align_resource(void *data, const struct resource *res,
+void pcibios_align_resource(void *data, struct resource *res,
 				resource_size_t size, resource_size_t align)
 {
 	struct pci_dev *dev = data;
-	resource_size_t start = res->start;
 
 	if (res->flags & IORESOURCE_IO) {
-		if (skip_isa_ioresource_align(dev))
-			return start;
-		if (start & 0x300)
-			start = (start + 0x3ff) & ~0x3ff;
-	}
+		resource_size_t start = res->start;
 
-	return start;
+		if (skip_isa_ioresource_align(dev))
+			return;
+		if (start & 0x300) {
+			start = (start + 0x3ff) & ~0x3ff;
+			res->start = start;
+		}
+	}
 }
 EXPORT_SYMBOL(pcibios_align_resource);
 
@@ -1261,8 +1278,9 @@ void pcibios_allocate_bus_resources(struct pci_bus *bus)
 	pr_debug("PCI: Allocating bus resources for %04x:%02x...\n",
 		 pci_domain_nr(bus), bus->number);
 
-	pci_bus_for_each_resource(bus, res, i) {
-		if (!res || !res->flags || res->start > res->end || res->parent)
+	for (i = 0; i < PCI_BUS_NUM_RESOURCES; ++i) {
+		if ((res = bus->resource[i]) == NULL || !res->flags
+		    || res->start > res->end || res->parent)
 			continue;
 		if (bus->parent == NULL)
 			pr = (res->flags & IORESOURCE_IO) ?

@@ -242,11 +242,10 @@ EXPORT_SYMBOL_GPL(of_node_to_nid);
  */
 static int __init find_min_common_depth(void)
 {
-	int depth, index;
+	int depth;
 	const unsigned int *ref_points;
 	struct device_node *rtas_root;
 	unsigned int len;
-	struct device_node *options;
 
 	rtas_root = of_find_node_by_path("/rtas");
 
@@ -259,23 +258,11 @@ static int __init find_min_common_depth(void)
 	 * configuration (should be all 0's) and the second is for a normal
 	 * NUMA configuration.
 	 */
-	index = 1;
 	ref_points = of_get_property(rtas_root,
 			"ibm,associativity-reference-points", &len);
 
-	/*
-	 * For type 1 affinity information we want the first field
-	 */
-	options = of_find_node_by_path("/options");
-	if (options) {
-		const char *str;
-		str = of_get_property(options, "ibm,associativity-form", NULL);
-		if (str && !strcmp(str, "1"))
-                        index = 0;
-	}
-
 	if ((len >= 2 * sizeof(unsigned int)) && ref_points) {
-		depth = ref_points[index];
+		depth = ref_points[1];
 	} else {
 		dbg("NUMA: ibm,associativity-reference-points not found.\n");
 		depth = -1;
@@ -464,7 +451,7 @@ static int __cpuinit numa_setup_cpu(unsigned long lcpu)
 	nid = of_node_to_nid_single(cpu);
 
 	if (nid < 0 || !node_online(nid))
-		nid = first_online_node;
+		nid = any_online_node(NODE_MASK_ALL);
 out:
 	map_cpu_to_node(lcpu, nid);
 
@@ -1127,7 +1114,7 @@ int hot_add_scn_to_nid(unsigned long scn_addr)
 	int nid, found = 0;
 
 	if (!numa_enabled || (min_common_depth < 0))
-		return first_online_node;
+		return any_online_node(NODE_MASK_ALL);
 
 	memory = of_find_node_by_path("/ibm,dynamic-reconfiguration-memory");
 	if (memory) {
@@ -1138,7 +1125,7 @@ int hot_add_scn_to_nid(unsigned long scn_addr)
 	}
 
 	if (nid < 0 || !node_online(nid))
-		nid = first_online_node;
+		nid = any_online_node(NODE_MASK_ALL);
 
 	if (NODE_DATA(nid)->node_spanned_pages)
 		return nid;

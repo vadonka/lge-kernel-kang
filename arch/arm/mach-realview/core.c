@@ -31,7 +31,6 @@
 #include <linux/smsc911x.h>
 #include <linux/ata_platform.h>
 #include <linux/amba/mmci.h>
-#include <linux/gfp.h>
 
 #include <asm/clkdev.h>
 #include <asm/system.h>
@@ -254,7 +253,7 @@ static unsigned int realview_mmc_status(struct device *dev)
 	else
 		mask = 2;
 
-	return !(readl(REALVIEW_SYSMCI) & mask);
+	return readl(REALVIEW_SYSMCI) & mask;
 }
 
 struct mmci_platform_data realview_mmc0_plat_data = {
@@ -347,7 +346,10 @@ static struct clk_lookup lookups[] = {
 
 static int __init clk_init(void)
 {
-	clkdev_add_table(lookups, ARRAY_SIZE(lookups));
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(lookups); i++)
+		clkdev_add(&lookups[i]);
 	return 0;
 }
 arch_initcall(clk_init);

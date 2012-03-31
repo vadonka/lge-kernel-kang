@@ -4,7 +4,6 @@
 #include <linux/i2c.h>
 #include <mach/devices.h>
 #include <plat/i2c.h>
-#include <plat/pxa3xx_nand.h>
 
 extern struct pxa_device_desc pxa910_device_uart1;
 extern struct pxa_device_desc pxa910_device_uart2;
@@ -14,7 +13,6 @@ extern struct pxa_device_desc pxa910_device_pwm1;
 extern struct pxa_device_desc pxa910_device_pwm2;
 extern struct pxa_device_desc pxa910_device_pwm3;
 extern struct pxa_device_desc pxa910_device_pwm4;
-extern struct pxa_device_desc pxa910_device_nand;
 
 static inline int pxa910_add_uart(int id)
 {
@@ -65,10 +63,5 @@ static inline int pxa910_add_pwm(int id)
 	}
 
 	return pxa_register_device(d, NULL, 0);
-}
-
-static inline int pxa910_add_nand(struct pxa3xx_nand_platform_data *info)
-{
-	return pxa_register_device(&pxa910_device_nand, info, sizeof(*info));
 }
 #endif /* __ASM_MACH_PXA910_H */

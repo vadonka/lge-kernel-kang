@@ -30,6 +30,7 @@
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/init.h>
+#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/random.h>

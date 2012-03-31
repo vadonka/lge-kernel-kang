@@ -39,9 +39,7 @@ void *kmap_coherent(struct page *page, unsigned long addr)
 	pagefault_disable();
 
 	idx = FIX_CMAP_END -
-		(((addr >> PAGE_SHIFT) & (FIX_N_COLOURS - 1)) +
-		 (FIX_N_COLOURS * smp_processor_id()));
-
+		((addr & current_cpu_data.dcache.alias_mask) >> PAGE_SHIFT);
 	vaddr = __fix_to_virt(idx);
 
 	BUG_ON(!pte_none(*(kmap_coherent_pte - idx)));

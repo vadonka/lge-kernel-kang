@@ -66,9 +66,9 @@ static void enable_cayman_irq(unsigned int irq)
 	reg = EPLD_MASK_BASE + ((irq / 8) << 2);
 	bit = 1<<(irq % 8);
 	local_irq_save(flags);
-	mask = __raw_readl(reg);
+	mask = ctrl_inl(reg);
 	mask |= bit;
-	__raw_writel(mask, reg);
+	ctrl_outl(mask, reg);
 	local_irq_restore(flags);
 }
 
@@ -83,9 +83,9 @@ void disable_cayman_irq(unsigned int irq)
 	reg = EPLD_MASK_BASE + ((irq / 8) << 2);
 	bit = 1<<(irq % 8);
 	local_irq_save(flags);
-	mask = __raw_readl(reg);
+	mask = ctrl_inl(reg);
 	mask &= ~bit;
-	__raw_writel(mask, reg);
+	ctrl_outl(mask, reg);
 	local_irq_restore(flags);
 }
 
@@ -109,8 +109,8 @@ int cayman_irq_demux(int evt)
 		unsigned long status;
 		int i;
 
-		status = __raw_readl(EPLD_STATUS_BASE) &
-			 __raw_readl(EPLD_MASK_BASE) & 0xff;
+		status = ctrl_inl(EPLD_STATUS_BASE) &
+			 ctrl_inl(EPLD_MASK_BASE) & 0xff;
 		if (status == 0) {
 			irq = -1;
 		} else {
@@ -126,8 +126,8 @@ int cayman_irq_demux(int evt)
 		unsigned long status;
 		int i;
 
-		status = __raw_readl(EPLD_STATUS_BASE + 3 * sizeof(u32)) &
-			 __raw_readl(EPLD_MASK_BASE + 3 * sizeof(u32)) & 0xff;
+		status = ctrl_inl(EPLD_STATUS_BASE + 3 * sizeof(u32)) &
+			 ctrl_inl(EPLD_MASK_BASE + 3 * sizeof(u32)) & 0xff;
 		if (status == 0) {
 			irq = -1;
 		} else {

@@ -12,7 +12,6 @@
  */
 
 #include <linux/kvm.h>
-#include <linux/gfp.h>
 #include <linux/errno.h>
 #include <asm/current.h>
 #include <asm/debug.h>
@@ -324,5 +323,5 @@ int kvm_s390_handle_b2(struct kvm_vcpu *vcpu)
 		else
 			return handler(vcpu);
 	}
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }

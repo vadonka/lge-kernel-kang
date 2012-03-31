@@ -1,7 +1,3 @@
-config BF52x
-	def_bool y
-	depends on (BF522 || BF523 || BF524 || BF525 || BF526 || BF527)
-
 if (BF52x)
 
 source "arch/blackfin/mach-bf527/boards/Kconfig"

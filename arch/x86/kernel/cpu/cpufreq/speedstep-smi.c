@@ -17,6 +17,7 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/cpufreq.h>
+#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <asm/ist.h>
@@ -34,7 +35,7 @@ static int smi_cmd;
 static unsigned int smi_sig;
 
 /* info about the processor */
-static enum speedstep_processor speedstep_processor;
+static unsigned int speedstep_processor;
 
 /*
  * There are only two frequency states for each processor. Values

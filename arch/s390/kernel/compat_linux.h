@@ -4,6 +4,10 @@
 #include <linux/compat.h>
 #include <linux/socket.h>
 #include <linux/syscalls.h>
+#include <linux/nfs_fs.h>
+#include <linux/sunrpc/svc.h>
+#include <linux/nfsd/nfsd.h>
+#include <linux/nfsd/export.h>
 
 /* Macro that masks the high order bit of an 32 bit pointer and converts it*/
 /*       to a 64 bit pointer */
@@ -158,6 +162,7 @@ struct ucontext32 {
 	compat_sigset_t		uc_sigmask;	/* mask last for extensibility */
 };
 
+struct __sysctl_args32;
 struct stat64_emu31;
 struct mmap_arg_struct_emu31;
 struct fadvise64_64_args;
@@ -207,6 +212,7 @@ long sys32_sendfile(int out_fd, int in_fd, compat_off_t __user *offset,
 		    size_t count);
 long sys32_sendfile64(int out_fd, int in_fd, compat_loff_t __user *offset,
 		      s32 count);
+long sys32_sysctl(struct __sysctl_args32 __user *args);
 long sys32_stat64(char __user * filename, struct stat64_emu31 __user * statbuf);
 long sys32_lstat64(char __user * filename,
 		   struct stat64_emu31 __user * statbuf);

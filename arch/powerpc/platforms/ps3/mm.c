@@ -22,7 +22,6 @@
 #include <linux/module.h>
 #include <linux/memory_hotplug.h>
 #include <linux/lmb.h>
-#include <linux/slab.h>
 
 #include <asm/cell-regs.h>
 #include <asm/firmware.h>
@@ -35,7 +34,7 @@
 #if defined(DEBUG)
 #define DBG udbg_printf
 #else
-#define DBG pr_devel
+#define DBG pr_debug
 #endif
 
 enum {

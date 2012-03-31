@@ -27,6 +27,7 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/random.h>

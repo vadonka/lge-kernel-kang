@@ -65,30 +65,42 @@
 	.endm
 
 /* Standard copy_to_user with segment limit checking */
-ENTRY(_copy_to_user)
+ENTRY(copy_to_user)
 	CFI_STARTPROC
 	GET_THREAD_INFO(%rax)
 	movq %rdi,%rcx
 	addq %rdx,%rcx
 	jc bad_to_user
 	cmpq TI_addr_limit(%rax),%rcx
-	jae bad_to_user
+	ja bad_to_user
 	ALTERNATIVE_JUMP X86_FEATURE_REP_GOOD,copy_user_generic_unrolled,copy_user_generic_string
 	CFI_ENDPROC
-ENDPROC(_copy_to_user)
+ENDPROC(copy_to_user)
 
 /* Standard copy_from_user with segment limit checking */
-ENTRY(_copy_from_user)
+ENTRY(copy_from_user)
 	CFI_STARTPROC
 	GET_THREAD_INFO(%rax)
 	movq %rsi,%rcx
 	addq %rdx,%rcx
 	jc bad_from_user
 	cmpq TI_addr_limit(%rax),%rcx
-	jae bad_from_user
+	ja bad_from_user
 	ALTERNATIVE_JUMP X86_FEATURE_REP_GOOD,copy_user_generic_unrolled,copy_user_generic_string
 	CFI_ENDPROC
-ENDPROC(_copy_from_user)
+ENDPROC(copy_from_user)
+
+ENTRY(copy_user_generic)
+	CFI_STARTPROC
+	ALTERNATIVE_JUMP X86_FEATURE_REP_GOOD,copy_user_generic_unrolled,copy_user_generic_string
+	CFI_ENDPROC
+ENDPROC(copy_user_generic)
+
+ENTRY(__copy_from_user_inatomic)
+	CFI_STARTPROC
+	ALTERNATIVE_JUMP X86_FEATURE_REP_GOOD,copy_user_generic_unrolled,copy_user_generic_string
+	CFI_ENDPROC
+ENDPROC(__copy_from_user_inatomic)
 
 	.section .fixup,"ax"
 	/* must zero dest */

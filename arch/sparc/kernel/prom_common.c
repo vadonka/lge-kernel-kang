@@ -37,6 +37,18 @@ EXPORT_SYMBOL(of_console_path);
 char *of_console_options;
 EXPORT_SYMBOL(of_console_options);
 
+struct device_node *of_find_node_by_phandle(phandle handle)
+{
+	struct device_node *np;
+
+	for (np = allnodes; np; np = np->allnext)
+		if (np->node == handle)
+			break;
+
+	return np;
+}
+EXPORT_SYMBOL(of_find_node_by_phandle);
+
 int of_getintprop_default(struct device_node *np, const char *name, int def)
 {
 	struct property *prop;
@@ -77,7 +89,7 @@ int of_set_property(struct device_node *dp, const char *name, void *val, int len
 			void *old_val = prop->value;
 			int ret;
 
-			ret = prom_setprop(dp->phandle, name, val, len);
+			ret = prom_setprop(dp->node, name, val, len);
 
 			err = -EINVAL;
 			if (ret >= 0) {
@@ -224,7 +236,7 @@ static struct device_node * __init prom_create_node(phandle node,
 
 	dp->name = get_one_property(node, "name");
 	dp->type = get_one_property(node, "device_type");
-	dp->phandle = node;
+	dp->node = node;
 
 	dp->properties = build_prop_list(node);
 
@@ -301,7 +313,7 @@ void __init prom_build_devicetree(void)
 
 	nextp = &allnodes->allnext;
 	allnodes->child = prom_build_tree(allnodes,
-					  prom_getchild(allnodes->phandle),
+					  prom_getchild(allnodes->node),
 					  &nextp);
 	of_console_init();
 

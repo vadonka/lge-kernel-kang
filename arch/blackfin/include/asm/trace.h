@@ -28,8 +28,6 @@ extern unsigned long software_trace_buff[];
 
 #ifdef CONFIG_DEBUG_BFIN_HWTRACE_ON
 
-#define trace_buffer_init() bfin_write_TBUFCTL(BFIN_TRACE_INIT)
-
 #define trace_buffer_save(x) \
 	do { \
 		(x) = bfin_read_TBUFCTL(); \

@@ -21,6 +21,7 @@
 #include <linux/pci.h>
 #include <linux/pm.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 #include <linux/serial_core.h>
 #include <linux/serial_8250.h>
 #include <linux/mtd/physmap.h>
@@ -77,6 +78,7 @@ static void __init iq31244_timer_init(void)
 
 static struct sys_timer iq31244_timer = {
 	.init		= iq31244_timer_init,
+	.offset		= iop_gettimeoffset,
 };
 
 

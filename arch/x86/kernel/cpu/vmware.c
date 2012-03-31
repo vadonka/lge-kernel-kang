@@ -22,7 +22,6 @@
  */
 
 #include <linux/dmi.h>
-#include <linux/module.h>
 #include <linux/jiffies.h>
 #include <asm/div64.h>
 #include <asm/vmware.h>
@@ -110,7 +109,6 @@ int vmware_platform(void)
 
 	return 0;
 }
-EXPORT_SYMBOL(vmware_platform);
 
 /*
  * VMware hypervisor takes care of exporting a reliable TSC to the guest.

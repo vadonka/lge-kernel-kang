@@ -188,7 +188,7 @@ static void end_a20r_irq(unsigned int irq)
 }
 
 static struct irq_chip a20r_irq_type = {
-	.name		= "A20R",
+	.typename	= "A20R",
 	.ack		= mask_a20r_irq,
 	.mask		= mask_a20r_irq,
 	.mask_ack	= mask_a20r_irq,

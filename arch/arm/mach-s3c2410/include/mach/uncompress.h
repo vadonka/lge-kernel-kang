@@ -1,6 +1,7 @@
+
 /* arch/arm/mach-s3c2410/include/mach/uncompress.h
  *
- * Copyright (c) 2003-2007 Simtec Electronics
+ * Copyright (c) 2003, 2007 Simtec Electronics
  *	http://armlinux.simtec.co.uk/
  *	Ben Dooks <ben@simtec.co.uk>
  *

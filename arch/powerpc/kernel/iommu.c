@@ -30,7 +30,7 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/dma-mapping.h>
-#include <linux/bitmap.h>
+#include <linux/bitops.h>
 #include <linux/iommu-helper.h>
 #include <linux/crash_dump.h>
 #include <asm/io.h>
@@ -42,7 +42,12 @@
 
 #define DBG(...)
 
-static int novmerge;
+#ifdef CONFIG_IOMMU_VMERGE
+static int novmerge = 0;
+#else
+static int novmerge = 1;
+#endif
+
 static int protect4gb = 1;
 
 static void __iommu_free(struct iommu_table *, dma_addr_t, unsigned int);
@@ -246,7 +251,7 @@ static void __iommu_free(struct iommu_table *tbl, dma_addr_t dma_addr,
 	}
 
 	ppc_md.tce_free(tbl, entry, npages);
-	bitmap_clear(tbl->it_map, free_entry, npages);
+	iommu_area_free(tbl->it_map, free_entry, npages);
 }
 
 static void iommu_free(struct iommu_table *tbl, dma_addr_t dma_addr,

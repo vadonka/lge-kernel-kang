@@ -17,6 +17,7 @@
 #include <linux/stddef.h>
 #include <linux/unistd.h>
 #include <linux/ptrace.h>
+#include <linux/slab.h>
 #include <linux/mman.h>
 #include <linux/personality.h>
 #include <linux/sys.h>
@@ -63,13 +64,8 @@ void __noreturn cpu_idle(void)
 
 			smtc_idle_loop_hook();
 #endif
-
-			if (cpu_wait) {
-				/* Don't trace irqs off for idle */
-				stop_critical_timings();
+			if (cpu_wait)
 				(*cpu_wait)();
-				start_critical_timings();
-			}
 		}
 #ifdef CONFIG_HOTPLUG_CPU
 		if (!cpu_online(cpu) && !cpu_isset(cpu, cpu_callin_map) &&

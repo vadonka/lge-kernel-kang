@@ -25,7 +25,6 @@
 #include <linux/bootmem.h>
 #include <linux/lmb.h>
 #include <linux/log2.h>
-#include <linux/slab.h>
 
 #include <asm/io.h>
 #include <asm/prom.h>
@@ -57,7 +56,7 @@ static int __init fsl_pcie_check_link(struct pci_controller *hose)
 	return 0;
 }
 
-#if defined(CONFIG_FSL_SOC_BOOKE) || defined(CONFIG_PPC_86xx)
+#if defined(CONFIG_PPC_85xx) || defined(CONFIG_PPC_86xx)
 static int __init setup_one_atmu(struct ccsr_pci __iomem *pci,
 	unsigned int index, const struct resource *res,
 	resource_size_t offset)
@@ -409,7 +408,7 @@ DECLARE_PCI_FIXUP_HEADER(0x1957, PCI_DEVICE_ID_P4040E, quirk_fsl_pcie_header);
 DECLARE_PCI_FIXUP_HEADER(0x1957, PCI_DEVICE_ID_P4040, quirk_fsl_pcie_header);
 DECLARE_PCI_FIXUP_HEADER(0x1957, PCI_DEVICE_ID_P4080E, quirk_fsl_pcie_header);
 DECLARE_PCI_FIXUP_HEADER(0x1957, PCI_DEVICE_ID_P4080, quirk_fsl_pcie_header);
-#endif /* CONFIG_FSL_SOC_BOOKE || CONFIG_PPC_86xx */
+#endif /* CONFIG_PPC_85xx || CONFIG_PPC_86xx */
 
 #if defined(CONFIG_PPC_83xx) || defined(CONFIG_PPC_MPC512x)
 DECLARE_PCI_FIXUP_HEADER(0x1957, PCI_DEVICE_ID_MPC8314E, quirk_fsl_pcie_header);
@@ -465,7 +464,8 @@ static void __iomem *mpc83xx_pcie_remap_cfg(struct pci_bus *bus,
 {
 	struct pci_controller *hose = pci_bus_to_host(bus);
 	struct mpc83xx_pcie_priv *pcie = hose->dn->data;
-	u32 dev_base = bus->number << 24 | devfn << 16;
+	u8 bus_no = bus->number - hose->first_busno;
+	u32 dev_base = bus_no << 24 | devfn << 16;
 	int ret;
 
 	ret = mpc83xx_pcie_exclude_device(bus, devfn);
@@ -515,16 +515,11 @@ static int mpc83xx_pcie_read_config(struct pci_bus *bus, unsigned int devfn,
 static int mpc83xx_pcie_write_config(struct pci_bus *bus, unsigned int devfn,
 				     int offset, int len, u32 val)
 {
-	struct pci_controller *hose = pci_bus_to_host(bus);
 	void __iomem *cfg_addr;
 
 	cfg_addr = mpc83xx_pcie_remap_cfg(bus, devfn, offset);
 	if (!cfg_addr)
 		return PCIBIOS_DEVICE_NOT_FOUND;
-
-	/* PPC_INDIRECT_TYPE_SURPRESS_PRIMARY_BUS */
-	if (offset == PCI_PRIMARY_BUS && bus->number == hose->first_busno)
-		val &= 0xffffff00;
 
 	switch (len) {
 	case 1:

@@ -42,6 +42,7 @@ static void __init em7210_timer_init(void)
 
 static struct sys_timer em7210_timer = {
 	.init		= em7210_timer_init,
+	.offset		= iop_gettimeoffset,
 };
 
 /*

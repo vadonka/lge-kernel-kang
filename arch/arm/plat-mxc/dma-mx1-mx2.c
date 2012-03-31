@@ -128,18 +128,6 @@ struct imx_dma_channel {
 	int hw_chaining;
 };
 
-static void __iomem *imx_dmav1_baseaddr;
-
-static void imx_dmav1_writel(unsigned val, unsigned offset)
-{
-	__raw_writel(val, imx_dmav1_baseaddr + offset);
-}
-
-static unsigned imx_dmav1_readl(unsigned offset)
-{
-	return __raw_readl(imx_dmav1_baseaddr + offset);
-}
-
 static struct imx_dma_channel imx_dma_channels[IMX_DMA_CHANNELS];
 
 static struct clk *dma_clk;
@@ -151,6 +139,7 @@ static int imx_dma_hw_chain(struct imx_dma_channel *imxdma)
 	else
 		return 0;
 }
+
 
 /*
  * imx_dma_sg_next - prepare next chunk for scatter-gather DMA emulation
@@ -167,21 +156,20 @@ static inline int imx_dma_sg_next(int channel, struct scatterlist *sg)
 	}
 
 	now = min(imxdma->resbytes, sg->length);
-	if (imxdma->resbytes != IMX_DMA_LENGTH_LOOP)
-		imxdma->resbytes -= now;
+	imxdma->resbytes -= now;
 
 	if ((imxdma->dma_mode & DMA_MODE_MASK) == DMA_MODE_READ)
-		imx_dmav1_writel(sg->dma_address, DMA_DAR(channel));
+		__raw_writel(sg->dma_address, DMA_BASE + DMA_DAR(channel));
 	else
-		imx_dmav1_writel(sg->dma_address, DMA_SAR(channel));
+		__raw_writel(sg->dma_address, DMA_BASE + DMA_SAR(channel));
 
-	imx_dmav1_writel(now, DMA_CNTR(channel));
+	__raw_writel(now, DMA_BASE + DMA_CNTR(channel));
 
 	pr_debug("imxdma%d: next sg chunk dst 0x%08x, src 0x%08x, "
 		"size 0x%08x\n", channel,
-		 imx_dmav1_readl(DMA_DAR(channel)),
-		 imx_dmav1_readl(DMA_SAR(channel)),
-		 imx_dmav1_readl(DMA_CNTR(channel)));
+		 __raw_readl(DMA_BASE + DMA_DAR(channel)),
+		 __raw_readl(DMA_BASE + DMA_SAR(channel)),
+		 __raw_readl(DMA_BASE + DMA_CNTR(channel)));
 
 	return now;
 }
@@ -229,26 +217,27 @@ imx_dma_setup_single(int channel, dma_addr_t dma_address,
 			channel, __func__, (unsigned int)dma_address,
 			dma_length, dev_addr);
 
-		imx_dmav1_writel(dev_addr, DMA_SAR(channel));
-		imx_dmav1_writel(dma_address, DMA_DAR(channel));
-		imx_dmav1_writel(imxdma->ccr_from_device, DMA_CCR(channel));
+		__raw_writel(dev_addr, DMA_BASE + DMA_SAR(channel));
+		__raw_writel(dma_address, DMA_BASE + DMA_DAR(channel));
+		__raw_writel(imxdma->ccr_from_device,
+				DMA_BASE + DMA_CCR(channel));
 	} else if ((dmamode & DMA_MODE_MASK) == DMA_MODE_WRITE) {
 		pr_debug("imxdma%d: %s dma_addressg=0x%08x dma_length=%d "
 			"dev_addr=0x%08x for write\n",
 			channel, __func__, (unsigned int)dma_address,
 			dma_length, dev_addr);
 
-		imx_dmav1_writel(dma_address, DMA_SAR(channel));
-		imx_dmav1_writel(dev_addr, DMA_DAR(channel));
-		imx_dmav1_writel(imxdma->ccr_to_device,
-				DMA_CCR(channel));
+		__raw_writel(dma_address, DMA_BASE + DMA_SAR(channel));
+		__raw_writel(dev_addr, DMA_BASE + DMA_DAR(channel));
+		__raw_writel(imxdma->ccr_to_device,
+				DMA_BASE + DMA_CCR(channel));
 	} else {
 		printk(KERN_ERR "imxdma%d: imx_dma_setup_single bad dmamode\n",
 		       channel);
 		return -EINVAL;
 	}
 
-	imx_dmav1_writel(dma_length, DMA_CNTR(channel));
+	__raw_writel(dma_length, DMA_BASE + DMA_CNTR(channel));
 
 	return 0;
 }
@@ -326,15 +315,17 @@ imx_dma_setup_sg(int channel,
 			"dev_addr=0x%08x for read\n",
 			channel, __func__, sg, sgcount, dma_length, dev_addr);
 
-		imx_dmav1_writel(dev_addr, DMA_SAR(channel));
-		imx_dmav1_writel(imxdma->ccr_from_device, DMA_CCR(channel));
+		__raw_writel(dev_addr, DMA_BASE + DMA_SAR(channel));
+		__raw_writel(imxdma->ccr_from_device,
+				DMA_BASE + DMA_CCR(channel));
 	} else if ((dmamode & DMA_MODE_MASK) == DMA_MODE_WRITE) {
 		pr_debug("imxdma%d: %s sg=%p sgcount=%d total length=%d "
 			"dev_addr=0x%08x for write\n",
 			channel, __func__, sg, sgcount, dma_length, dev_addr);
 
-		imx_dmav1_writel(dev_addr, DMA_DAR(channel));
-		imx_dmav1_writel(imxdma->ccr_to_device, DMA_CCR(channel));
+		__raw_writel(dev_addr, DMA_BASE + DMA_DAR(channel));
+		__raw_writel(imxdma->ccr_to_device,
+				DMA_BASE + DMA_CCR(channel));
 	} else {
 		printk(KERN_ERR "imxdma%d: imx_dma_setup_sg bad dmamode\n",
 		       channel);
@@ -368,7 +359,7 @@ imx_dma_config_channel(int channel, unsigned int config_port,
 	imxdma->ccr_from_device = config_port | (config_mem << 2) | dreq;
 	imxdma->ccr_to_device = config_mem | (config_port << 2) | dreq;
 
-	imx_dmav1_writel(dmareq, DMA_RSSR(channel));
+	__raw_writel(dmareq, DMA_BASE + DMA_RSSR(channel));
 
 	return 0;
 }
@@ -376,7 +367,7 @@ EXPORT_SYMBOL(imx_dma_config_channel);
 
 void imx_dma_config_burstlen(int channel, unsigned int burstlen)
 {
-	imx_dmav1_writel(burstlen, DMA_BLR(channel));
+	__raw_writel(burstlen, DMA_BASE + DMA_BLR(channel));
 }
 EXPORT_SYMBOL(imx_dma_config_burstlen);
 
@@ -406,7 +397,7 @@ imx_dma_setup_handlers(int channel,
 	}
 
 	local_irq_save(flags);
-	imx_dmav1_writel(1 << channel, DMA_DISR);
+	__raw_writel(1 << channel, DMA_BASE + DMA_DISR);
 	imxdma->irq_handler = irq_handler;
 	imxdma->err_handler = err_handler;
 	imxdma->data = data;
@@ -470,21 +461,22 @@ void imx_dma_enable(int channel)
 
 	local_irq_save(flags);
 
-	imx_dmav1_writel(1 << channel, DMA_DISR);
-	imx_dmav1_writel(imx_dmav1_readl(DMA_DIMR) & ~(1 << channel), DMA_DIMR);
-	imx_dmav1_writel(imx_dmav1_readl(DMA_CCR(channel)) | CCR_CEN |
-		CCR_ACRPT, DMA_CCR(channel));
+	__raw_writel(1 << channel, DMA_BASE + DMA_DISR);
+	__raw_writel(__raw_readl(DMA_BASE + DMA_DIMR) & ~(1 << channel),
+		DMA_BASE + DMA_DIMR);
+	__raw_writel(__raw_readl(DMA_BASE + DMA_CCR(channel)) | CCR_CEN |
+		CCR_ACRPT,
+		DMA_BASE + DMA_CCR(channel));
 
 #ifdef CONFIG_ARCH_MX2
-	if ((cpu_is_mx21() || cpu_is_mx27()) &&
-			imxdma->sg && imx_dma_hw_chain(imxdma)) {
+	if (imxdma->sg && imx_dma_hw_chain(imxdma)) {
 		imxdma->sg = sg_next(imxdma->sg);
 		if (imxdma->sg) {
 			u32 tmp;
 			imx_dma_sg_next(channel, imxdma->sg);
-			tmp = imx_dmav1_readl(DMA_CCR(channel));
-			imx_dmav1_writel(tmp | CCR_RPT | CCR_ACRPT,
-				DMA_CCR(channel));
+			tmp = __raw_readl(DMA_BASE + DMA_CCR(channel));
+			__raw_writel(tmp | CCR_RPT | CCR_ACRPT,
+				DMA_BASE + DMA_CCR(channel));
 		}
 	}
 #endif
@@ -509,10 +501,11 @@ void imx_dma_disable(int channel)
 		del_timer(&imxdma->watchdog);
 
 	local_irq_save(flags);
-	imx_dmav1_writel(imx_dmav1_readl(DMA_DIMR) | (1 << channel), DMA_DIMR);
-	imx_dmav1_writel(imx_dmav1_readl(DMA_CCR(channel)) & ~CCR_CEN,
-			DMA_CCR(channel));
-	imx_dmav1_writel(1 << channel, DMA_DISR);
+	__raw_writel(__raw_readl(DMA_BASE + DMA_DIMR) | (1 << channel),
+		DMA_BASE + DMA_DIMR);
+	__raw_writel(__raw_readl(DMA_BASE + DMA_CCR(channel)) & ~CCR_CEN,
+		DMA_BASE + DMA_CCR(channel));
+	__raw_writel(1 << channel, DMA_BASE + DMA_DISR);
 	imxdma->in_use = 0;
 	local_irq_restore(flags);
 }
@@ -523,7 +516,7 @@ static void imx_dma_watchdog(unsigned long chno)
 {
 	struct imx_dma_channel *imxdma = &imx_dma_channels[chno];
 
-	imx_dmav1_writel(0, DMA_CCR(chno));
+	__raw_writel(0, DMA_BASE + DMA_CCR(chno));
 	imxdma->in_use = 0;
 	imxdma->sg = NULL;
 
@@ -539,17 +532,17 @@ static irqreturn_t dma_err_handler(int irq, void *dev_id)
 	unsigned int err_mask;
 	int errcode;
 
-	disr = imx_dmav1_readl(DMA_DISR);
+	disr = __raw_readl(DMA_BASE + DMA_DISR);
 
-	err_mask = imx_dmav1_readl(DMA_DBTOSR) |
-		   imx_dmav1_readl(DMA_DRTOSR) |
-		   imx_dmav1_readl(DMA_DSESR)  |
-		   imx_dmav1_readl(DMA_DBOSR);
+	err_mask = __raw_readl(DMA_BASE + DMA_DBTOSR) |
+		   __raw_readl(DMA_BASE + DMA_DRTOSR) |
+		   __raw_readl(DMA_BASE + DMA_DSESR)  |
+		   __raw_readl(DMA_BASE + DMA_DBOSR);
 
 	if (!err_mask)
 		return IRQ_HANDLED;
 
-	imx_dmav1_writel(disr & err_mask, DMA_DISR);
+	__raw_writel(disr & err_mask, DMA_BASE + DMA_DISR);
 
 	for (i = 0; i < IMX_DMA_CHANNELS; i++) {
 		if (!(err_mask & (1 << i)))
@@ -557,20 +550,20 @@ static irqreturn_t dma_err_handler(int irq, void *dev_id)
 		imxdma = &imx_dma_channels[i];
 		errcode = 0;
 
-		if (imx_dmav1_readl(DMA_DBTOSR) & (1 << i)) {
-			imx_dmav1_writel(1 << i, DMA_DBTOSR);
+		if (__raw_readl(DMA_BASE + DMA_DBTOSR) & (1 << i)) {
+			__raw_writel(1 << i, DMA_BASE + DMA_DBTOSR);
 			errcode |= IMX_DMA_ERR_BURST;
 		}
-		if (imx_dmav1_readl(DMA_DRTOSR) & (1 << i)) {
-			imx_dmav1_writel(1 << i, DMA_DRTOSR);
+		if (__raw_readl(DMA_BASE + DMA_DRTOSR) & (1 << i)) {
+			__raw_writel(1 << i, DMA_BASE + DMA_DRTOSR);
 			errcode |= IMX_DMA_ERR_REQUEST;
 		}
-		if (imx_dmav1_readl(DMA_DSESR) & (1 << i)) {
-			imx_dmav1_writel(1 << i, DMA_DSESR);
+		if (__raw_readl(DMA_BASE + DMA_DSESR) & (1 << i)) {
+			__raw_writel(1 << i, DMA_BASE + DMA_DSESR);
 			errcode |= IMX_DMA_ERR_TRANSFER;
 		}
-		if (imx_dmav1_readl(DMA_DBOSR) & (1 << i)) {
-			imx_dmav1_writel(1 << i, DMA_DBOSR);
+		if (__raw_readl(DMA_BASE + DMA_DBOSR) & (1 << i)) {
+			__raw_writel(1 << i, DMA_BASE + DMA_DBOSR);
 			errcode |= IMX_DMA_ERR_BUFFER;
 		}
 		if (imxdma->name && imxdma->err_handler) {
@@ -613,7 +606,7 @@ static void dma_irq_handle_channel(int chno)
 		if (imxdma->sg) {
 			imx_dma_sg_next(chno, imxdma->sg);
 
-			tmp = imx_dmav1_readl(DMA_CCR(chno));
+			tmp = __raw_readl(DMA_BASE + DMA_CCR(chno));
 
 			if (imx_dma_hw_chain(imxdma)) {
 				/* FIXME: The timeout should probably be
@@ -623,13 +616,15 @@ static void dma_irq_handle_channel(int chno)
 					jiffies + msecs_to_jiffies(500));
 
 				tmp |= CCR_CEN | CCR_RPT | CCR_ACRPT;
-				imx_dmav1_writel(tmp, DMA_CCR(chno));
+				__raw_writel(tmp, DMA_BASE +
+						DMA_CCR(chno));
 			} else {
-				imx_dmav1_writel(tmp & ~CCR_CEN, DMA_CCR(chno));
+				__raw_writel(tmp & ~CCR_CEN, DMA_BASE +
+						DMA_CCR(chno));
 				tmp |= CCR_CEN;
 			}
 
-			imx_dmav1_writel(tmp, DMA_CCR(chno));
+			__raw_writel(tmp, DMA_BASE + DMA_CCR(chno));
 
 			if (imxdma->prog_handler)
 				imxdma->prog_handler(chno, imxdma->data,
@@ -644,7 +639,7 @@ static void dma_irq_handle_channel(int chno)
 		}
 	}
 
-	imx_dmav1_writel(0, DMA_CCR(chno));
+	__raw_writel(0, DMA_BASE + DMA_CCR(chno));
 	imxdma->in_use = 0;
 	if (imxdma->irq_handler)
 		imxdma->irq_handler(chno, imxdma->data);
@@ -655,16 +650,15 @@ static irqreturn_t dma_irq_handler(int irq, void *dev_id)
 	int i, disr;
 
 #ifdef CONFIG_ARCH_MX2
-	if (cpu_is_mx21() || cpu_is_mx27())
-		dma_err_handler(irq, dev_id);
+	dma_err_handler(irq, dev_id);
 #endif
 
-	disr = imx_dmav1_readl(DMA_DISR);
+	disr = __raw_readl(DMA_BASE + DMA_DISR);
 
 	pr_debug("imxdma: dma_irq_handler called, disr=0x%08x\n",
 		     disr);
 
-	imx_dmav1_writel(disr, DMA_DISR);
+	__raw_writel(disr, DMA_BASE + DMA_DISR);
 	for (i = 0; i < IMX_DMA_CHANNELS; i++) {
 		if (disr & (1 << i))
 			dma_irq_handle_channel(i);
@@ -704,19 +698,17 @@ int imx_dma_request(int channel, const char *name)
 	local_irq_restore(flags); /* request_irq() can block */
 
 #ifdef CONFIG_ARCH_MX2
-	if (cpu_is_mx21() || cpu_is_mx27()) {
-		ret = request_irq(MX2x_INT_DMACH0 + channel,
-				dma_irq_handler, 0, "DMA", NULL);
-		if (ret) {
-			imxdma->name = NULL;
-			pr_crit("Can't register IRQ %d for DMA channel %d\n",
-					MX2x_INT_DMACH0 + channel, channel);
-			return ret;
-		}
-		init_timer(&imxdma->watchdog);
-		imxdma->watchdog.function = &imx_dma_watchdog;
-		imxdma->watchdog.data = channel;
+	ret = request_irq(MXC_INT_DMACH0 + channel, dma_irq_handler, 0, "DMA",
+			NULL);
+	if (ret) {
+		imxdma->name = NULL;
+		printk(KERN_CRIT "Can't register IRQ %d for DMA channel %d\n",
+				MXC_INT_DMACH0 + channel, channel);
+		return ret;
 	}
+	init_timer(&imxdma->watchdog);
+	imxdma->watchdog.function = &imx_dma_watchdog;
+	imxdma->watchdog.data = channel;
 #endif
 
 	return ret;
@@ -745,8 +737,7 @@ void imx_dma_free(int channel)
 	imxdma->name = NULL;
 
 #ifdef CONFIG_ARCH_MX2
-	if (cpu_is_mx21() || cpu_is_mx27())
-		free_irq(MX2x_INT_DMACH0 + channel, NULL);
+	free_irq(MXC_INT_DMACH0 + channel, NULL);
 #endif
 
 	local_irq_restore(flags);
@@ -804,53 +795,34 @@ static int __init imx_dma_init(void)
 	int ret = 0;
 	int i;
 
-#ifdef CONFIG_ARCH_MX1
-	if (cpu_is_mx1())
-		imx_dmav1_baseaddr = MX1_IO_ADDRESS(MX1_DMA_BASE_ADDR);
-	else
-#endif
-#ifdef CONFIG_MACH_MX21
-	if (cpu_is_mx21())
-		imx_dmav1_baseaddr = MX21_IO_ADDRESS(MX21_DMA_BASE_ADDR);
-	else
-#endif
-#ifdef CONFIG_MACH_MX27
-	if (cpu_is_mx27())
-		imx_dmav1_baseaddr = MX27_IO_ADDRESS(MX27_DMA_BASE_ADDR);
-	else
-#endif
-		BUG();
-
 	dma_clk = clk_get(NULL, "dma");
 	clk_enable(dma_clk);
 
 	/* reset DMA module */
-	imx_dmav1_writel(DCR_DRST, DMA_DCR);
+	__raw_writel(DCR_DRST, DMA_BASE + DMA_DCR);
 
 #ifdef CONFIG_ARCH_MX1
-	if (cpu_is_mx1()) {
-		ret = request_irq(MX1_DMA_INT, dma_irq_handler, 0, "DMA", NULL);
-		if (ret) {
-			pr_crit("Wow!  Can't register IRQ for DMA\n");
-			return ret;
-		}
+	ret = request_irq(DMA_INT, dma_irq_handler, 0, "DMA", NULL);
+	if (ret) {
+		printk(KERN_CRIT "Wow!  Can't register IRQ for DMA\n");
+		return ret;
+	}
 
-		ret = request_irq(MX1_DMA_ERR, dma_err_handler, 0, "DMA", NULL);
-		if (ret) {
-			pr_crit("Wow!  Can't register ERRIRQ for DMA\n");
-			free_irq(MX1_DMA_INT, NULL);
-			return ret;
-		}
+	ret = request_irq(DMA_ERR, dma_err_handler, 0, "DMA", NULL);
+	if (ret) {
+		printk(KERN_CRIT "Wow!  Can't register ERRIRQ for DMA\n");
+		free_irq(DMA_INT, NULL);
+		return ret;
 	}
 #endif
 	/* enable DMA module */
-	imx_dmav1_writel(DCR_DEN, DMA_DCR);
+	__raw_writel(DCR_DEN, DMA_BASE + DMA_DCR);
 
 	/* clear all interrupts */
-	imx_dmav1_writel((1 << IMX_DMA_CHANNELS) - 1, DMA_DISR);
+	__raw_writel((1 << IMX_DMA_CHANNELS) - 1, DMA_BASE + DMA_DISR);
 
 	/* disable interrupts */
-	imx_dmav1_writel((1 << IMX_DMA_CHANNELS) - 1, DMA_DIMR);
+	__raw_writel((1 << IMX_DMA_CHANNELS) - 1, DMA_BASE + DMA_DIMR);
 
 	for (i = 0; i < IMX_DMA_CHANNELS; i++) {
 		imx_dma_channels[i].sg = NULL;

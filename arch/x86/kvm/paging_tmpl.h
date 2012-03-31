@@ -162,7 +162,7 @@ walk:
 		if (rsvd_fault)
 			goto access_error;
 
-		if (write_fault && !is_writable_pte(pte))
+		if (write_fault && !is_writeble_pte(pte))
 			if (user_fault || is_write_protection(vcpu))
 				goto access_error;
 
@@ -356,12 +356,11 @@ static u64 *FNAME(fetch)(struct kvm_vcpu *vcpu, gva_t addr,
 			direct = 1;
 			if (!is_dirty_gpte(gw->ptes[level - delta]))
 				access &= ~ACC_WRITE_MASK;
-			access &= gw->pte_access;
-
 			table_gfn = gpte_to_gfn(gw->ptes[level - delta]);
 			/* advance table_gfn when emulating 1gb pages with 4k */
 			if (delta == 0)
 				table_gfn += PT_INDEX(addr, level);
+			access &= gw->pte_access;
 		} else {
 			direct = 0;
 			table_gfn = gw->table_gfn[level - 2];
@@ -493,6 +492,7 @@ static void FNAME(invlpg)(struct kvm_vcpu *vcpu, gva_t gva)
 		level = iterator.level;
 		sptep = iterator.sptep;
 
+		/* FIXME: properly handle invlpg on large guest pages */
 		if (level == PT_PAGE_TABLE_LEVEL  ||
 		    ((level == PT_DIRECTORY_LEVEL && is_large_pte(*sptep))) ||
 		    ((level == PT_PDPE_LEVEL && is_large_pte(*sptep)))) {

@@ -11,7 +11,7 @@
  *
 **/
 
-		.macro	addruart, rx, tmp
+		.macro	addruart,rx
 		mov	\rx, #0xf0000000
 		orr	\rx, \rx, #0x00000be0
 		.endm

@@ -32,7 +32,6 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 #include <asm/cpudata.h>
-#include <asm/leon.h>
 
 #include "irq.h"
 
@@ -96,9 +95,6 @@ void __init smp_cpus_done(unsigned int max_cpus)
 		break;
 	case sun4d:
 		smp4d_smp_done();
-		break;
-	case sparc_leon:
-		leon_smp_done();
 		break;
 	case sun4e:
 		printk("SUN4E\n");
@@ -310,9 +306,6 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	case sun4d:
 		smp4d_boot_cpus();
 		break;
-	case sparc_leon:
-		leon_boot_cpus();
-		break;
 	case sun4e:
 		printk("SUN4E\n");
 		BUG();
@@ -382,9 +375,6 @@ int __cpuinit __cpu_up(unsigned int cpu)
 		break;
 	case sun4d:
 		ret = smp4d_boot_one_cpu(cpu);
-		break;
-	case sparc_leon:
-		ret = leon_boot_one_cpu(cpu);
 		break;
 	case sun4e:
 		printk("SUN4E\n");

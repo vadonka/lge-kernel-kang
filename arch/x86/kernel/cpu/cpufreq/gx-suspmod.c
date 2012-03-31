@@ -80,7 +80,6 @@
 #include <linux/cpufreq.h>
 #include <linux/pci.h>
 #include <linux/errno.h>
-#include <linux/slab.h>
 
 #include <asm/processor-cyrix.h>
 

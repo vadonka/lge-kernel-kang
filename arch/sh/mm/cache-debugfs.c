@@ -22,7 +22,8 @@ enum cache_type {
 	CACHE_TYPE_UNIFIED,
 };
 
-static int cache_seq_show(struct seq_file *file, void *iter)
+static int __uses_jump_to_uncached cache_seq_show(struct seq_file *file,
+						  void *iter)
 {
 	unsigned int cache_type = (unsigned int)file->private;
 	struct cache_info *cache;
@@ -36,7 +37,7 @@ static int cache_seq_show(struct seq_file *file, void *iter)
 	 */
 	jump_to_uncached();
 
-	ccr = __raw_readl(CCR);
+	ccr = ctrl_inl(CCR);
 	if ((ccr & CCR_CACHE_ENABLE) == 0) {
 		back_to_cached();
 
@@ -89,7 +90,7 @@ static int cache_seq_show(struct seq_file *file, void *iter)
 		for (addr = addrstart, line = 0;
 		     addr < addrstart + waysize;
 		     addr += cache->linesz, line++) {
-			unsigned long data = __raw_readl(addr);
+			unsigned long data = ctrl_inl(addr);
 
 			/* Check the V bit, ignore invalid cachelines */
 			if ((data & 1) == 0)

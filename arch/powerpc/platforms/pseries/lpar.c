@@ -39,7 +39,6 @@
 #include <asm/cputable.h>
 #include <asm/udbg.h>
 #include <asm/smp.h>
-#include <asm/trace.h>
 
 #include "plpar_wrappers.h"
 #include "pseries.h"
@@ -372,7 +371,7 @@ static void pSeries_lpar_hptab_clear(void)
 		unsigned long ptel;
 	} ptes[4];
 	long lpar_rc;
-	int i, j;
+	unsigned long i, j;
 
 	/* Read in batches of 4,
 	 * invalidate only valid entries not in the VRMA
@@ -668,36 +667,4 @@ void arch_free_page(struct page *page, int order)
 }
 EXPORT_SYMBOL(arch_free_page);
 
-#endif
-
-#ifdef CONFIG_TRACEPOINTS
-/*
- * We optimise our hcall path by placing hcall_tracepoint_refcount
- * directly in the TOC so we can check if the hcall tracepoints are
- * enabled via a single load.
- */
-
-/* NB: reg/unreg are called while guarded with the tracepoints_mutex */
-extern long hcall_tracepoint_refcount;
-
-void hcall_tracepoint_regfunc(void)
-{
-	hcall_tracepoint_refcount++;
-}
-
-void hcall_tracepoint_unregfunc(void)
-{
-	hcall_tracepoint_refcount--;
-}
-
-void __trace_hcall_entry(unsigned long opcode, unsigned long *args)
-{
-	trace_hcall_entry(opcode, args);
-}
-
-void __trace_hcall_exit(long opcode, unsigned long retval,
-			unsigned long *retbuf)
-{
-	trace_hcall_exit(opcode, retval, retbuf);
-}
 #endif

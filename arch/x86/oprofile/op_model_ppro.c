@@ -78,18 +78,9 @@ static void ppro_setup_ctrs(struct op_x86_model_spec const *model,
 
 	/* clear all counters */
 	for (i = 0; i < num_counters; ++i) {
-		if (unlikely(!msrs->controls[i].addr)) {
-			if (counter_config[i].enabled && !smp_processor_id())
-				/*
-				 * counter is reserved, this is on all
-				 * cpus, so report only for cpu #0
-				 */
-				op_x86_warn_reserved(i);
+		if (unlikely(!msrs->controls[i].addr))
 			continue;
-		}
 		rdmsrl(msrs->controls[i].addr, val);
-		if (val & ARCH_PERFMON_EVENTSEL_ENABLE)
-			op_x86_warn_in_use(i);
 		val &= model->reserved;
 		wrmsrl(msrs->controls[i].addr, val);
 	}
@@ -166,7 +157,7 @@ static void ppro_start(struct op_msrs const * const msrs)
 	for (i = 0; i < num_counters; ++i) {
 		if (reset_value[i]) {
 			rdmsrl(msrs->controls[i].addr, val);
-			val |= ARCH_PERFMON_EVENTSEL_ENABLE;
+			val |= ARCH_PERFMON_EVENTSEL0_ENABLE;
 			wrmsrl(msrs->controls[i].addr, val);
 		}
 	}
@@ -184,7 +175,7 @@ static void ppro_stop(struct op_msrs const * const msrs)
 		if (!reset_value[i])
 			continue;
 		rdmsrl(msrs->controls[i].addr, val);
-		val &= ~ARCH_PERFMON_EVENTSEL_ENABLE;
+		val &= ~ARCH_PERFMON_EVENTSEL0_ENABLE;
 		wrmsrl(msrs->controls[i].addr, val);
 	}
 }

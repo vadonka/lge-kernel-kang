@@ -29,7 +29,6 @@
 #include <asm/cacheflush.h>
 #include <asm/sections.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 
 DEFINE_PER_CPU(struct kprobe *, current_kprobe) = NULL;
 DEFINE_PER_CPU(struct kprobe_ctlblk, kprobe_ctlblk);

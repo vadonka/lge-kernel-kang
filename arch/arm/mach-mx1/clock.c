@@ -570,6 +570,7 @@ static struct clk_lookup lookups[] __initdata = {
 int __init mx1_clocks_init(unsigned long fref)
 {
 	unsigned int reg;
+	int i;
 
 	/* disable clocks we are able to */
 	__raw_writel(0, SCM_GCCR);
@@ -591,7 +592,8 @@ int __init mx1_clocks_init(unsigned long fref)
 	reg = (reg & CCM_CSCR_CLKO_MASK) >> CCM_CSCR_CLKO_OFFSET;
 	clko_clk.parent = (struct clk *)clko_clocks[reg];
 
-	clkdev_add_table(lookups, ARRAY_SIZE(lookups));
+	for (i = 0; i < ARRAY_SIZE(lookups); i++)
+		clkdev_add(&lookups[i]);
 
 	clk_enable(&hclk);
 	clk_enable(&fclk);

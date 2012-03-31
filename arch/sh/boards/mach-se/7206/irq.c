@@ -32,12 +32,12 @@ static void disable_se7206_irq(unsigned int irq)
 	unsigned short msk0,msk1;
 
 	/* Set the priority in IPR to 0 */
-	val = __raw_readw(INTC_IPR01);
+	val = ctrl_inw(INTC_IPR01);
 	val &= mask;
-	__raw_writew(val, INTC_IPR01);
+	ctrl_outw(val, INTC_IPR01);
 	/* FPGA mask set */
-	msk0 = __raw_readw(INTMSK0);
-	msk1 = __raw_readw(INTMSK1);
+	msk0 = ctrl_inw(INTMSK0);
+	msk1 = ctrl_inw(INTMSK1);
 
 	switch (irq) {
 	case IRQ0_IRQ:
@@ -51,8 +51,8 @@ static void disable_se7206_irq(unsigned int irq)
 		msk1 |= 0x00ff;
 		break;
 	}
-	__raw_writew(msk0, INTMSK0);
-	__raw_writew(msk1, INTMSK1);
+	ctrl_outw(msk0, INTMSK0);
+	ctrl_outw(msk1, INTMSK1);
 }
 
 static void enable_se7206_irq(unsigned int irq)
@@ -62,13 +62,13 @@ static void enable_se7206_irq(unsigned int irq)
 	unsigned short msk0,msk1;
 
 	/* Set priority in IPR back to original value */
-	val = __raw_readw(INTC_IPR01);
+	val = ctrl_inw(INTC_IPR01);
 	val |= value;
-	__raw_writew(val, INTC_IPR01);
+	ctrl_outw(val, INTC_IPR01);
 
 	/* FPGA mask reset */
-	msk0 = __raw_readw(INTMSK0);
-	msk1 = __raw_readw(INTMSK1);
+	msk0 = ctrl_inw(INTMSK0);
+	msk1 = ctrl_inw(INTMSK1);
 
 	switch (irq) {
 	case IRQ0_IRQ:
@@ -82,20 +82,19 @@ static void enable_se7206_irq(unsigned int irq)
 		msk1 &= ~0x00ff;
 		break;
 	}
-	__raw_writew(msk0, INTMSK0);
-	__raw_writew(msk1, INTMSK1);
+	ctrl_outw(msk0, INTMSK0);
+	ctrl_outw(msk1, INTMSK1);
 }
 
 static void eoi_se7206_irq(unsigned int irq)
 {
 	unsigned short sts0,sts1;
-	struct irq_desc *desc = irq_to_desc(irq);
 
-	if (!(desc->status & (IRQ_DISABLED|IRQ_INPROGRESS)))
+	if (!(irq_desc[irq].status & (IRQ_DISABLED|IRQ_INPROGRESS)))
 		enable_se7206_irq(irq);
 	/* FPGA isr clear */
-	sts0 = __raw_readw(INTSTS0);
-	sts1 = __raw_readw(INTSTS1);
+	sts0 = ctrl_inw(INTSTS0);
+	sts1 = ctrl_inw(INTSTS1);
 
 	switch (irq) {
 	case IRQ0_IRQ:
@@ -109,8 +108,8 @@ static void eoi_se7206_irq(unsigned int irq)
 		sts1 &= ~0x00ff;
 		break;
 	}
-	__raw_writew(sts0, INTSTS0);
-	__raw_writew(sts1, INTSTS1);
+	ctrl_outw(sts0, INTSTS0);
+	ctrl_outw(sts1, INTSTS1);
 }
 
 static struct irq_chip se7206_irq_chip __read_mostly = {
@@ -137,11 +136,11 @@ void __init init_se7206_IRQ(void)
 	make_se7206_irq(IRQ0_IRQ); /* SMC91C111 */
 	make_se7206_irq(IRQ1_IRQ); /* ATA */
 	make_se7206_irq(IRQ3_IRQ); /* SLOT / PCM */
-	__raw_writew(inw(INTC_ICR1) | 0x000b ,INTC_ICR1 ) ; /* ICR1 */
+	ctrl_outw(inw(INTC_ICR1) | 0x000b ,INTC_ICR1 ) ; /* ICR1 */
 
 	/* FPGA System register setup*/
-	__raw_writew(0x0000,INTSTS0); /* Clear INTSTS0 */
-	__raw_writew(0x0000,INTSTS1); /* Clear INTSTS1 */
+	ctrl_outw(0x0000,INTSTS0); /* Clear INTSTS0 */
+	ctrl_outw(0x0000,INTSTS1); /* Clear INTSTS1 */
 	/* IRQ0=LAN, IRQ1=ATA, IRQ3=SLT,PCM */
-	__raw_writew(0x0001,INTSEL);
+	ctrl_outw(0x0001,INTSEL);
 }

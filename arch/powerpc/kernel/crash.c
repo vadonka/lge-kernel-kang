@@ -163,7 +163,7 @@ static void crash_kexec_prepare_cpus(int cpu)
 }
 
 /* wait for all the CPUs to hit real mode but timeout if they don't come in */
-#if defined(CONFIG_PPC_STD_MMU_64) && defined(CONFIG_SMP)
+#ifdef CONFIG_PPC_STD_MMU_64
 static void crash_kexec_wait_realmode(int cpu)
 {
 	unsigned int msecs;
@@ -176,12 +176,8 @@ static void crash_kexec_wait_realmode(int cpu)
 
 		while (paca[i].kexec_state < KEXEC_STATE_REAL_MODE) {
 			barrier();
-			if (!cpu_possible(i)) {
+			if (!cpu_possible(i) || !cpu_online(i) || (msecs <= 0))
 				break;
-			}
-			if (!cpu_online(i)) {
-				break;
-			}
 			msecs--;
 			mdelay(1);
 		}
@@ -403,7 +399,7 @@ void default_machine_crash_shutdown(struct pt_regs *regs)
 	hard_irq_disable();
 
 	for_each_irq(i) {
-		struct irq_desc *desc = irq_to_desc(i);
+		struct irq_desc *desc = irq_desc + i;
 
 		if (!desc || !desc->chip || !desc->chip->eoi)
 			continue;

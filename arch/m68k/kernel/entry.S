@@ -179,11 +179,7 @@ do_signal_return:
 	addql	#8,%sp
 	RESTORE_SWITCH_STACK
 	addql	#4,%sp
-	tstl	%d0
-	jeq	resume_userspace
-	| when single stepping into handler stop at the first insn
-	btst	#6,%curptr@(TASK_INFO+TINFO_FLAGS+2)
-	jeq	resume_userspace
+	jbra	resume_userspace
 
 do_delayed_trace:
 	bclr	#7,%sp@(PT_OFF_SR)	| clear trace bit in SR
@@ -510,7 +506,7 @@ sys_call_table:
 	.long sys_settimeofday
 	.long sys_getgroups16	/* 80 */
 	.long sys_setgroups16
-	.long sys_old_select
+	.long old_select
 	.long sys_symlink
 	.long sys_lstat
 	.long sys_readlink	/* 85 */
@@ -518,7 +514,7 @@ sys_call_table:
 	.long sys_swapon
 	.long sys_reboot
 	.long sys_old_readdir
-	.long sys_old_mmap	/* 90 */
+	.long old_mmap		/* 90 */
 	.long sys_munmap
 	.long sys_truncate
 	.long sys_ftruncate
@@ -761,8 +757,4 @@ sys_call_table:
 	.long sys_pwritev		/* 330 */
 	.long sys_rt_tgsigqueueinfo
 	.long sys_perf_event_open
-	.long sys_get_thread_area
-	.long sys_set_thread_area
-	.long sys_atomic_cmpxchg_32	/* 335 */
-	.long sys_atomic_barrier
 

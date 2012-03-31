@@ -12,7 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/slab.h>
+#include <linux/gfp.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/rbtree.h>
@@ -20,7 +20,6 @@
 #include <asm/cacheflush.h>
 #include <asm/processor.h>
 #include <asm/tlbflush.h>
-#include <asm/x86_init.h>
 #include <asm/pgtable.h>
 #include <asm/fcntl.h>
 #include <asm/e820.h>
@@ -356,6 +355,9 @@ static int free_ram_pages_type(u64 start, u64 end)
  * - _PAGE_CACHE_UC_MINUS
  * - _PAGE_CACHE_UC
  *
+ * req_type will have a special case value '-1', when requester want to inherit
+ * the memory type from mtrr (if WB), existing PAT, defaulting to UC_MINUS.
+ *
  * If new_type is NULL, function will return an error if it cannot reserve the
  * region with req_type. If new_type is non-NULL, function will return
  * available type in new_type in case of no error. In case of any error
@@ -375,7 +377,9 @@ int reserve_memtype(u64 start, u64 end, unsigned long req_type,
 	if (!pat_enabled) {
 		/* This is identical to page table setting without PAT */
 		if (new_type) {
-			if (req_type == _PAGE_CACHE_WC)
+			if (req_type == -1)
+				*new_type = _PAGE_CACHE_WB;
+			else if (req_type == _PAGE_CACHE_WC)
 				*new_type = _PAGE_CACHE_UC_MINUS;
 			else
 				*new_type = req_type & _PAGE_CACHE_MASK;
@@ -384,7 +388,7 @@ int reserve_memtype(u64 start, u64 end, unsigned long req_type,
 	}
 
 	/* Low ISA region is always mapped WB in page table. No need to track */
-	if (x86_platform.is_untracked_pat_range(start, end)) {
+	if (is_ISA_range(start, end - 1)) {
 		if (new_type)
 			*new_type = _PAGE_CACHE_WB;
 		return 0;
@@ -495,7 +499,7 @@ int free_memtype(u64 start, u64 end)
 		return 0;
 
 	/* Low ISA region is always mapped WB. No need to track */
-	if (x86_platform.is_untracked_pat_range(start, end))
+	if (is_ISA_range(start, end - 1))
 		return 0;
 
 	is_range_ram = pat_pagerange_is_ram(start, end);
@@ -578,7 +582,7 @@ static unsigned long lookup_memtype(u64 paddr)
 	int rettype = _PAGE_CACHE_WB;
 	struct memtype *entry;
 
-	if (x86_platform.is_untracked_pat_range(paddr, paddr + PAGE_SIZE))
+	if (is_ISA_range(paddr, paddr + PAGE_SIZE - 1))
 		return rettype;
 
 	if (pat_pagerange_is_ram(paddr, paddr + PAGE_SIZE)) {
@@ -704,8 +708,9 @@ int phys_mem_access_prot_allowed(struct file *file, unsigned long pfn,
 	if (!range_is_allowed(pfn, size))
 		return 0;
 
-	if (file->f_flags & O_DSYNC)
+	if (file->f_flags & O_SYNC) {
 		flags = _PAGE_CACHE_UC_MINUS;
+	}
 
 #ifdef CONFIG_X86_32
 	/*
@@ -1013,10 +1018,8 @@ static const struct file_operations memtype_fops = {
 
 static int __init pat_memtype_list_init(void)
 {
-	if (pat_enabled) {
-		debugfs_create_file("pat_memtype_list", S_IRUSR,
-				    arch_debugfs_dir, NULL, &memtype_fops);
-	}
+	debugfs_create_file("pat_memtype_list", S_IRUSR, arch_debugfs_dir,
+				NULL, &memtype_fops);
 	return 0;
 }
 

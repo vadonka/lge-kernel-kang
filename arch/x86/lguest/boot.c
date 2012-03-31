@@ -115,7 +115,7 @@ static void async_hcall(unsigned long call, unsigned long arg1,
 	local_irq_save(flags);
 	if (lguest_data.hcall_status[next_call] != 0xFF) {
 		/* Table full, so do normal hcall which will flush table. */
-		hcall(call, arg1, arg2, arg3, arg4);
+		kvm_hypercall4(call, arg1, arg2, arg3, arg4);
 	} else {
 		lguest_data.hcalls[next_call].arg0 = call;
 		lguest_data.hcalls[next_call].arg1 = arg1;
@@ -145,45 +145,46 @@ static void async_hcall(unsigned long call, unsigned long arg1,
  * So, when we're in lazy mode, we call async_hcall() to store the call for
  * future processing:
  */
-static void lazy_hcall1(unsigned long call, unsigned long arg1)
+static void lazy_hcall1(unsigned long call,
+		       unsigned long arg1)
 {
 	if (paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE)
-		hcall(call, arg1, 0, 0, 0);
+		kvm_hypercall1(call, arg1);
 	else
 		async_hcall(call, arg1, 0, 0, 0);
 }
 
 /* You can imagine what lazy_hcall2, 3 and 4 look like. :*/
 static void lazy_hcall2(unsigned long call,
-			unsigned long arg1,
-			unsigned long arg2)
+		       unsigned long arg1,
+		       unsigned long arg2)
 {
 	if (paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE)
-		hcall(call, arg1, arg2, 0, 0);
+		kvm_hypercall2(call, arg1, arg2);
 	else
 		async_hcall(call, arg1, arg2, 0, 0);
 }
 
 static void lazy_hcall3(unsigned long call,
-			unsigned long arg1,
-			unsigned long arg2,
-			unsigned long arg3)
+		       unsigned long arg1,
+		       unsigned long arg2,
+		       unsigned long arg3)
 {
 	if (paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE)
-		hcall(call, arg1, arg2, arg3, 0);
+		kvm_hypercall3(call, arg1, arg2, arg3);
 	else
 		async_hcall(call, arg1, arg2, arg3, 0);
 }
 
 #ifdef CONFIG_X86_PAE
 static void lazy_hcall4(unsigned long call,
-			unsigned long arg1,
-			unsigned long arg2,
-			unsigned long arg3,
-			unsigned long arg4)
+		       unsigned long arg1,
+		       unsigned long arg2,
+		       unsigned long arg3,
+		       unsigned long arg4)
 {
 	if (paravirt_get_lazy_mode() == PARAVIRT_LAZY_NONE)
-		hcall(call, arg1, arg2, arg3, arg4);
+		kvm_hypercall4(call, arg1, arg2, arg3, arg4);
 	else
 		async_hcall(call, arg1, arg2, arg3, arg4);
 }
@@ -195,13 +196,13 @@ static void lazy_hcall4(unsigned long call,
 :*/
 static void lguest_leave_lazy_mmu_mode(void)
 {
-	hcall(LHCALL_FLUSH_ASYNC, 0, 0, 0, 0);
+	kvm_hypercall0(LHCALL_FLUSH_ASYNC);
 	paravirt_leave_lazy_mmu();
 }
 
 static void lguest_end_context_switch(struct task_struct *next)
 {
-	hcall(LHCALL_FLUSH_ASYNC, 0, 0, 0, 0);
+	kvm_hypercall0(LHCALL_FLUSH_ASYNC);
 	paravirt_end_context_switch(next);
 }
 
@@ -285,7 +286,7 @@ static void lguest_write_idt_entry(gate_desc *dt,
 	/* Keep the local copy up to date. */
 	native_write_idt_entry(dt, entrynum, g);
 	/* Tell Host about this new entry. */
-	hcall(LHCALL_LOAD_IDT_ENTRY, entrynum, desc[0], desc[1], 0);
+	kvm_hypercall3(LHCALL_LOAD_IDT_ENTRY, entrynum, desc[0], desc[1]);
 }
 
 /*
@@ -299,7 +300,7 @@ static void lguest_load_idt(const struct desc_ptr *desc)
 	struct desc_struct *idt = (void *)desc->address;
 
 	for (i = 0; i < (desc->size+1)/8; i++)
-		hcall(LHCALL_LOAD_IDT_ENTRY, i, idt[i].a, idt[i].b, 0);
+		kvm_hypercall3(LHCALL_LOAD_IDT_ENTRY, i, idt[i].a, idt[i].b);
 }
 
 /*
@@ -320,7 +321,7 @@ static void lguest_load_gdt(const struct desc_ptr *desc)
 	struct desc_struct *gdt = (void *)desc->address;
 
 	for (i = 0; i < (desc->size+1)/8; i++)
-		hcall(LHCALL_LOAD_GDT_ENTRY, i, gdt[i].a, gdt[i].b, 0);
+		kvm_hypercall3(LHCALL_LOAD_GDT_ENTRY, i, gdt[i].a, gdt[i].b);
 }
 
 /*
@@ -333,8 +334,8 @@ static void lguest_write_gdt_entry(struct desc_struct *dt, int entrynum,
 {
 	native_write_gdt_entry(dt, entrynum, desc, type);
 	/* Tell Host about this new entry. */
-	hcall(LHCALL_LOAD_GDT_ENTRY, entrynum,
-	      dt[entrynum].a, dt[entrynum].b, 0);
+	kvm_hypercall3(LHCALL_LOAD_GDT_ENTRY, entrynum,
+		       dt[entrynum].a, dt[entrynum].b);
 }
 
 /*
@@ -930,7 +931,7 @@ static int lguest_clockevent_set_next_event(unsigned long delta,
 	}
 
 	/* Please wake us this far in the future. */
-	hcall(LHCALL_SET_CLOCKEVENT, delta, 0, 0, 0);
+	kvm_hypercall1(LHCALL_SET_CLOCKEVENT, delta);
 	return 0;
 }
 
@@ -941,7 +942,7 @@ static void lguest_clockevent_set_mode(enum clock_event_mode mode,
 	case CLOCK_EVT_MODE_UNUSED:
 	case CLOCK_EVT_MODE_SHUTDOWN:
 		/* A 0 argument shuts the clock down. */
-		hcall(LHCALL_SET_CLOCKEVENT, 0, 0, 0, 0);
+		kvm_hypercall0(LHCALL_SET_CLOCKEVENT);
 		break;
 	case CLOCK_EVT_MODE_ONESHOT:
 		/* This is what we expect. */
@@ -1099,7 +1100,7 @@ static void set_lguest_basic_apic_ops(void)
 /* STOP!  Until an interrupt comes in. */
 static void lguest_safe_halt(void)
 {
-	hcall(LHCALL_HALT, 0, 0, 0, 0);
+	kvm_hypercall0(LHCALL_HALT);
 }
 
 /*
@@ -1111,8 +1112,8 @@ static void lguest_safe_halt(void)
  */
 static void lguest_power_off(void)
 {
-	hcall(LHCALL_SHUTDOWN, __pa("Power down"),
-	      LGUEST_SHUTDOWN_POWEROFF, 0, 0);
+	kvm_hypercall2(LHCALL_SHUTDOWN, __pa("Power down"),
+					LGUEST_SHUTDOWN_POWEROFF);
 }
 
 /*
@@ -1122,7 +1123,7 @@ static void lguest_power_off(void)
  */
 static int lguest_panic(struct notifier_block *nb, unsigned long l, void *p)
 {
-	hcall(LHCALL_SHUTDOWN, __pa(p), LGUEST_SHUTDOWN_POWEROFF, 0, 0);
+	kvm_hypercall2(LHCALL_SHUTDOWN, __pa(p), LGUEST_SHUTDOWN_POWEROFF);
 	/* The hcall won't return, but to keep gcc happy, we're "done". */
 	return NOTIFY_DONE;
 }
@@ -1161,7 +1162,7 @@ static __init int early_put_chars(u32 vtermno, const char *buf, int count)
 		len = sizeof(scratch) - 1;
 	scratch[len] = '\0';
 	memcpy(scratch, buf, len);
-	hcall(LHCALL_NOTIFY, __pa(scratch), 0, 0, 0);
+	kvm_hypercall1(LHCALL_NOTIFY, __pa(scratch));
 
 	/* This routine returns the number of bytes actually written. */
 	return len;
@@ -1173,7 +1174,7 @@ static __init int early_put_chars(u32 vtermno, const char *buf, int count)
  */
 static void lguest_restart(char *reason)
 {
-	hcall(LHCALL_SHUTDOWN, __pa(reason), LGUEST_SHUTDOWN_RESTART, 0, 0);
+	kvm_hypercall2(LHCALL_SHUTDOWN, __pa(reason), LGUEST_SHUTDOWN_RESTART);
 }
 
 /*G:050

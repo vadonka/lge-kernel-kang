@@ -13,7 +13,6 @@
 #include <linux/ptrace.h>
 #include <linux/preempt.h>
 #include <linux/kdebug.h>
-#include <linux/slab.h>
 #include <asm/cacheflush.h>
 #include <asm/uaccess.h>
 
