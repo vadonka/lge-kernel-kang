@@ -7,7 +7,6 @@
 #include <linux/string.h>
 #include <linux/fs.h>
 #include <linux/security.h>
-#include <linux/slab.h>
 #include "ext4_jbd2.h"
 #include "ext4.h"
 #include "xattr.h"

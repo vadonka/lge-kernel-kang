@@ -23,7 +23,6 @@
 
 #include "mballoc.h"
 #include <linux/debugfs.h>
-#include <linux/slab.h>
 #include <trace/events/ext4.h>
 
 /*
@@ -70,7 +69,7 @@
  *
  * pa_lstart -> the logical start block for this prealloc space
  * pa_pstart -> the physical start block for this prealloc space
- * pa_len    -> length for this prealloc space
+ * pa_len    -> lenght for this prealloc space
  * pa_free   ->  free space available in this prealloc space
  *
  * The inode preallocation space is used looking at the _logical_ start
@@ -143,7 +142,7 @@
  * 2 blocks and the order of allocation is >= sbi->s_mb_order2_reqs. The
  * value of s_mb_order2_reqs can be tuned via
  * /sys/fs/ext4/<partition>/mb_order2_req.  If the request len is equal to
- * stripe size (sbi->s_stripe), we try to search for contiguous block in
+ * stripe size (sbi->s_stripe), we try to search for contigous block in
  * stripe size. This should result in better allocation on RAID setups. If
  * not, we search in the specific group using bitmap for best extents. The
  * tunable min_to_scan and max_to_scan control the behaviour here.

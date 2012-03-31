@@ -13,7 +13,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/slab.h>
 #include "ext4_jbd2.h"
 #include "ext4_extents.h"
 

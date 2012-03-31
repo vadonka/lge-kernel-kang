@@ -68,21 +68,7 @@ static int ext4_statfs(struct dentry *dentry, struct kstatfs *buf);
 static int ext4_unfreeze(struct super_block *sb);
 static void ext4_write_super(struct super_block *sb);
 static int ext4_freeze(struct super_block *sb);
-static int ext4_get_sb(struct file_system_type *fs_type, int flags,
-		       const char *dev_name, void *data, struct vfsmount *mnt);
 
-#if !defined(CONFIG_EXT3_FS) && !defined(CONFIG_EXT3_FS_MODULE) && defined(CONFIG_EXT4_USE_FOR_EXT23)
-static struct file_system_type ext3_fs_type = {
-	.owner		= THIS_MODULE,
-	.name		= "ext3",
-	.get_sb		= ext4_get_sb,
-	.kill_sb	= kill_block_super,
-	.fs_flags	= FS_REQUIRES_DEV,
-};
-#define IS_EXT3_SB(sb) ((sb)->s_bdev->bd_holder == &ext3_fs_type)
-#else
-#define IS_EXT3_SB(sb) (0)
-#endif
 
 ext4_fsblk_t ext4_block_bitmap(struct super_block *sb,
 			       struct ext4_group_desc *bg)
@@ -317,7 +303,7 @@ void ext4_journal_abort_handle(const char *caller, const char *err_fn,
  * write out the superblock safely.
  *
  * We'll just use the jbd2_journal_abort() error code to record an error in
- * the journal instead.  On recovery, the journal will complain about
+ * the journal instead.  On recovery, the journal will compain about
  * that error until we've noted it down and cleared it.
  */
 
@@ -4007,52 +3993,6 @@ static int ext4_get_sb(struct file_system_type *fs_type, int flags,
 	return get_sb_bdev(fs_type, flags, dev_name, data, ext4_fill_super,mnt);
 }
 
-#if !defined(CONFIG_EXT2_FS) && !defined(CONFIG_EXT2_FS_MODULE) && defined(CONFIG_EXT4_USE_FOR_EXT23)
-static struct file_system_type ext2_fs_type = {
-	.owner		= THIS_MODULE,
-	.name		= "ext2",
-	.get_sb		= ext4_get_sb,
-	.kill_sb	= kill_block_super,
-	.fs_flags	= FS_REQUIRES_DEV,
-};
-
-static inline void register_as_ext2(void)
-{
-	int err = register_filesystem(&ext2_fs_type);
-	if (err)
-		printk(KERN_WARNING
-		       "EXT4-fs: Unable to register as ext2 (%d)\n", err);
-}
-
-static inline void unregister_as_ext2(void)
-{
-	unregister_filesystem(&ext2_fs_type);
-}
-MODULE_ALIAS("ext2");
-#else
-static inline void register_as_ext2(void) { }
-static inline void unregister_as_ext2(void) { }
-#endif
-
-#if !defined(CONFIG_EXT3_FS) && !defined(CONFIG_EXT3_FS_MODULE) && defined(CONFIG_EXT4_USE_FOR_EXT23)
-static inline void register_as_ext3(void)
-{
-	int err = register_filesystem(&ext3_fs_type);
-	if (err)
-		printk(KERN_WARNING
-		       "EXT4-fs: Unable to register as ext3 (%d)\n", err);
-}
-
-static inline void unregister_as_ext3(void)
-{
-	unregister_filesystem(&ext3_fs_type);
-}
-MODULE_ALIAS("ext3");
-#else
-static inline void register_as_ext3(void) { }
-static inline void unregister_as_ext3(void) { }
-#endif
-
 static struct file_system_type ext4_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "ext4",
@@ -4083,15 +4023,11 @@ static int __init init_ext4_fs(void)
 	err = init_inodecache();
 	if (err)
 		goto out1;
-	register_as_ext2();
-	register_as_ext3();
 	err = register_filesystem(&ext4_fs_type);
 	if (err)
 		goto out;
 	return 0;
 out:
-	unregister_as_ext2();
-	unregister_as_ext3();
 	destroy_inodecache();
 out1:
 	exit_ext4_xattr();
@@ -4107,8 +4043,6 @@ out4:
 
 static void __exit exit_ext4_fs(void)
 {
-	unregister_as_ext2();
-	unregister_as_ext3();
 	unregister_filesystem(&ext4_fs_type);
 	destroy_inodecache();
 	exit_ext4_xattr();
