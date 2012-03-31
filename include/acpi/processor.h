@@ -93,11 +93,11 @@ struct acpi_processor_power {
 /* Performance Management */
 
 struct acpi_psd_package {
-	u64 num_entries;
-	u64 revision;
-	u64 domain;
-	u64 coord_type;
-	u64 num_processors;
+	acpi_integer num_entries;
+	acpi_integer revision;
+	acpi_integer domain;
+	acpi_integer coord_type;
+	acpi_integer num_processors;
 } __attribute__ ((packed));
 
 struct acpi_pct_register {
@@ -111,12 +111,12 @@ struct acpi_pct_register {
 } __attribute__ ((packed));
 
 struct acpi_processor_px {
-	u64 core_frequency;	/* megahertz */
-	u64 power;	/* milliWatts */
-	u64 transition_latency;	/* microseconds */
-	u64 bus_master_latency;	/* microseconds */
-	u64 control;	/* control value */
-	u64 status;	/* success indicator */
+	acpi_integer core_frequency;	/* megahertz */
+	acpi_integer power;	/* milliWatts */
+	acpi_integer transition_latency;	/* microseconds */
+	acpi_integer bus_master_latency;	/* microseconds */
+	acpi_integer control;	/* control value */
+	acpi_integer status;	/* success indicator */
 };
 
 struct acpi_processor_performance {
@@ -134,11 +134,11 @@ struct acpi_processor_performance {
 /* Throttling Control */
 
 struct acpi_tsd_package {
-	u64 num_entries;
-	u64 revision;
-	u64 domain;
-	u64 coord_type;
-	u64 num_processors;
+	acpi_integer num_entries;
+	acpi_integer revision;
+	acpi_integer domain;
+	acpi_integer coord_type;
+	acpi_integer num_processors;
 } __attribute__ ((packed));
 
 struct acpi_ptc_register {
@@ -152,11 +152,11 @@ struct acpi_ptc_register {
 } __attribute__ ((packed));
 
 struct acpi_processor_tx_tss {
-	u64 freqpercentage;	/* */
-	u64 power;	/* milliWatts */
-	u64 transition_latency;	/* microseconds */
-	u64 control;	/* control value */
-	u64 status;	/* success indicator */
+	acpi_integer freqpercentage;	/* */
+	acpi_integer power;	/* milliWatts */
+	acpi_integer transition_latency;	/* microseconds */
+	acpi_integer control;	/* control value */
+	acpi_integer status;	/* success indicator */
 };
 struct acpi_processor_tx {
 	u16 power;
@@ -225,6 +225,8 @@ struct acpi_processor {
 	struct acpi_processor_throttling throttling;
 	struct acpi_processor_limit limit;
 	struct thermal_cooling_device *cdev;
+	/* the _PDC objects for this processor, if any */
+	struct acpi_object_list *pdc;
 };
 
 struct acpi_processor_errata {
@@ -239,7 +241,7 @@ struct acpi_processor_errata {
 
 extern int acpi_processor_preregister_performance(struct
 						  acpi_processor_performance
-						  __percpu *performance);
+						  *performance);
 
 extern int acpi_processor_register_performance(struct acpi_processor_performance
 					       *performance, unsigned int cpu);
@@ -255,6 +257,9 @@ int acpi_processor_notify_smm(struct module *calling_module);
 /* for communication between multiple parts of the processor kernel module */
 DECLARE_PER_CPU(struct acpi_processor *, processors);
 extern struct acpi_processor_errata errata;
+
+void arch_acpi_processor_init_pdc(struct acpi_processor *pr);
+void arch_acpi_processor_cleanup_pdc(struct acpi_processor *pr);
 
 #ifdef ARCH_HAS_POWER_INIT
 void acpi_processor_power_init_bm_check(struct acpi_processor_flags *flags,
@@ -290,8 +295,7 @@ static inline void acpi_processor_ffh_cstate_enter(struct acpi_processor_cx
 #ifdef CONFIG_CPU_FREQ
 void acpi_processor_ppc_init(void);
 void acpi_processor_ppc_exit(void);
-int acpi_processor_ppc_has_changed(struct acpi_processor *pr, int event_flag);
-extern int acpi_processor_get_bios_limit(int cpu, unsigned int *limit);
+int acpi_processor_ppc_has_changed(struct acpi_processor *pr);
 #else
 static inline void acpi_processor_ppc_init(void)
 {
@@ -301,8 +305,7 @@ static inline void acpi_processor_ppc_exit(void)
 {
 	return;
 }
-static inline int acpi_processor_ppc_has_changed(struct acpi_processor *pr,
-								int event_flag)
+static inline int acpi_processor_ppc_has_changed(struct acpi_processor *pr)
 {
 	static unsigned int printout = 1;
 	if (printout) {
@@ -314,23 +317,7 @@ static inline int acpi_processor_ppc_has_changed(struct acpi_processor *pr,
 	}
 	return 0;
 }
-static inline int acpi_processor_get_bios_limit(int cpu, unsigned int *limit)
-{
-	return -ENODEV;
-}
-
 #endif				/* CONFIG_CPU_FREQ */
-
-/* in processor_core.c */
-void acpi_processor_set_pdc(acpi_handle handle);
-#ifdef CONFIG_SMP
-int acpi_get_cpuid(acpi_handle, int type, u32 acpi_id);
-#else
-static inline int acpi_get_cpuid(acpi_handle handle, int type, u32 acpi_id)
-{
-	return -1;
-}
-#endif
 
 /* in processor_throttling.c */
 int acpi_processor_tstate_has_changed(struct acpi_processor *pr);
