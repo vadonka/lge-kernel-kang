@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2010, Intel Corp.
+ * Copyright (C) 2000 - 2008, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -70,8 +70,9 @@ ACPI_MODULE_NAME("utmath")
  *
  ******************************************************************************/
 acpi_status
-acpi_ut_short_divide(u64 dividend,
-		     u32 divisor, u64 *out_quotient, u32 *out_remainder)
+acpi_ut_short_divide(acpi_integer dividend,
+		     u32 divisor,
+		     acpi_integer * out_quotient, u32 * out_remainder)
 {
 	union uint64_overlay dividend_ovl;
 	union uint64_overlay quotient;
@@ -125,8 +126,9 @@ acpi_ut_short_divide(u64 dividend,
  ******************************************************************************/
 
 acpi_status
-acpi_ut_divide(u64 in_dividend,
-	       u64 in_divisor, u64 *out_quotient, u64 *out_remainder)
+acpi_ut_divide(acpi_integer in_dividend,
+	       acpi_integer in_divisor,
+	       acpi_integer * out_quotient, acpi_integer * out_remainder)
 {
 	union uint64_overlay dividend;
 	union uint64_overlay divisor;
@@ -197,8 +199,9 @@ acpi_ut_divide(u64 in_dividend,
 		 * The 64-bit remainder must be generated.
 		 */
 		partial1 = quotient.part.lo * divisor.part.hi;
-		partial2.full = (u64) quotient.part.lo * divisor.part.lo;
-		partial3.full = (u64) partial2.part.hi + partial1;
+		partial2.full =
+		    (acpi_integer) quotient.part.lo * divisor.part.lo;
+		partial3.full = (acpi_integer) partial2.part.hi + partial1;
 
 		remainder.part.hi = partial3.part.lo;
 		remainder.part.lo = partial2.part.lo;
@@ -254,8 +257,9 @@ acpi_ut_divide(u64 in_dividend,
  *
  ******************************************************************************/
 acpi_status
-acpi_ut_short_divide(u64 in_dividend,
-		     u32 divisor, u64 *out_quotient, u32 *out_remainder)
+acpi_ut_short_divide(acpi_integer in_dividend,
+		     u32 divisor,
+		     acpi_integer * out_quotient, u32 * out_remainder)
 {
 
 	ACPI_FUNCTION_TRACE(ut_short_divide);
@@ -280,8 +284,9 @@ acpi_ut_short_divide(u64 in_dividend,
 }
 
 acpi_status
-acpi_ut_divide(u64 in_dividend,
-	       u64 in_divisor, u64 *out_quotient, u64 *out_remainder)
+acpi_ut_divide(acpi_integer in_dividend,
+	       acpi_integer in_divisor,
+	       acpi_integer * out_quotient, acpi_integer * out_remainder)
 {
 	ACPI_FUNCTION_TRACE(ut_divide);
 

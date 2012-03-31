@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2010, Intel Corp.
+ * Copyright (C) 2000 - 2008, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,7 +96,7 @@ acpi_status acpi_ns_initialize_objects(void)
 	/* Walk entire namespace from the supplied root */
 
 	status = acpi_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
-				     ACPI_UINT32_MAX, acpi_ns_init_one_object, NULL,
+				     ACPI_UINT32_MAX, acpi_ns_init_one_object,
 				     &info, NULL);
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status, "During WalkNamespace"));
@@ -156,8 +156,7 @@ acpi_status acpi_ns_initialize_devices(void)
 
 	status = acpi_ns_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
 					ACPI_UINT32_MAX, FALSE,
-					acpi_ns_find_ini_methods, NULL, &info,
-					NULL);
+					acpi_ns_find_ini_methods, &info, NULL);
 	if (ACPI_FAILURE(status)) {
 		goto error_exit;
 	}
@@ -190,8 +189,7 @@ acpi_status acpi_ns_initialize_devices(void)
 
 	status = acpi_ns_walk_namespace(ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
 					ACPI_UINT32_MAX, FALSE,
-					acpi_ns_init_one_device, NULL, &info,
-					NULL);
+					acpi_ns_init_one_device, &info, NULL);
 
 	ACPI_FREE(info.evaluate_info);
 	if (ACPI_FAILURE(status)) {

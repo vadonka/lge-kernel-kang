@@ -443,7 +443,8 @@ struct thermal_cooling_device_ops processor_cooling_ops = {
 #ifdef CONFIG_ACPI_PROCFS
 static int acpi_processor_limit_seq_show(struct seq_file *seq, void *offset)
 {
-	struct acpi_processor *pr = seq->private;
+	struct acpi_processor *pr = (struct acpi_processor *)seq->private;
+
 
 	if (!pr)
 		goto end;

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2010, Intel Corp.
+ * Copyright (C) 2000 - 2008, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -287,8 +287,7 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 	/* Invoke an internal method if necessary */
 
 	if (info->obj_desc->method.method_flags & AML_METHOD_INTERNAL_ONLY) {
-		status =
-		    info->obj_desc->method.extra.implementation(walk_state);
+		status = info->obj_desc->method.implementation(walk_state);
 		info->return_object = walk_state->return_desc;
 
 		/* Cleanup states */
@@ -307,12 +306,14 @@ acpi_status acpi_ps_execute_method(struct acpi_evaluate_info *info)
 	 */
 	if (acpi_gbl_enable_interpreter_slack) {
 		walk_state->implicit_return_obj =
-		    acpi_ut_create_integer_object((u64) 0);
+		    acpi_ut_create_internal_object(ACPI_TYPE_INTEGER);
 		if (!walk_state->implicit_return_obj) {
 			status = AE_NO_MEMORY;
 			acpi_ds_delete_walk_state(walk_state);
 			goto cleanup;
 		}
+
+		walk_state->implicit_return_obj->integer.value = 0;
 	}
 
 	/* Parse the AML */

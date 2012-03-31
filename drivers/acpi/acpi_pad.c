@@ -27,16 +27,20 @@
 #include <linux/freezer.h>
 #include <linux/cpu.h>
 #include <linux/clockchips.h>
-#include <linux/slab.h>
 #include <acpi/acpi_bus.h>
 #include <acpi/acpi_drivers.h>
-#include <asm/mwait.h>
 
-#define ACPI_PROCESSOR_AGGREGATOR_CLASS	"acpi_pad"
+#define ACPI_PROCESSOR_AGGREGATOR_CLASS	"processor_aggregator"
 #define ACPI_PROCESSOR_AGGREGATOR_DEVICE_NAME "Processor Aggregator"
 #define ACPI_PROCESSOR_AGGREGATOR_NOTIFY 0x80
 static DEFINE_MUTEX(isolated_cpus_lock);
 
+#define MWAIT_SUBSTATE_MASK	(0xf)
+#define MWAIT_CSTATE_MASK	(0xf)
+#define MWAIT_SUBSTATE_SIZE	(4)
+#define CPUID_MWAIT_LEAF (5)
+#define CPUID5_ECX_EXTENSIONS_SUPPORTED (0x1)
+#define CPUID5_ECX_INTERRUPT_BREAK	(0x2)
 static unsigned long power_saving_mwait_eax;
 static void power_saving_mwait_init(void)
 {
@@ -96,8 +100,7 @@ static void round_robin_cpu(unsigned int tsk_index)
 	struct cpumask *pad_busy_cpus = to_cpumask(pad_busy_cpus_bits);
 	cpumask_var_t tmp;
 	int cpu;
-	unsigned long min_weight = -1;
-	unsigned long uninitialized_var(preferred_cpu);
+	unsigned long min_weight = -1, preferred_cpu;
 
 	if (!alloc_cpumask_var(&tmp, GFP_KERNEL))
 		return;
@@ -204,7 +207,7 @@ static int power_saving_thread(void *data)
 		 * the mechanism only works when all CPUs have RT task running,
 		 * as if one CPU hasn't RT task, RT task from other CPUs will
 		 * borrow CPU time from this CPU and cause RT task use > 95%
-		 * CPU time. To make 'avoid starvation' work, takes a nap here.
+		 * CPU time. To make 'avoid staration' work, takes a nap here.
 		 */
 		if (do_sleep)
 			schedule_timeout_killable(HZ * idle_pct / 100);
@@ -218,18 +221,14 @@ static struct task_struct *ps_tsks[NR_CPUS];
 static unsigned int ps_tsk_num;
 static int create_power_saving_task(void)
 {
-	int rc = -ENOMEM;
-
 	ps_tsks[ps_tsk_num] = kthread_run(power_saving_thread,
 		(void *)(unsigned long)ps_tsk_num,
 		"power_saving/%d", ps_tsk_num);
-	rc = IS_ERR(ps_tsks[ps_tsk_num]) ? PTR_ERR(ps_tsks[ps_tsk_num]) : 0;
-	if (!rc)
+	if (ps_tsks[ps_tsk_num]) {
 		ps_tsk_num++;
-	else
-		ps_tsks[ps_tsk_num] = NULL;
-
-	return rc;
+		return 0;
+	}
+	return -EINVAL;
 }
 
 static void destroy_power_saving_task(void)
@@ -237,7 +236,6 @@ static void destroy_power_saving_task(void)
 	if (ps_tsk_num > 0) {
 		ps_tsk_num--;
 		kthread_stop(ps_tsks[ps_tsk_num]);
-		ps_tsks[ps_tsk_num] = NULL;
 	}
 }
 
@@ -254,7 +252,7 @@ static void set_power_saving_task_num(unsigned int num)
 	}
 }
 
-static void acpi_pad_idle_cpus(unsigned int num_cpus)
+static int acpi_pad_idle_cpus(unsigned int num_cpus)
 {
 	get_online_cpus();
 
@@ -262,6 +260,7 @@ static void acpi_pad_idle_cpus(unsigned int num_cpus)
 	set_power_saving_task_num(num_cpus);
 
 	put_online_cpus();
+	return 0;
 }
 
 static uint32_t acpi_pad_idle_cpus_num(void)
@@ -369,21 +368,19 @@ static void acpi_pad_remove_sysfs(struct acpi_device *device)
 static int acpi_pad_pur(acpi_handle handle, int *num_cpus)
 {
 	struct acpi_buffer buffer = {ACPI_ALLOCATE_BUFFER, NULL};
+	acpi_status status;
 	union acpi_object *package;
 	int rev, num, ret = -EINVAL;
 
-	if (ACPI_FAILURE(acpi_evaluate_object(handle, "_PUR", NULL, &buffer)))
+	status = acpi_evaluate_object(handle, "_PUR", NULL, &buffer);
+	if (ACPI_FAILURE(status))
 		return -EINVAL;
-
-	if (!buffer.length || !buffer.pointer)
-		return -EINVAL;
-
 	package = buffer.pointer;
 	if (package->type != ACPI_TYPE_PACKAGE || package->package.count != 2)
 		goto out;
 	rev = package->package.elements[0].integer.value;
 	num = package->package.elements[1].integer.value;
-	if (rev != 1 || num < 0)
+	if (rev != 1)
 		goto out;
 	*num_cpus = num;
 	ret = 0;
@@ -412,7 +409,7 @@ static void acpi_pad_ost(acpi_handle handle, int stat,
 
 static void acpi_pad_handle_notify(acpi_handle handle)
 {
-	int num_cpus;
+	int num_cpus, ret;
 	uint32_t idle_cpus;
 
 	mutex_lock(&isolated_cpus_lock);
@@ -420,9 +417,12 @@ static void acpi_pad_handle_notify(acpi_handle handle)
 		mutex_unlock(&isolated_cpus_lock);
 		return;
 	}
-	acpi_pad_idle_cpus(num_cpus);
+	ret = acpi_pad_idle_cpus(num_cpus);
 	idle_cpus = acpi_pad_idle_cpus_num();
-	acpi_pad_ost(handle, 0, idle_cpus);
+	if (!ret)
+		acpi_pad_ost(handle, 0, idle_cpus);
+	else
+		acpi_pad_ost(handle, 1, 0);
 	mutex_unlock(&isolated_cpus_lock);
 }
 
