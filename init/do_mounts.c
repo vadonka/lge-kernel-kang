@@ -15,7 +15,6 @@
 #include <linux/initrd.h>
 #include <linux/async.h>
 #include <linux/fs_struct.h>
-#include <linux/slab.h>
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_fs_sb.h>
