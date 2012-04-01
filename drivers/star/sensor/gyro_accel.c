@@ -1152,13 +1152,8 @@ static ssize_t motion_sensors_reboot_store(struct device *dev,  struct device_at
 	return count;
 }
 
-<<<<<<< HEAD
-//LGE_CHANGE_S [] 2011-03-04, [LGE_AP20] Virtual sensor supports
-static ssize_t motion_gravity_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
-=======
 //LGE_CHANGE_S [] 2011-03-04, [LGE_AP20] Virtual sensor supports
 static ssize_t motion_gravity_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
->>>>>>> 25d4d1f... star: fixup some minor bugs
 {
 	u32    val = atomic_read(&gravity_flag);
 	return sprintf(buf, "%d\n",val);
