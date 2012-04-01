@@ -109,6 +109,12 @@
 #define CBC_REQUEST_TIME_CRITICAL 480000 // ms
 #define GAUGE_FOLLOW_TIME	120 // second
 
+#if defined(CONFIG_STAR_BATTERY_UNIT_UV)
+#define STAR_VOLT_UNIT 1000
+#else
+#define STAR_VOLT_UNIT 1
+#endif
+
 typedef enum {
 	NvCharger_Type_Battery = 0,
 	NvCharger_Type_USB,
@@ -1687,23 +1693,26 @@ static int tegra_battery_get_property(struct power_supply *psy,
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_HEALTH(%d)", val->intval);
 			break;
 
-#ifdef CONFIG_BATTSCALE
 		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-			val->intval = batt_dev->batt_vol * 1000;
+			val->intval = batt_dev->batt_vol * STAR_VOLT_UNIT;
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
 			break;
-#else
-		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-			val->intval = batt_dev->batt_vol;
-			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
+
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+			val->intval = 4203 * STAR_VOLT_UNIT;
 			break;
-#endif
+
+		case POWER_SUPPLY_PROP_VOLTAGE_MIN:
+		case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+			val->intval = 3390 * STAR_VOLT_UNIT;
+			break;
 
 		case POWER_SUPPLY_PROP_CAPACITY:
 			if (batt_dev->BatteryGauge_on == NV_TRUE)
 				val->intval = batt_dev->BatteryLifePercent;
 			else
-				val->intval = 999;
+				val->intval = batt_dev->Capacity_Voltage;
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_CAPACITY(%d)", val->intval);
 			break;
 

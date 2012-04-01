@@ -41,6 +41,7 @@
 #include "nvcommon.h"
 #include "nvos.h"
 #include "nvrm_pmu.h"
+//#include "nvodm_pmu.h" //20100929, , RTC setting for checking battery status during sleep
 #include "mach/nvrm_linux.h" // for s_hRmGlobal
 
 //20100609, , Charger Code [START]
@@ -52,11 +53,24 @@
 //20100609, , Charger Code [END]
 
 #define DEBUGFS_STAR_BATT_TEST_MODE
+#define STAR_BATTERY_AT_COMMAND // AT+CBC & AT%FUELRST : power_supply property or switch sysfs
+#define USE_ONETIME_VOLTAGE_CAPACITY // Determine Battery capacity using voltage
+
+//20100926, , Communication with BatteryService for AT Command [START]
+#ifndef STAR_BATTERY_AT_COMMAND
+#include <linux/mutex.h>
+#include <linux/switch.h>
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
+//20100824, , get capacity using battery voltage for demo [START]
+#if defined (USE_ONETIME_VOLTAGE_CAPACITY)
+#include "star_battery_charger.h" // 100823 
+#endif // USE_ONETIME_VOLTAGE_CAPACITY
+//20100824, , get capacity using battery voltage for demo [END]
 
 //20100428, , This define for Debug Message function [START]
 #include <mach/lprintk.h>
 
-#define TRICKLE_RECHECK // Trickle charge reconfirm code
 #define LG_DEBUG_BATT  // Define for Debug Serial
 #define LG_DEBUG_CHG // Define for Debug Serial
 //#undef LG_DEBUG_BATT
@@ -82,18 +96,32 @@
 
 //20100520, , Set Delay time of Charger setting [START]
 #define CHG_IC_DELAY            200     // 200us for RT9524 - Star RevA, (100us < delay < 700us)
-#define CHG_IC_SET_DELAY        2000    // 1.5ms for RT9524 (over 1.5ms)
+#define CHG_IC_SET_DELAY        1500    // 1.5ms for RT9524
 //20100520, , Set Delay time of Charger setting [END]
 
 #define NVBATTERY_POLLING_INTERVAL 390 /* 90+300 seconds */ // Use with HZ(1sec) const
 //20100929, , RTC setting for checking battery status during sleep
 #define SLEEP_BAT_CHECK_PERIOD 2090 /* 90 + 2000 seconds */
 #define CRITICAL_BAT_CHECK_PERIOD 90 // second
+#define CBC_REQUEST_TIME_FIRST	35000 // ms
+#define CBC_REQUEST_TIME_SECOND	2000 // ms
+#define CBC_REQUEST_TIME_NORMAL	180000 // ms
+#define CBC_REQUEST_TIME_CRITICAL 480000 // ms
+#define GAUGE_FOLLOW_TIME	120 // second
+
+#if defined(CONFIG_STAR_BATTERY_UNIT_UV)
+#define STAR_VOLT_UNIT 1000
+#else
+#define STAR_VOLT_UNIT 1
+#endif
 
 typedef enum {
 	NvCharger_Type_Battery = 0,
 	NvCharger_Type_USB,
 	NvCharger_Type_AC,
+#if defined (STAR_BATTERY_AT_COMMAND)
+	NvCharger_Type_AT_Command,
+#endif // STAR_BATTERY_AT_COMMAND
 	NvCharger_Type_Num,
 	NvCharger_Type_Force32 = 0x7FFFFFFF
 } NvCharger_Type;
@@ -105,13 +133,37 @@ typedef enum {
 	NvCharge_Control_Force32 = 0x7FFFFFFF
 } NvCharge_Control;
 
+//20100702, , for Fuel gauge reset [START]
+typedef enum {
+	Gauge_CTL_Reset = 199,
+	Gauge_CTL_Reset_Done = 198
+} Gauge_CTL;
+//20100702, , for Fuel gauge reset [END]
+
 typedef enum {
 	Update_Battery_Data =0,
 	Update_USB_Data,
 	Update_AC_Data,
 	Update_Power_Data,
+#if defined (STAR_BATTERY_AT_COMMAND)
+	Update_AT_Command,
+#endif // STAR_BATTERY_AT_COMMAND
 	Update_ALL
 } OneTime_Update;
+
+typedef enum {
+	Request_First_Time = 0,
+	Request_Second_Time,
+	Request_Normal_Time,
+	Request_Resume_Time,
+} CBC_Request_State;
+
+typedef enum {
+	Clear_No_Response_0 = 0,
+	Clear_No_Response_1,
+	Clear_No_Response_2,
+	Clear_No_Response_3,
+} CBC_Clear_State;
 
 static enum power_supply_property tegra_battery_properties[] = {
 	POWER_SUPPLY_PROP_STATUS,
@@ -120,12 +172,22 @@ static enum power_supply_property tegra_battery_properties[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_TEMP
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_VOLTAGE_MIN,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN,
+	POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN,
 };
 
 static enum power_supply_property tegra_power_properties[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 };
+
+#if defined (STAR_BATTERY_AT_COMMAND)
+static enum power_supply_property star_at_command_properties[] = {
+	POWER_SUPPLY_PROP_CAPACITY_DUTY_TIME,
+};
+#endif // STAR_BATTERY_AT_COMMAND
 
 static char *supply_list[] = {
 	"battery",
@@ -138,9 +200,18 @@ static NvBool at_charge_comp = NV_FALSE;
 static NvBool ELT_test_mode = NV_FALSE;
 
 static NvU32 previous_guage=100;
+
 static int bat_shutdown = 0;
 
 //20100706, , For Full Battery process [START]
+typedef enum {
+	FULL_BATT_BOTH_NO = 0,
+	FULL_BATT_GAUGE,
+	FULL_BATT_CHARGER,
+	FULL_BATT_BOTH,
+	FULL_BATT_SET,
+} full_battery_status;
+
 typedef enum {
 	CHGSB_PGB_OFF_OFF = 0,
 	CHGSB_PGB_ON_ON,
@@ -159,7 +230,7 @@ typedef enum {
 
 //20100609, , Charger Code [START]
 typedef enum {
-	CHG_IC_DEFAULT_MODE=0,    		/* 0  */
+	CHG_IC_DEFAULT_MODE=0,			/* 0  */
 	CHG_IC_TA_MODE,
 	CHG_IC_USB_LO_MODE,
 	CHG_IC_FACTORY_MODE,
@@ -176,6 +247,9 @@ typedef struct CHG_IC_DeviceRec
 	NvOdmGpioPinHandle hPGBPin;
 	NvOdmServicesGpioIntrHandle hCHGDone_int;
 	max8922_status status;
+	//20100702, , for Fuel gauge reset [START]
+	max8922_status status_past;
+	//20100702, , for Fuel gauge reset [END]
 } CHG_IC_Device;
 
 static CHG_IC_Device *charging_ic;
@@ -201,12 +275,15 @@ static int tegra_power_get_property(struct power_supply *psy,
 static int tegra_battery_get_property(struct power_supply *psy, 
 	enum power_supply_property psp, union power_supply_propval *val);
 
-static void star_battery_data_poll_period_change(void);
+static int star_at_command_get_property(struct power_supply *psy,
+	enum power_supply_property psp, union power_supply_propval *val);
+
 static void star_debug_show_battery_status(void);
 static int star_battery_infomation_update(void);
 static void charger_control_with_battery_temp(void);
 static void star_battery_data_onetime_update(NvU8 update_option);
 static void star_gauge_follower_func(void);
+static void star_cbc_gauge_request_timer_func(unsigned long unused);
 
 static struct power_supply tegra_supplies[] = {
 	{
@@ -234,13 +311,60 @@ static struct power_supply tegra_supplies[] = {
 		.num_properties = ARRAY_SIZE(tegra_power_properties),
 		.get_property = tegra_power_get_property,
 	},
+#if defined (STAR_BATTERY_AT_COMMAND)
+	{
+		.name = "battery_monitoring",
+		.type = POWER_SUPPLY_TYPE_BATTERY_MONITORING,
+		.properties = star_at_command_properties,
+		.num_properties = ARRAY_SIZE(star_at_command_properties),
+		.get_property = star_at_command_get_property,
+	},
+#endif // STAR_BATTERY_AT_COMMAND
 };
+
+//20100926, , Communication with BatteryService for AT Command [START]
+typedef enum {
+	AT_COMM_NO = 0,
+	AT_COMM_CBC,
+	AT_COMM_FUELRST,
+	AT_COMM_CBCDC,
+} at_comm_status;
+
+#ifndef STAR_BATTERY_AT_COMMAND
+typedef struct switch_for_at_command {
+	struct switch_dev	sdev;
+	struct mutex	mutex_lock;
+	int	flag_at_comm_want;
+	int	flag_at_comm_ready;
+} at_command_switch;
+
+static at_command_switch *AtComm;
+
+static ssize_t at_comm_print_name(struct switch_dev *sdev, char *buf)
+{
+	switch (switch_get_state( &AtComm->sdev))
+	{
+		case AT_COMM_NO:
+			return sprintf(buf, "No AT Command\n");
+		case AT_COMM_CBC:
+			return sprintf(buf, "AT+CBC\n");
+		case AT_COMM_FUELRST:
+			return sprintf(buf, "AT%%FUELVAL\n");
+		case AT_COMM_CBCDC:
+			return sprintf(buf, "AT%%CBCDC\n");
+	}
+	return -EINVAL;
+}
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
 
 typedef struct tegra_battery_dev {
 	struct	workqueue_struct *battery_workqueue;
 	struct	delayed_work battery_status_poll_work;
 	struct	delayed_work battery_id_poll_work;
+	//struct	delayed_work battery_charge_done_work;
 	struct	timer_list charger_state_read_timer;
+	struct	timer_list battery_gauge_timer;
 
 	//NvU32	batt_id;		/* battery ID from ADC */
 	NvU32	batt_vol;		/* voltage from ADC */
@@ -252,9 +376,11 @@ typedef struct tegra_battery_dev {
 	NvU32	charging_enabled;	/* 0: Disable, 1: Enable */
 	//NvU32	full_bat;		/* max capacity of battery (mAh) */
 	//20100706, , For Full Battery process [START]
+	NvU32	cbc_request_time;
 	NvU8	charger_state_machine;
 	max8922_status	charger_setting_chcomp;
 	NvU32	sleep_bat_check_period;
+	NvU32	sleep_bat_check_period_to_cp;
 	//20100706, , For Full Battery process [END]
 	NvU32	BatteryLifePercent;
 	NvU32	BatteryGauge;
@@ -264,17 +390,29 @@ typedef struct tegra_battery_dev {
 	NvBool	Capacity_first_time;
 	NvBool	Boot_TA_setting;
 	NvBool	RIL_ready;
+	//20100824, , get capacity using battery voltage for demo [START]
+#if defined (USE_ONETIME_VOLTAGE_CAPACITY)
+	NvBool	repeat_index;
+	NvU32	vol_for_capacity;
+#endif // USE_ONETIME_VOLTAGE_CAPACITY
+	//20100824, , get capacity using battery voltage for demo [END]
 	//NvU32	BatteryLifeTime;
 	//NvU32	BatteryMahConsumed;
+
 	NvU32	ACLineStatus;
 	NvU32	battery_poll_interval;
 	NvBool	present;
+#if defined (STAR_BATTERY_AT_COMMAND)
+	at_comm_status	at_comm_want;
+	NvBool	at_comm_ready;
+#endif // STAR_BATTERY_AT_COMMAND
+
 	NvU32	old_alarm_sec;
 	NvU32	old_checkbat_sec;
 	NvU32	last_cbc_time;
-#if defined (TRICKLE_RECHECK)
-	NvBool	Trickle_charge_check;
-#endif // TRICKLE_RECHECK
+	NvU32	gauge_follow_time;
+	CBC_Request_State	cbc_request_state;
+	CBC_Clear_State		cbc_clear_state;
 } tegra_battery_dev;
 
 static tegra_battery_dev *batt_dev;
@@ -282,8 +420,6 @@ static tegra_battery_dev *batt_dev;
 typedef struct star_battery_dev {
 	NvU32	batt_vol;
 	NvS32	batt_temp;
-	NvU32	prev_batt_vol;
-	NvS32	prev_batt_temp;
 	NvU32	batt_health;
 	NvU32	charging_source;	/* 0: no cable, 1:usb, 2:AC */
 	NvU32	charging_enabled;	/* 0: Disable, 1: Enable */
@@ -324,11 +460,11 @@ struct star_batt_test_reg {
 #define STAR_BATT_TEST_REG(_name, _code) { .name = _name, .code = _code}
 
 static struct star_batt_test_reg star_batt_test_regs[] = {
-	STAR_BATT_TEST_REG("TestMode",  	 BATT_TEST_MODE),
-	STAR_BATT_TEST_REG("TestCapacity",    BATT_TEST_CAPACITY),
-	STAR_BATT_TEST_REG("TestVoltage",    BATT_TEST_VOLT),
-	STAR_BATT_TEST_REG("TestTemperature", BATT_TEST_TEMP),
-	STAR_BATT_TEST_REG("TestPresent", BATT_TEST_PRESENT),
+	STAR_BATT_TEST_REG("TestMode",		BATT_TEST_MODE),
+	STAR_BATT_TEST_REG("TestCapacity",	BATT_TEST_CAPACITY),
+	STAR_BATT_TEST_REG("TestVoltage",	BATT_TEST_VOLT),
+	STAR_BATT_TEST_REG("TestTemperature",	BATT_TEST_TEMP),
+	STAR_BATT_TEST_REG("TestPresent",	BATT_TEST_PRESENT),
 };
 
 static int star_battery_debug_set(void *data, u64 val)
@@ -446,8 +582,9 @@ static void change_battery_value_for_test(void)
 static void tegra_battery_status_poll_work(struct work_struct *work);
 static void star_battery_id_poll_work(struct work_struct *work);
 static void tegra_battery_gpio_read_timer_func(unsigned long unused); // BatteryTest
+static void star_cp_at_comm_request(void); // CBCDC Test
 
-//20100609, jh.ahn@lge.com, Charger Code [START]
+//20100609, , Charger Code [START]
 static void charging_ic_active_for_recharge(NvU32 Mode)
 {
 	NvU32 pulse;
@@ -488,7 +625,7 @@ static void charging_ic_active_for_recharge(NvU32 Mode)
 		NvOdmOsWaitUS(CHG_IC_DELAY);
 	}
 
-	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hSetPin, 0x0);
+	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hSetPin, 0);
 	NvOdmOsWaitUS(CHG_IC_SET_DELAY);
 
 	batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
@@ -534,13 +671,17 @@ void charging_ic_active(NvU32 Mode)
 		{
 			if ( batt_dev->present == NV_TRUE )
 			{
+				charging_ic->status_past = charging_ic->status; // Why??
+				//charging_ic->status = (max8922_status)Mode;
 				//LDC("[Present_Battery] charging_ic->status(%d)", charging_ic->status);
 				star_charger_activation_work(Mode);
 			}
 			else // batt_dev->present == NV_FALSE : for developer
 			{
+				charging_ic->status_past = charging_ic->status; // Why??
 				charging_ic->status = (max8922_status)Mode;
 				LDC("[No_Battery] charging_ic->status(%d)", charging_ic->status);
+				//star_charger_activation_work(Mode);
 			}
 		}
 
@@ -579,7 +720,7 @@ void charging_ic_active(NvU32 Mode)
 }
 EXPORT_SYMBOL(charging_ic_active);
 
-static void charging_ic_deactive_for_recharge(void)
+static void charging_ic_deactive_for_rechrge(void)
 {
 	if ( at_boot_state == 0 )
 	{
@@ -596,12 +737,9 @@ static void star_charger_deactivation_work(void)
 {
 	// Deactivation IC
 	//LDC("[chg] Start charging_ic->status = %d", charging_ic->status);
-	charging_ic_deactive_for_recharge();
+	charging_ic_deactive_for_rechrge();
 
 	charging_ic->status = CHG_IC_DEACTIVE_MODE;
-#if defined (TRICKLE_RECHECK)
-	batt_dev->Trickle_charge_check = NV_FALSE;
-#endif // TRICKLE_RECHECK)
 	//LDC("[chg] End charging_ic->status = CHG_IC_DEACTIVE_MODE(%d)", charging_ic->status);
 
 	batt_dev->ACLineStatus = NV_FALSE;
@@ -621,56 +759,29 @@ EXPORT_SYMBOL(charging_ic_deactive);
 //20100813, , For Debugging [START]
 static void star_debug_show_battery_status(void)
 {
-	static NvU32 curr_sec = 0, now_al_sec = 0;
-	struct rtc_time cbc_tm, cu_tm, al_tm;
-
-	rtc_time_to_tm(batt_dev->last_cbc_time, &cbc_tm);
-
-	if (NvRmPmuReadRtc(s_hRmGlobal, &curr_sec))
-		rtc_time_to_tm(curr_sec, &cu_tm);
-	else
-		LDB("[Warning] Debug RTC read Fail!!");
-
-	if (NvRmPmuReadAlarm(s_hRmGlobal, &now_al_sec))
-		rtc_time_to_tm(now_al_sec, &al_tm);
-	else
-		LDB("[Warning] CHR_Alarm read Fail!!");
-
-	lprintk(D_BATT, "%s : \n\n INFO : level[SOC/Volt/Temp]\n        "
-					"status[status(2:Chg/3:Dischg/5:Full),health(2:Good/3:Overheat),present(1),plugged(0:None/1:TA/2:USB),tech]\n        "
-					"FullBat[online/tric/CHG(0:USB/1:TA/3:FAC/4:Dis)], Factory_on[Array(0)/charge(0)/ELT(0)]\n\n "
-					"BATT : level[%d,%d,%d], status[%d,%d,%d,%d,Li-ion]\n        "
-					"Gauge[BG/CBC(%d,%d),on/BootTA(%d,%d),CV(%d)], FullBat[Online(%d),Trickle(%d),CHG(p:%d,n:%d)], Factory_on[%d,%d,%d]\n "
-					"CHG  : StateMachine[SHDN/STBY/CHRG/FULL/RECH : %d]\n "
-					"TIME : poll/wake[%d,%d], curr[%04d-%02d-%02d %02d:%02d:%02d], last_alarm[%04d-%02d-%02d %02d:%02d:%02d], last_CBC[%04d-%02d-%02d %02d:%02d:%02d]\n\n"
+	lprintk(D_BATT, "%s : \n\n BAT : SOC(%d), Vol(%d), Temp(%d), present(%d),\n       CV(%d), CBC(%d, %d, %d), Boot_TA(%d) \n       StateMachine(%d), AT_Boot_ELT(%d, %d, %d), poll/wake(%d, %d)\n CHG : AcLine(%d), src(%d), en(%d),\n       past(%d) full_set(%d) now(%d)\n TIME : Last_CBC(%u) GaugeFollow(%u)\n\n"
 						, __func__
 						, batt_dev->BatteryLifePercent
 						, batt_dev->batt_vol
 						, batt_dev->batt_temp
-						, (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY ? 5 : (batt_dev->charging_enabled == NV_TRUE ? (POWER_SUPPLY_STATUS_CHARGING+1) : (POWER_SUPPLY_STATUS_DISCHARGING+1)))
-						, (batt_dev->batt_health+1)
 						, batt_dev->present
-						, (batt_dev->ACLineStatus == NV_FALSE ? 0 : (batt_dev->charging_source == 2 ? 1 : 2))
+						, batt_dev->Capacity_Voltage
 						, batt_dev->BatteryGauge
 						, batt_dev->CBC_Value
 						, batt_dev->BatteryGauge_on
 						, batt_dev->Boot_TA_setting
-						, batt_dev->Capacity_Voltage
-						, batt_dev->ACLineStatus
-						#if defined (TRICKLE_RECHECK)
-						, batt_dev->Trickle_charge_check
-						#else
-						, 10
-						#endif
-						, batt_dev->charger_setting_chcomp
-						, charging_ic->status
-						, at_boot_state , at_charge_index, ELT_test_mode
 						, batt_dev->charger_state_machine
+						, at_boot_state , at_charge_index, ELT_test_mode
 						, (batt_dev->battery_poll_interval/HZ)
 						, batt_dev->sleep_bat_check_period
-						, (cu_tm.tm_year + LINUX_RTC_BASE_YEAR), (cu_tm.tm_mon+1), cu_tm.tm_mday, cu_tm.tm_hour, cu_tm.tm_min, cu_tm.tm_sec
-						, (al_tm.tm_year + LINUX_RTC_BASE_YEAR), (al_tm.tm_mon+1), al_tm.tm_mday, al_tm.tm_hour, al_tm.tm_min, al_tm.tm_sec
-						, (cbc_tm.tm_year + LINUX_RTC_BASE_YEAR), (cbc_tm.tm_mon+1), cbc_tm.tm_mday, cbc_tm.tm_hour, cbc_tm.tm_min, cbc_tm.tm_sec
+						, batt_dev->ACLineStatus
+						, batt_dev->charging_source
+						, batt_dev->charging_enabled
+						, charging_ic->status_past
+						, batt_dev->charger_setting_chcomp
+						, charging_ic->status
+						,batt_dev->last_cbc_time
+						,batt_dev->gauge_follow_time
 	);
 }
 //20100813, , For Debugging [END]
@@ -679,39 +790,78 @@ static void star_capacity_from_voltage_via_calculate(void)
 {
 	NvU32	calculate_capacity = 0;
 
-	if ((batt_dev->ACLineStatus == NV_TRUE) && ((batt_dev->charger_state_machine == CHARGER_STATE_RECHARGE) || (batt_dev->charger_state_machine == CHARGER_STATE_CHARGE)))
+	if (batt_dev->charging_source == NvCharger_Type_AC && batt_dev->ACLineStatus == NV_TRUE &&
+			((batt_dev->charger_state_machine == CHARGER_STATE_RECHARGE) || (batt_dev->charger_state_machine == CHARGER_STATE_CHARGE)))
 	{
-		if ( batt_dev->batt_vol <= 3828 )
-		{
-			calculate_capacity = 1;
-		}
-		else if (( batt_dev->batt_vol > 3828 ) && ( batt_dev->batt_vol <= 3901 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3753932260)/47378494);
-		}
-		else if (( batt_dev->batt_vol > 3901 ) && ( batt_dev->batt_vol <= 4018 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3887428489)/4445102);
-		}
-		else if (( batt_dev->batt_vol > 4018 ) && ( batt_dev->batt_vol <= 4058 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3965963402)/1786774);
-		}
-		else if (( batt_dev->batt_vol > 4058 ) && ( batt_dev->batt_vol <= 4108 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3877928383)/3482047);
-		}
-		else if (( batt_dev->batt_vol > 4108 ) && ( batt_dev->batt_vol <= 4181 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3747845158)/5444410);
-		}
-		else if (( batt_dev->batt_vol > 4181 ) && ( batt_dev->batt_vol <= 4200 ))
-		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 4110783184)/885201);
-		}
-		else
+		if (batt_dev->batt_vol >= 4200) /* v >= 0 */
 		{
 			calculate_capacity = 100;
+		}
+		else if (batt_dev->batt_vol >= 4170) /* 4170 <= v < 4200 : 80 - 100 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 4170000)/1500 + 80);
+		}
+		else if (batt_dev->batt_vol >= 4128) /* 4128 <= v < 4170 : 60 - 80 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 4128000)/2100 + 60);
+		}
+		else if (batt_dev->batt_vol >= 4020) /* 4020 <= v < 4128 : 30 - 60 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 4020000)/3600 + 30);
+		}
+		else if (batt_dev->batt_vol >= 3910) /* 3910 <= v < 4020 : 4 - 30 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3910000)/4230 + 4);
+		}
+		else if (batt_dev->batt_vol >= 3832) /* 3832 <= v < 3910 : 1 - 4 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3832000)/26000 + 1);
+		}
+		else /* v < 3832 */
+		{
+				calculate_capacity = 1;
+		}
+
+		if ( calculate_capacity < 0 ) calculate_capacity = 1;
+		if ( calculate_capacity > 100 ) calculate_capacity = 99;
+		batt_dev->Capacity_Voltage = calculate_capacity;
+
+		LDB("[CBC] : With AC Charger : CAL_CBC(%d)", calculate_capacity);
+	}
+			else
+	if ((batt_dev->ACLineStatus == NV_TRUE) && ((batt_dev->charger_state_machine == CHARGER_STATE_RECHARGE) || (batt_dev->charger_state_machine == CHARGER_STATE_CHARGE)))
+	{
+		if (batt_dev->batt_vol >= 4200) /* v >= 0 */
+		{
+			calculate_capacity = 100;
+		}
+		else if (batt_dev->batt_vol >= 4050) /* 4050 <= v < 4200 : 80 - 100 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 4050000)/7500 + 80);
+		}
+		else if (batt_dev->batt_vol >= 3910) /* 3910 <= v < 4050 : 60 - 80 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3910000)/7000 + 60);
+		}
+		else if (batt_dev->batt_vol >= 3800) /* 3800 <= v < 3910 : 40 - 60 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3800000)/5500 + 40);
+		}
+		else if (batt_dev->batt_vol >= 3710) /* 3710 <= v < 3800 : 20 - 40 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3710000)/4500 + 20);
+		}
+		else if (batt_dev->batt_vol >= 3605) /* 3605 <= v < 3710 : 5 - 20 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3605000)/7000 + 5);
+		}
+		else if (batt_dev->batt_vol >= 3392) /* 3392 <= v < 3605 : 1 - 5 */
+		{
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3392000)/53250 + 1);
+		}
+		else /* v < 3392 */
+		{
+			calculate_capacity = 1;
 		}
 
 		if ( calculate_capacity < 0 ) calculate_capacity = 1;
@@ -722,37 +872,37 @@ static void star_capacity_from_voltage_via_calculate(void)
 	}
 	else if ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
 	{
-		if ( batt_dev->batt_vol >= 4114 )
+		if (batt_dev->batt_vol >= 4114) /* v >= 0 */
 		{
-			calculate_capacity = 100;
+				calculate_capacity = 100;
 		}
-		else if (( batt_dev->batt_vol >= 3962 ) && ( batt_dev->batt_vol < 4114 ))
+		else if (batt_dev->batt_vol >= 3962) /* 3962 <= v < 4114 : 81 - 100 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3288671384)/8251572);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3962000)/8000 + 81);
 		}
-		else if (( batt_dev->batt_vol >= 3797 ) && ( batt_dev->batt_vol < 3962 ))
+		else if (batt_dev->batt_vol >= 3797) /* 3797 <= v < 3962 : 56 - 81 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3426225743)/6563978);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3797000)/6600 + 56);
 		}
-		else if (( batt_dev->batt_vol >= 3734 ) && ( batt_dev->batt_vol < 3797 ))
+		else if (batt_dev->batt_vol >= 3734) /* 3734 <= v < 3797 : 35 - 56 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3625046296)/3037037);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3734000)/3000 + 35);
 		}
-		else if (( batt_dev->batt_vol >= 3703 ) && ( batt_dev->batt_vol < 3734 ))
+		else if (batt_dev->batt_vol >= 3704) /* 3704 <= v < 3734 : 20 - 35 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3658493590)/2102564);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3704000)/2000 + 20);
 		}
-		else if (( batt_dev->batt_vol >= 3598 ) && ( batt_dev->batt_vol < 3703 ))
+		else if (batt_dev->batt_vol >= 3596) /* 3596 <= v < 3704 : 5 - 20 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3571440909)/6261818);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3596000)/7200 + 5);
 		}
-		else if (( batt_dev->batt_vol >= 3391 ) && ( batt_dev->batt_vol < 3598 ))
+		else if (batt_dev->batt_vol >= 3392) /* 3392 <= v < 3596 : 1 - 5 */
 		{
-			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3325328947)/65400810);
+			calculate_capacity = (NvU32)((batt_dev->batt_vol*1000 - 3392000)/51000 + 1);
 		}
-		else
+		else /* v < 3392 */
 		{
-			calculate_capacity = 1;
+				calculate_capacity = 1;
 		}
 
 		if ( calculate_capacity < 0 ) calculate_capacity = 1;
@@ -763,33 +913,36 @@ static void star_capacity_from_voltage_via_calculate(void)
 	}
 }
 
-#if defined(TRICKLE_RECHECK)
-static void star_set_recharge_again(void)
+static void true_valid_cbc_process(NvU32 cbc_value)
 {
-	LDB("[FULLBAT]: Re-enable Charger : AGAIN!!");
-	batt_dev->charger_state_machine = CHARGER_STATE_RECHARGE;
-	switch (batt_dev->batt_health)
+	static NvU32 display_cbc = 0;
+
+	if( batt_dev->BatteryLifePercent !=104 )									// at first process, do not update
+		previous_guage= batt_dev->BatteryLifePercent;		// save previous value
+		
+	batt_dev->CBC_Value = cbc_value;
+
+	if (cbc_value <= 0)
+		display_cbc = 1;
+	else if (cbc_value >= 92)
+		display_cbc = 100;
+	else
+		display_cbc = ( cbc_value * 100 / 92 );
+
+	batt_dev->BatteryLifePercent = display_cbc;
+	batt_dev->BatteryGauge = display_cbc;
+	batt_dev->BatteryGauge_on = NV_TRUE;
+
+	printk("[BATT] previous value = %d, current_value=%d\n", previous_guage , batt_dev->BatteryLifePercent);
+	if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY)) 
+		&& previous_guage< batt_dev->BatteryLifePercent   )
 	{
-		case POWER_SUPPLY_HEALTH_OVERHEAT:
-			LDB("[Warning]: Reconfigure Charger, BUT batt_health is POWER_SUPPLY_HEALTH_OVERHEAT : 400mA current setting");
-			charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
-			break;
-
-		case POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT:
-			LDB("[Warning]: Reconfigure Charger, BUT batt_health is POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT : Do nothing");
-			break;
-
-		case POWER_SUPPLY_HEALTH_COLD:
-			LDB("[Warning]: Reconfigure Charger, BUT batt_health is POWER_SUPPLY_HEALTH_COLD : Do nothing");
-			break;
-
-		case POWER_SUPPLY_HEALTH_GOOD:
-		default:
-			charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
-			break;
+		batt_dev->BatteryLifePercent = previous_guage;
 	}
+	printk("[BATT] final value = %d\n", batt_dev->BatteryLifePercent);
+	
+	star_battery_data_onetime_update(Update_Battery_Data);
 }
-#endif // TRICKLE_RECHECK
 
 static void valid_cbc_check_and_process(NvU32 cbc_value)
 {
@@ -798,15 +951,26 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 
 	//if  ( at_charge_index == NV_FALSE )
 	{
-#if defined(TRICKLE_RECHECK)
-		if ((batt_dev->Trickle_charge_check == NV_TRUE) && (cbc_value <=94))
+//20100926, , Communication with BatteryService for AT Command [START]
+#if defined (STAR_BATTERY_AT_COMMAND)
+		if (batt_dev->at_comm_want == AT_COMM_CBC)
 		{
-			if (batt_dev->CBC_Value >= cbc_value) // gauge_value reduce continuously... even if charger is in Recharge condition!!!
-			{
-				star_set_recharge_again();
-			}
+			//LDB("[at_comm]:[Receive] AT Command(%d)", batt_dev->at_comm_want);
+			batt_dev->at_comm_want = AT_COMM_NO;
+			batt_dev->at_comm_ready = NV_TRUE;
 		}
-#endif // TRICKLE_RECHECK
+#else // STAR_BATTERY_AT_COMMAND
+		if (AtComm->flag_at_comm_want == AT_COMM_CBC)
+		{
+			//LDB("[at_comm]:[Receive] AT Command(%d)", switch_get_state(&AtComm->sdev));
+			mutex_lock(&AtComm->mutex_lock);
+			switch_set_state(&AtComm->sdev, (switch_get_state(&AtComm->sdev) & AT_COMM_NO));
+			mutex_unlock(&AtComm->mutex_lock);
+			AtComm->flag_at_comm_want = AT_COMM_NO;
+			AtComm->flag_at_comm_ready = NV_TRUE;
+		}
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
 
 		batt_dev->CBC_Value = cbc_value;
 
@@ -840,6 +1004,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 				else
 				{
 					batt_dev->BatteryGauge = display_cbc;
+					//mod_timer(&(batt_dev->battery_gauge_timer), jiffies + msecs_to_jiffies(100));
 				}
 			}
 			else if (cbc_value == 100)
@@ -853,6 +1018,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 				else
 				{
 					batt_dev->BatteryGauge = display_cbc;
+					//mod_timer(&(batt_dev->battery_gauge_timer), jiffies + msecs_to_jiffies(100));
 				}
 			}
 			else
@@ -866,7 +1032,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 		if (batt_dev->BatteryGauge_on == NV_TRUE)
 		{
 			star_batt_dev->BatteryLifePercent = batt_dev->BatteryLifePercent;
-			if( batt_dev->BatteryLifePercent !=104 )			// at first process, do not update
+			if( batt_dev->BatteryLifePercent !=104 )									// at first process, do not update
 				previous_guage = batt_dev->BatteryLifePercent;		// save previous value
 
 			if (cbc_value <= 2)
@@ -901,7 +1067,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 					}
 					else if ((display_cbc - batt_dev->BatteryLifePercent) > 1)
 					{
-						batt_dev->BatteryGauge = display_cbc;
+							batt_dev->BatteryGauge = display_cbc;
 						star_gauge_follower_func();
 					}
 				}
@@ -915,7 +1081,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 					else if ((batt_dev->BatteryLifePercent - display_cbc) > 1)
 					{
 						batt_dev->BatteryGauge = display_cbc;
-						star_gauge_follower_func();
+							star_gauge_follower_func();
 					}
 				}
 				batt_dev->BatteryGauge = display_cbc;
@@ -950,32 +1116,53 @@ static ssize_t tegra_battery_store_property(
 		const char *buf,
 		size_t count)
 {
-	static NvU32 value = 0, last_cbc = 0;
+	static NvU32 value = 0;
 
 	value = (NvU32)(simple_strtoul(buf, NULL, 0));
 	LDB("[gauge]: gauge_value(%d)", value);
 
+//20100702, , for Fuel gauge reset [START]
+	if ( value == Gauge_CTL_Reset_Done )
+	{
+		//star_battery_gauge_ic_reset();
+#if defined (STAR_BATTERY_AT_COMMAND)
+		if (batt_dev->at_comm_want == AT_COMM_FUELRST)
+		{
+			//LDB("[at_comm]: Battery AT Command_RST(%d)", batt_dev->at_comm_want);
+			batt_dev->at_comm_want = AT_COMM_NO;
+			batt_dev->at_comm_ready = NV_TRUE;
+		}
+#else //
+		if (AtComm->flag_at_comm_want == AT_COMM_FUELRST)
+		{
+			//LDB("[at_comm]: AT Command_RST(%d)", switch_get_state(&AtComm->sdev));
+			mutex_lock(&AtComm->mutex_lock);
+			switch_set_state(&AtComm->sdev, (switch_get_state(&AtComm->sdev) & AT_COMM_NO));
+			mutex_unlock(&AtComm->mutex_lock);
+			AtComm->flag_at_comm_ready = NV_TRUE;
+		}
+#endif // STAR_BATTERY_AT_COMMAND
+	}
+//20100702, , for Fuel gauge reset [END]
+
 	if (value == 52407)
 	{
 		batt_dev->RIL_ready = NV_TRUE;
-		star_battery_data_poll_period_change();
+		mod_timer(&(batt_dev->battery_gauge_timer), jiffies + msecs_to_jiffies(3000));
 	}
 
 	if ((batt_dev->present == NV_TRUE) && (value >= 0 && value <= 100))
 	{
-		if (NvRmPmuReadAlarm(s_hRmGlobal, &last_cbc))
-			batt_dev->last_cbc_time = last_cbc;
-		else
-			LDB("[Warning] Last_CBC rtc read Fail!!");
-
+		batt_dev->last_cbc_time = NvOsGetTimeMS();
 		valid_cbc_check_and_process(value);
 	}
 	else if ((value < 0 || value > 100) && (value != 52407))
 	{
 		lprintk(D_BATT, "%s: [Critical] Unexpected Battery gauge value from CP & RIL!!!(%d) \n", __func__, value);
 		batt_dev->BatteryLifePercent = 101; // default setting
+		return count;
 	}
-
+//20100702, , for Fuel gauge reset [END]
 	return count;
 }
 
@@ -1005,8 +1192,10 @@ static NvBool star_charger_disable_ok_check(void)
 				return NV_FALSE;
 		}
 	}
-
-	return NV_FALSE;
+	else // batt_dev->ACLineStatus == NV_FALSE --> batt_dev->charging_source = NvCharger_Type_Battery
+	{
+		return NV_FALSE;
+	}
 }
 
 static ssize_t star_cbc_show_property(
@@ -1026,7 +1215,7 @@ static ssize_t star_cbc_show_property(
 				batt_dev->Boot_TA_setting = NV_TRUE;
 				batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 				batt_dev->charger_setting_chcomp = charging_ic->status;
-				charging_ic_deactive_for_recharge();
+				charging_ic_deactive_for_rechrge();
 			}
 		}
 	}
@@ -1112,7 +1301,6 @@ static ssize_t star_debug_store_property(
 
 	value = (NvU32)(simple_strtoul(buf, NULL, 0));
 
-	// set ELT Test mode : 2171-Set / 2170-Reset
 	if ((value == 2171) && (ELT_test_mode == NV_FALSE))
 	{
 		ELT_test_mode = NV_TRUE;
@@ -1139,6 +1327,64 @@ static struct device_attribute star_debug_attr = {
 	.store = star_debug_store_property,
 };
 //20100810, , for Debug [END]
+
+//20100810, , for CBCDC [START]
+static ssize_t star_cbcdc_show_property(
+		struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	size_t count=0;
+
+	count = sprintf(buf, "%d\n", batt_dev->sleep_bat_check_period_to_cp);
+
+	return count;
+}
+
+static ssize_t star_cbcdc_store_property(
+		struct device *dev,
+		struct device_attribute *attr,
+		const char *buf,
+		size_t count)
+{
+	static NvU32 value = 0;
+
+	value = (NvU32)(simple_strtoul(buf, NULL, 0));
+
+	if ( value == AT_COMM_NO )
+	{
+//20100926, , Communication with BatteryService for AT Command [START]
+#if defined (STAR_BATTERY_AT_COMMAND)
+		if (batt_dev->at_comm_want != AT_COMM_NO)
+		{
+			//LDB("[at_comm]:[Receive] AT Command(%d)", batt_dev->at_comm_want);
+			batt_dev->at_comm_want = AT_COMM_NO;
+			batt_dev->at_comm_ready = NV_TRUE;
+		}
+#else // STAR_BATTERY_AT_COMMAND
+		if (AtComm->flag_at_comm_want != AT_COMM_NO)
+		{
+			//LDB("[at_comm]:[Receive] AT Command(%d)", switch_get_state(&AtComm->sdev));
+			mutex_lock(&AtComm->mutex_lock);
+			switch_set_state(&AtComm->sdev, (switch_get_state(&AtComm->sdev) & AT_COMM_NO));
+			mutex_unlock(&AtComm->mutex_lock);
+			AtComm->flag_at_comm_want = AT_COMM_NO;
+			AtComm->flag_at_comm_ready = NV_TRUE;
+		}
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
+	}
+
+	return count;
+}
+
+static struct device_attribute star_cbcdc_attr = {
+	.attr = { .name = "cbc_dc", .mode = S_IRUGO | S_IWUGO,
+			  .owner = THIS_MODULE },
+	.show = star_cbcdc_show_property,
+	.store = star_cbcdc_store_property,
+};
+//20100810, , for CBCDC [END]
 
 //20100706, , Do not use battery chemistry [START]
 // PMU just return fixed value "NICD" so do not use this function
@@ -1174,6 +1420,53 @@ static void tegra_get_battery_tech(int *Value,
 	}
 }
 //20100706, , Do not use battery chemistry [END]
+
+#if 0
+static void tegra_battery_convert(NvRmPmuBatteryData *pPmuData)
+{
+	//STAR only use Voltage & Temperature data
+	
+	//if (pPmuData->batteryLifePercent == NVODM_BATTERY_DATA_UNKNOWN)
+	//	pPmuData->batteryLifePercent = 0;
+
+	//if (pPmuData->batteryLifeTime == NVODM_BATTERY_DATA_UNKNOWN)
+	//	pPmuData->batteryLifeTime = 0;
+
+	if (pPmuData->batteryVoltage == NVODM_BATTERY_DATA_UNKNOWN)
+		pPmuData->batteryVoltage = 0;
+
+	//if (pPmuData->batteryCurrent == NVODM_BATTERY_DATA_UNKNOWN)
+	//	pPmuData->batteryCurrent = 0;
+
+	//if (pPmuData->batteryMahConsumed == NVODM_BATTERY_DATA_UNKNOWN)
+	//	pPmuData->batteryMahConsumed = 0;
+
+	if (pPmuData->batteryTemperature == NVODM_BATTERY_DATA_UNKNOWN)
+		pPmuData->batteryTemperature = 0;
+}
+
+static int tegra_battery_data(NvRmPmuBatteryInstance NvBatteryInst)
+{	
+	NvRmPmuBatteryData pPmuData = {0};
+
+	if (!NvRmPmuGetBatteryData(s_hRmGlobal, NvBatteryInst, &pPmuData))
+		return -1;
+
+	if (NvBatteryInst == NvRmPmuBatteryInst_Main) {
+		tegra_battery_convert(&pPmuData);
+		batt_dev->batt_vol = pPmuData.batteryVoltage; // Already in [mV] scale..
+		//batt_dev->batt_vol *= 1000; // Convert volt to mV
+		//batt_dev->batt_current = pPmuData.batteryCurrent;
+		batt_dev->batt_temp = pPmuData.batteryTemperature-2730; // Conversion from [K] to [C] <- *10
+		//batt_dev->batt_temp *= 10;  // FIXME : Why is this here? <- Framework need 10*temperature, ex) 25.2C -> 252
+		//batt_dev->BatteryLifePercent = pPmuData.batteryLifePercent;
+		//batt_dev->BatteryLifeTime = pPmuData.batteryLifeTime;
+		//batt_dev->BatteryMahConsumed = pPmuData.batteryMahConsumed;
+	}
+
+	return 0;
+}
+#endif // STAR_BATTERY_UPDATE
 
 static int star_battery_infomation_update(void)
 {
@@ -1249,6 +1542,7 @@ static int star_battery_infomation_update(void)
 			case NVODM_BATTERY_STATUS_NO_BATTERY:
 				batt_dev->present = NV_FALSE;
 				batt_dev->BatteryLifePercent = 0; // default setting
+				//batt_dev->repeat_index = NV_TRUE;
 				//LDB("[bat_poll] NVODM_BATTERY_STATUS_NO_BATTERY(BatStatus:%d)", BatStatus);
 				break;
 
@@ -1266,21 +1560,25 @@ static int star_battery_infomation_update(void)
 				LDB("[Critical]: Exception in BatStatus!!!");
 				batt_dev->present = NV_TRUE;
 				batt_dev->BatteryLifePercent = 102; // default setting
+				//batt_dev->repeat_index = NV_TRUE;
 				//LDB("[bat_poll] POWER_SUPPLY_STATUS_default(BatStatus:%d)", BatStatus);
 				break;
 		}
 
 		if ((BatData.batteryVoltage != NVODM_BATTERY_DATA_UNKNOWN) && (BatData.batteryTemperature != NVODM_BATTERY_DATA_UNKNOWN))
 		{
+			//if (3250 > BatData.batteryVoltage) BatData.batteryVoltage = 3250;
+			//if (4250 < BatData.batteryVoltage) BatData.batteryVoltage = 4250;
 			if ((3200 < BatData.batteryVoltage) && (BatData.batteryVoltage < 4400))
 			{
 				if (batt_dev->Capacity_first_time)
 				{
+					batt_dev->vol_for_capacity = BatData.batteryVoltage;
 					batt_dev->batt_vol = BatData.batteryVoltage;
-					batt_dev->Capacity_first_time = NV_FALSE;
 				}
 				else
 				{
+					batt_dev->vol_for_capacity = batt_dev->batt_vol;
 					if (3400 >= BatData.batteryVoltage)
 						batt_dev->batt_vol = (NvU32)BatData.batteryVoltage;
 					else if ((3450 < BatData.batteryVoltage) && (4050 > BatData.batteryVoltage))
@@ -1380,15 +1678,18 @@ static int tegra_battery_get_property(struct power_supply *psy,
 	if (star_battery_test_mode == STAR_BATT_TEST_MODE_ON)
 		change_battery_value_for_test();
 
+	star_battery_infomation_update();
+	star_capacity_from_voltage_via_calculate();
+
 	switch (psp)
 	{
 		case POWER_SUPPLY_PROP_STATUS:
 			if (batt_dev->BatteryGauge_on == NV_FALSE) // Not yet receive CBC from CP
 			{
 				val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
-				LDB("[Warning] Cannot receive CBC from CP until now, Display Battery loading Icon!!");
+				pr_debug("[Warning] Cannot receive CBC from CP until now, Display Battery loading Icon!!");
 			}
-			else if (batt_dev->present == NV_FALSE) // NVODM_BATTERY_STATUS_NO_BATTERY
+			if (batt_dev->present == NV_FALSE) // NVODM_BATTERY_STATUS_NO_BATTERY
 			{
 				val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 				//LDB("[bat_poll] intval: NVODM_BATTERY_STATUS_NO_BATTERY(%d)", val->intval);
@@ -1438,23 +1739,26 @@ static int tegra_battery_get_property(struct power_supply *psy,
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_HEALTH(%d)", val->intval);
 			break;
 
-#ifdef CONFIG_BATTSCALE
 		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-			val->intval = batt_dev->batt_vol * 1000;
+			val->intval = batt_dev->batt_vol * STAR_VOLT_UNIT;
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
 			break;
-#else
-		case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-			val->intval = batt_dev->batt_vol;
-			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_VOLTAGE_NOW(%d)", val->intval);
+
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		case POWER_SUPPLY_PROP_VOLTAGE_MAX_DESIGN:
+			val->intval = 4203 * STAR_VOLT_UNIT;
 			break;
-#endif
+
+		case POWER_SUPPLY_PROP_VOLTAGE_MIN:
+		case POWER_SUPPLY_PROP_VOLTAGE_MIN_DESIGN:
+			val->intval = 3390 * STAR_VOLT_UNIT;
+			break;
 
 		case POWER_SUPPLY_PROP_CAPACITY:
 			if (batt_dev->BatteryGauge_on == NV_TRUE)
 				val->intval = batt_dev->BatteryLifePercent;
 			else
-				val->intval = 999;
+				val->intval = batt_dev->Capacity_Voltage;
 			//LDB("[bat_poll] intval: POWER_SUPPLY_PROP_CAPACITY(%d)", val->intval);
 			break;
 
@@ -1469,6 +1773,365 @@ static int tegra_battery_get_property(struct power_supply *psy,
 	}
 	return 0;
 }
+
+#if defined (STAR_BATTERY_AT_COMMAND)
+static int star_at_command_get_property(struct power_supply *psy,
+	enum power_supply_property psp, union power_supply_propval *val)
+{
+	//LDB("[Debug] psp(%d) : POWER_SUPPLY_PROP_CAPACITY_DUTY_TIME==31", psp);
+	switch (psp)
+	{
+		case POWER_SUPPLY_PROP_CAPACITY_DUTY_TIME:
+			if (batt_dev->at_comm_want == AT_COMM_NO) // Everytime, you execute AT command, AT_COMM_NO is returned to framework
+			{
+				val->intval = AT_COMM_NO;
+				batt_dev->at_comm_ready = NV_FALSE;
+				//LDB("[at_comm]:[Send] AT_COMM_NO(%d)", val->intval);
+			}
+			else // if (batt_dev->at_comm_ready == NV_TRUE) // If you want to execute AT command, set AT_COMM_CBC or AT_COMM_FUELRST and must set at_comm_ready to NV_TURE
+			{
+				if (batt_dev->at_comm_want == AT_COMM_CBCDC)
+				{
+					val->intval = AT_COMM_CBCDC;
+					batt_dev->at_comm_ready = NV_FALSE;
+					//LDB("[at_comm]:[Send] AT_COMM_CBCDC(%d)", val->intval);
+				}
+				else if (batt_dev->at_comm_want == AT_COMM_CBC)
+				{
+					val->intval = AT_COMM_CBC;
+					batt_dev->at_comm_ready = NV_FALSE;
+					//LDB("[at_comm]:[Send] AT_COMM_CBC(%d)", val->intval);
+				}
+				else if (batt_dev->at_comm_want == AT_COMM_FUELRST)
+				{
+					// Infact, if you want execute FUELRST, you have to disable charger before update sysfs.
+					val->intval = AT_COMM_FUELRST;
+					batt_dev->at_comm_ready = NV_FALSE;
+					LDB("[at_comm]:[Send] AT_COMM_FUELRST(%d)", val->intval);
+				}
+				else val->intval = AT_COMM_NO;
+			}
+			break;
+
+		default:
+			LDB("[Critical]:[Send] No AT_COMM property!!!");
+			return -EINVAL;
+	}
+	return 0;
+}
+#endif // STAR_BATTERY_AT_COMMAND
+
+//20100824, , get capacity using battery voltage for demo [START]
+#if defined (USE_ONETIME_VOLTAGE_CAPACITY)
+static NvBool valid_capacity_gauge(void)
+{
+	NvU32 capacity_gauge_temp;
+
+	star_batt_dev->BatteryLifePercent = batt_dev->BatteryLifePercent;
+
+	if (batt_dev->Capacity_first_time)
+	{
+		batt_dev->Capacity_first_time = NV_FALSE; // Let Capacity_first_time to NV_FALSE here only. It is require for determine capacity from battery voltage in first time, No dependent to previous voltage level
+		if (batt_dev->BatteryGauge_on == NV_FALSE)
+			batt_dev->BatteryLifePercent = STAR_BAT_MIN(batt_dev->Capacity_Voltage + 3 , 100);
+		star_batt_dev->BatteryLifePercent = batt_dev->BatteryLifePercent;
+	}
+	else
+	{
+		if (batt_dev->ACLineStatus == NV_TRUE)
+		{
+			if (batt_dev->BatteryLifePercent >= batt_dev->Capacity_Voltage)
+			{
+				capacity_gauge_temp = batt_dev->BatteryLifePercent;
+			}
+			else // higher then previous gauge
+			{
+				capacity_gauge_temp = batt_dev->BatteryLifePercent + 1; // Gauge tracking is juct one step!
+			}
+		}
+		else // batt_dev->ACLineStatus == NV_FALSE
+		{
+			if (batt_dev->BatteryLifePercent <= batt_dev->Capacity_Voltage)
+			{
+				capacity_gauge_temp = batt_dev->BatteryLifePercent;
+			}
+			else
+			{
+				capacity_gauge_temp = batt_dev->BatteryLifePercent - 1; // Gauge tracking is juct one step!
+			}
+		}
+
+		if (batt_dev->BatteryGauge_on == NV_FALSE)
+		{
+			batt_dev->BatteryLifePercent = capacity_gauge_temp;
+			if (STAR_BAT_MAX(batt_dev->BatteryGauge, batt_dev->Capacity_Voltage) - STAR_BAT_MIN(batt_dev->BatteryGauge, batt_dev->Capacity_Voltage) <= 5)
+			{
+				batt_dev->BatteryLifePercent = batt_dev->BatteryGauge;
+				batt_dev->BatteryGauge_on = NV_TRUE;
+			}
+		}
+	}
+
+	if (batt_dev->BatteryLifePercent < 0)
+	{
+		batt_dev->BatteryLifePercent = 0;
+		LDB("[Critical] Capacity gauging has exceptinal value!!!: below 0");
+	}
+	else if (batt_dev->BatteryLifePercent > 100)
+	{
+		batt_dev->BatteryLifePercent = 100;
+		LDB("[Critical] Capacity gauging has exceptinal value!!!: above 100");
+	}
+
+	return NV_TRUE;
+}
+
+static NvBool capacity_with_charger_source_USB(void)
+{
+	static NvU16 capacity_table[] = BAT_CV_USB_TABLE;
+	static NvU8 capacity_index = 0, range_index = 0;
+	static NvU32 temp_vol;
+
+	//temp_vol = (NvU32)((batt_dev->batt_vol + 2*batt_dev->vol_for_capacity)/3);
+	temp_vol = batt_dev->batt_vol;
+	if (batt_dev->Capacity_first_time) // In first time, search range is from 0 to 100 (whole range)
+	{
+		for (capacity_index = 100; capacity_index >= 0 ; capacity_index--)
+		{
+			if ((capacity_table[capacity_index] <= temp_vol) || (capacity_index == 0))
+				goto set_BatteryLifePercent_w_USB;
+		}
+		capacity_index = 0;
+		goto set_BatteryLifePercent_w_USB;
+	}
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now) 
+	{
+		range_index = batt_dev->BatteryLifePercent;
+		for (; range_index >= 0; range_index--)
+		{
+			if ((capacity_table[range_index] <= temp_vol) || (range_index == 0))
+				break;
+		}
+		capacity_index = range_index;
+
+		for (; capacity_index <= 100 ; capacity_index++ )
+		{
+			if ((capacity_table[capacity_index] >= temp_vol) || (capacity_index == 100))
+			{
+				goto set_BatteryLifePercent_w_USB;
+			}
+		}
+		capacity_index = 100;
+		goto set_BatteryLifePercent_w_USB;
+	}
+
+	return NV_FALSE;
+
+set_BatteryLifePercent_w_USB:
+	if ((capacity_index >= 0) || (capacity_index <= 100))
+	{
+		batt_dev->Capacity_Voltage = capacity_index;
+		//LDB("[bat_cv] CV_w gauge USB(%d)", batt_dev->Capacity_Voltage);
+	}
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now) 
+	{
+		lprintk(D_BATT, "%s: [Critical] Unexpected Battery gauge value!!!(%d) \n", __func__, capacity_index);
+		batt_dev->Capacity_Voltage = 30; // default setting
+	}
+
+	return NV_TRUE;
+}
+
+static NvBool capacity_with_charger_source_TA(void)
+{
+	static NvU16 capacity_table[] = BAT_CV_TA_TABLE;
+	static NvU8 capacity_index = 0, range_index = 0;
+	static NvU32 temp_vol;
+
+	//temp_vol = (NvU32)((batt_dev->batt_vol + 2*batt_dev->vol_for_capacity)/3);
+	temp_vol = batt_dev->batt_vol;
+	if (batt_dev->Capacity_first_time) // In first time, search range is from 0 to 100 (whole range)
+	{
+		for (capacity_index = 100; capacity_index >= 0 ; capacity_index--)
+		{
+			if ((capacity_table[capacity_index] <= temp_vol) || (capacity_index == 0))
+				goto set_BatteryLifePercent_w_TA;
+		}
+		capacity_index = 0;
+		goto set_BatteryLifePercent_w_TA;
+	}
+	else
+	{
+		range_index = batt_dev->BatteryLifePercent;
+		for (; range_index >= 0; range_index-- )
+		{
+			if ((capacity_table[range_index] <= temp_vol) || (range_index == 0))
+				break;
+		}
+		capacity_index = range_index;
+
+		for (; capacity_index <= 100 ; capacity_index++ )
+		{
+			if ((capacity_table[capacity_index] >= temp_vol) || (capacity_index == 100))
+			{
+				goto set_BatteryLifePercent_w_TA;
+			}
+		}
+		capacity_index = 100;
+		goto set_BatteryLifePercent_w_TA;
+	}
+
+	return NV_FALSE;
+
+set_BatteryLifePercent_w_TA:
+	if ((capacity_index >= 0) || (capacity_index <= 100))
+	{
+		batt_dev->Capacity_Voltage = capacity_index;
+		//LDB("[bat_cv] CV_w gauge TA(%d)", batt_dev->Capacity_Voltage);
+	}
+	else
+	{
+		lprintk(D_BATT, "%s: [Critical] Unexpected Battery gauge value!!!(%d) \n", __func__, capacity_index);
+		batt_dev->Capacity_Voltage = 30; // In first time, search range is from 0 to 100 (whole range)
+	}
+
+	return NV_TRUE;
+}
+
+static NvBool capacity_without_charger_source(void)
+{
+	static NvU16 capacity_table[] = BAT_CV_TABLE;
+	static NvU8 capacity_index = 100, range_index = 0;
+	static NvU32 temp_vol;
+
+	//temp_vol = (NvU32)((batt_dev->batt_vol + 2*batt_dev->vol_for_capacity)/3);
+	temp_vol = batt_dev->batt_vol;
+	if (batt_dev->Capacity_first_time) // default setting
+	{
+		for (capacity_index = 0; capacity_index <= 100; capacity_index++)
+		{
+			if ((capacity_table[capacity_index] >= temp_vol) || (capacity_index == 100))
+				goto set_BatteryLifePercent_wo;
+		}
+		capacity_index = 100;
+		goto set_BatteryLifePercent_wo;
+	}
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to decrease direction (because "Discharging state" now) 
+	{
+		range_index = batt_dev->BatteryLifePercent;
+		for (; range_index <= 100; range_index++ )
+		{
+			if ((capacity_table[range_index] >= temp_vol) || (range_index == 100))
+				break;
+		}
+		capacity_index = range_index;
+
+		for (; capacity_index >= 0 ; capacity_index-- )
+		{
+			if ((capacity_table[capacity_index] <= temp_vol) || (capacity_index == 0))
+			{
+				goto set_BatteryLifePercent_wo;
+			}
+		}
+		capacity_index = 0;
+		goto set_BatteryLifePercent_wo;
+	}
+
+	return NV_FALSE;
+
+set_BatteryLifePercent_wo:
+	if ((capacity_index >= 0) || (capacity_index <= 100))
+	{
+		batt_dev->Capacity_Voltage = capacity_index;
+		//LDB("[bat_cv] CV_wo gauge Battery(%d)", batt_dev->Capacity_Voltage);
+	}
+	else
+	{
+		lprintk(D_BATT, "%s: [Critical] Unexpected Battery gauge value in OneTime CV w/o Charger!!!(%d) \n", __func__, capacity_index);
+		batt_dev->Capacity_Voltage = 30; // default setting
+	}
+
+	return NV_TRUE;
+}
+
+static NvBool determine_capacity_for_demo(void)
+{
+	NvRmPmuAcLineStatus AcStatus = NvRmPmuAcLine_Offline;
+	NvU8 BatStatus = 0;
+	NvRmPmuBatteryData BatData = {0};
+	NvU32 Average_Vol = 0, Average_count, Valid_count = 0;
+
+	if (batt_dev->Capacity_first_time)
+	{
+		for (Average_count = 0; Average_count < 7; Average_count++)
+		{
+			// Warning!! NvRmPmuUpdateBatteryInfo operate correctly, but return value is false.. why??
+			// Never use "if (!func)" for NvRmPmuUpdatebatteryInfo.....  , 2010-10-14
+			if (NvRmPmuUpdateBatteryInfo(s_hRmGlobal, &AcStatus, &BatStatus, &BatData))
+			{
+				if ((2500 < BatData.batteryVoltage) && (BatData.batteryVoltage < 4500))
+				{
+					Average_Vol += BatData.batteryVoltage; // Already in [mV] scale..
+					Valid_count++;
+				}
+			}
+			else
+			{
+				LDB("[Critical]: NvRmPmuUpdateBatteryInfo is failed!!!");
+			}
+		}
+		batt_dev->batt_vol = (NvU32)(Average_Vol /Valid_count); // Booting time, current consumption is high, so determine capacity with bias...
+		batt_dev->vol_for_capacity = batt_dev->batt_vol + 200;
+	}
+/*
+	switch (get_charging_ic_status())
+	{
+		case CHG_IC_DEFAULT_MODE:
+		case CHG_IC_USB_LO_MODE:
+			//LDB("[bat_cv]: Charging Source: USB");
+			if (!capacity_with_charger_source_USB())
+			{
+				LDB("[Critical]: CV_USB(%d)", batt_dev->Capacity_Voltage);
+				return NV_FALSE;
+			}
+			break;
+
+		case CHG_IC_TA_MODE:
+		case CHG_IC_FACTORY_MODE:
+			//LDB("[bat_cv]: Charging Source: TA");
+			if (!capacity_with_charger_source_TA())
+			{
+				LDB("[Critical]: CV_TA(%d)", batt_dev->Capacity_Voltage);
+				return NV_FALSE;
+			}
+			break;
+
+		case CHG_IC_DEACTIVE_MODE:
+			//LDB("[bat_cv]: Charging Source: NONE");
+			if (!capacity_without_charger_source())
+			{
+				LDB("[Critical]: CV_BATT(%d)", batt_dev->Capacity_Voltage);
+				return NV_FALSE;
+			}
+			break;
+
+		default:
+			LDB("[Critical] Unknown state - CV");
+			if (!capacity_without_charger_source())
+			{
+				LDB("[Critical]: CV_Unknown(%d)", batt_dev->Capacity_Voltage);
+				return NV_FALSE;
+			}
+			break;
+	}
+*/
+	star_capacity_from_voltage_via_calculate();
+	valid_capacity_gauge();
+
+	return NV_TRUE;
+}
+#endif // USE_ONETIME_VOLTAGE_CAPACITY
+//20100824, , get capacity using battery voltage for demo [END]
 
 //20100915, , For AT command [START]
 static ssize_t star_at_charge_show_property(
@@ -1502,6 +2165,7 @@ static ssize_t star_at_charge_store_property(
 	if ( value == 1 )
 	{
 		at_charge_index = NV_TRUE;
+		batt_dev->repeat_index = NV_FALSE;
 
 		star_battery_infomation_update();
 		star_battery_data_onetime_update(Update_Battery_Data);
@@ -1597,7 +2261,7 @@ static void charger_control_with_battery_temp(void)
 		{
 			case POWER_SUPPLY_HEALTH_GOOD:
 			{
-				if (batt_dev->batt_temp >= 500)
+				if (batt_dev->batt_temp >= 550)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -1605,7 +2269,7 @@ static void charger_control_with_battery_temp(void)
 					{
 						LDC("[OVERHEAT]: Deactive Charger");
 						batt_dev->charger_setting_chcomp = charging_ic->status;
-						charging_ic_deactive_for_recharge();
+						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 						// Overheat OTF protection
 #ifdef CONFIG_OTF_BATTPROT
@@ -1645,7 +2309,7 @@ static void charger_control_with_battery_temp(void)
 					{
 						LDC("[BATTCOLD]: Deactive Charger");
 						batt_dev->charger_setting_chcomp = charging_ic->status;
-						charging_ic_deactive_for_recharge();
+						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 					}
 				}
@@ -1660,7 +2324,7 @@ static void charger_control_with_battery_temp(void)
 
 			case POWER_SUPPLY_HEALTH_OVERHEAT:
 			{
-				if (batt_dev->batt_temp >= 500)
+				if (batt_dev->batt_temp >= 550)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -1668,7 +2332,7 @@ static void charger_control_with_battery_temp(void)
 					{
 						LDC("[OVERHEAT]: Deactive Charger");
 						batt_dev->charger_setting_chcomp = charging_ic->status;
-						charging_ic_deactive_for_recharge();
+						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 #ifdef CONFIG_OTF_BATTPROT
 						PWONOFF = 3;
@@ -1709,7 +2373,7 @@ static void charger_control_with_battery_temp(void)
 
 			case POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT:
 			{
-				if (batt_dev->batt_temp <= 490)
+				if (batt_dev->batt_temp <= 520)
 				{
 					if ( charging_ic->status != CHG_IC_DEACTIVE_MODE )
 					{
@@ -1797,11 +2461,11 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Voltage Status
-	vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-	vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
+		vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+		vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	// Temperatue Status
-	if ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp)-STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) < 50) // 5 degree
+	if ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp)-STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) < 100) // 10 degree
 	{
 		temp_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
 		temp_period_wake = SLEEP_BAT_CHECK_PERIOD;
@@ -1809,12 +2473,12 @@ static void star_battery_data_poll_period_change(void)
 	else
 	{
 		temp_period_data = CRITICAL_BAT_CHECK_PERIOD*2*HZ;
-		temp_period_wake = CRITICAL_BAT_CHECK_PERIOD*2+10;
+		temp_period_wake = CRITICAL_BAT_CHECK_PERIOD*2;
 	}
 
 	// Gauge Status
-	gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-	gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
+			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	batt_dev->battery_poll_interval = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_data, vol_period_data), STAR_BAT_MIN(temp_period_data, gauge_period_data));
 	batt_dev->sleep_bat_check_period = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_wake, vol_period_wake), STAR_BAT_MIN(temp_period_wake, gauge_period_wake));
@@ -1828,27 +2492,30 @@ static void star_battery_data_poll_period_change(void)
 
 static void star_gauge_follower_func(void)
 {
+	NvU32 gauge_follower_time;
+	NvU32 gauge_follower_time_mask;
+
 	//LDC("");
 	star_batt_dev->BatteryLifePercent = batt_dev->BatteryLifePercent;
 
-	if (batt_dev->ACLineStatus == NV_TRUE)
-	{
-		if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
-			batt_dev->BatteryLifePercent += 1;
-		else if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
-			batt_dev->BatteryLifePercent -= 1;
-	}
-	else if (batt_dev->ACLineStatus == NV_FALSE)
-	{
-		//if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
-		//	batt_dev->BatteryLifePercent += 1;
-		//else 
-		if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
-			batt_dev->BatteryLifePercent -= 1;
-	}
+		if (batt_dev->ACLineStatus == NV_TRUE)
+		{
+			if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
+				batt_dev->BatteryLifePercent += 1;
+			else if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
+				batt_dev->BatteryLifePercent -= 1;
+		}
+		else if (batt_dev->ACLineStatus == NV_FALSE)
+		{
+			//if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
+			//	batt_dev->BatteryLifePercent += 1;
+			//else 
+			if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
+				batt_dev->BatteryLifePercent -= 1;
+		}
 
-	if (batt_dev->BatteryLifePercent < 0) batt_dev->BatteryLifePercent = 0;
-	if (batt_dev->BatteryLifePercent > 100) batt_dev->BatteryLifePercent = 100;
+		if (batt_dev->BatteryLifePercent < 0) batt_dev->BatteryLifePercent = 0;
+		if (batt_dev->BatteryLifePercent > 100) batt_dev->BatteryLifePercent = 100;
 }
 
 static void tegra_battery_status_poll_work(struct work_struct *work)
@@ -1859,8 +2526,18 @@ static void tegra_battery_status_poll_work(struct work_struct *work)
 	mod_timer(&(batt_dev->charger_state_read_timer), jiffies + msecs_to_jiffies(0));
 	charger_control_with_battery_temp();
 
-	star_capacity_from_voltage_via_calculate(); // For Reference
-
+//20100824, , get capacity using battery voltage for demo [START]
+#if defined (USE_ONETIME_VOLTAGE_CAPACITY)
+	if (batt_dev->repeat_index == NV_TRUE)
+	{
+		if (!determine_capacity_for_demo())  // 100823 
+		{
+			batt_dev->BatteryLifePercent = 103;
+			LDB("[Critical]: capacity for demo is failed!!!!");
+		}
+	}
+#endif // USE_ONETIME_VOLTAGE_CAPACITY
+//20100824, , get capacity using battery voltage for demo [END]
 //20100924, , For Battery recharge [START]
 	//if (( batt_dev->batt_vol < 4130 ) && (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
 	if ((( batt_dev->CBC_Value <= 97 ) || (batt_dev->batt_vol < 4135)) && (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
@@ -1889,33 +2566,83 @@ static void tegra_battery_status_poll_work(struct work_struct *work)
 		}
 	}
 //20100924, , For Battery recharge [END]
-
-#if defined(TRICKLE_RECHECK)
-	if ((batt_dev->Trickle_charge_check == NV_TRUE) && (batt_dev->batt_vol < 4000))
-		star_set_recharge_again();
-#endif // TRICKLE_RECHECK
-
 	if ((batt_dev->BatteryGauge_on == NV_TRUE) && (batt_dev->BatteryLifePercent != batt_dev->BatteryGauge))
 		star_gauge_follower_func();
 
 	star_battery_data_poll_period_change();
-
 	if ( ((batt_dev->BatteryLifePercent == 1) || (batt_dev->BatteryLifePercent == 0) || (batt_dev->batt_vol <= 3400))
 		|| (star_batt_dev->BatteryLifePercent != batt_dev->BatteryLifePercent)
 		|| ((batt_dev->batt_health != POWER_SUPPLY_HEALTH_GOOD) || (star_batt_dev->batt_health != batt_dev->batt_health))
 		|| (star_batt_dev->charger_state_machine != batt_dev->charger_state_machine)
 		|| (star_batt_dev->present != batt_dev->present)
-		|| ((STAR_BAT_MAX(star_batt_dev->prev_batt_vol, batt_dev->batt_vol) - STAR_BAT_MIN(star_batt_dev->prev_batt_vol, batt_dev->batt_vol)) >= 200)
-		|| ((STAR_BAT_MAX(star_batt_dev->prev_batt_temp, batt_dev->batt_temp) - STAR_BAT_MIN(star_batt_dev->prev_batt_temp, batt_dev->batt_temp)) >= 50)
+		|| ((STAR_BAT_MAX(star_batt_dev->batt_vol, batt_dev->batt_vol) - STAR_BAT_MIN(star_batt_dev->batt_vol, batt_dev->batt_vol)) >= 100)
+		|| ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp) - STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) >= 50)
 		|| ((star_batt_dev->ACLineStatus != batt_dev->ACLineStatus) ||(star_batt_dev->charging_source != batt_dev->charging_source) || (star_batt_dev->charging_enabled != batt_dev->charging_enabled)))
 		{
-			star_batt_dev->prev_batt_vol = batt_dev->batt_vol;
-			star_batt_dev->prev_batt_temp = batt_dev->batt_temp;
 			star_battery_data_onetime_update(Update_Battery_Data);
 		}
+	//star_debug_show_battery_status();
 
 	queue_delayed_work(batt_dev->battery_workqueue, &batt_dev->battery_status_poll_work, batt_dev->battery_poll_interval);
 }
+
+//20101117, , AT command request function [START]
+static void star_cp_at_comm_request(void)
+{
+#if defined (STAR_BATTERY_AT_COMMAND)
+	if (batt_dev->at_comm_ready == NV_TRUE)
+	{
+		//LDB("[at_comm] Call Update_AT_Command:::");;
+		star_battery_data_onetime_update(Update_AT_Command);
+	}
+#else // STAR_BATTERY_AT_COMMAND
+	if ((!at_charge_index) && (AtComm->flag_at_comm_ready == NV_TRUE))
+	{
+		if (AtComm->flag_at_comm_want == AT_COMM_CBC)
+		{
+			mutex_lock(&AtComm->mutex_lock);
+			switch_set_state(&AtComm->sdev, (switch_get_state(&AtComm->sdev) | AT_COMM_CBC));
+			mutex_unlock(&AtComm->mutex_lock);
+			AtComm->flag_at_comm_ready = NV_FALSE;
+			//LDB("[at_comm]: AT Command(%d)", switch_get_state(&AtComm->sdev));
+		}
+	}
+#endif // STAR_BATTERY_AT_COMMAND
+}
+
+static void star_cbc_gauge_request_timer_func(unsigned long unused)
+{
+	if (batt_dev->at_comm_ready == NV_FALSE)
+	{
+		if (batt_dev->cbc_clear_state != Clear_No_Response_1)
+	    {
+		    //LDB("[CBC]: Clear NO Response STATE");
+		    batt_dev->cbc_clear_state += 1;
+		    batt_dev->at_comm_want = AT_COMM_NO;
+		    batt_dev->at_comm_ready = NV_TRUE;
+
+		    star_cp_at_comm_request();
+
+			mod_timer(&(batt_dev->battery_gauge_timer), jiffies + msecs_to_jiffies(3000));
+		}
+		else
+			batt_dev->at_comm_ready = NV_TRUE;
+	}
+	else if (batt_dev->BatteryGauge_on == NV_FALSE)
+	{
+		if (batt_dev->RIL_ready == NV_TRUE)
+	    {
+		    LDB("[CBC]: Request FUELRST with clear(%d)", batt_dev->cbc_clear_state);
+			batt_dev->at_comm_want = AT_COMM_NO;
+		    batt_dev->at_comm_ready = NV_TRUE;
+		    star_cp_at_comm_request();
+		    batt_dev->cbc_clear_state = Clear_No_Response_0;
+	    }
+		else
+			mod_timer(&(batt_dev->battery_gauge_timer), jiffies + msecs_to_jiffies(3000));
+	}
+}
+//20101117, , AT command request function [END]
 
 //20100917, , Battery ID polling function [START]
 static void star_battery_id_check(void)
@@ -1997,6 +2724,13 @@ static void star_battery_data_onetime_update(NvU8 update_option)
 			//LDB("[bat_poll]  OneTime_Update(Update_Power_Data:%d)", update_option);
 			break;
 
+#if defined (STAR_BATTERY_AT_COMMAND)
+		case Update_AT_Command:
+			power_supply_changed(&tegra_supplies[NvCharger_Type_AT_Command]);
+			//LDB("[bat_poll]  OneTime_Update(Update_AT_Command:%d)", update_option);
+			break;
+#endif // STAR_BATTERY_AT_COMMAND
+
 		case Update_ALL:
 			power_supply_changed(&tegra_supplies[NvCharger_Type_Battery]);
 			power_supply_changed(&tegra_supplies[NvCharger_Type_USB]);
@@ -2011,6 +2745,12 @@ static void star_battery_data_onetime_update(NvU8 update_option)
 	star_debug_show_battery_status();
 }
 	
+/*
+static void star_battery_charge_done_work(struct work_struct *work)
+{
+	LDC("[FULLBAT] Do nothing!!!");
+}
+*/
 static void star_read_charger_state_gpio(NvU8 *chg_state)
 {
 	NvU32 Status_Value = 0xff, PGB_Value = 0xff;
@@ -2152,11 +2892,8 @@ static void tegra_battery_gpio_read_timer_func(unsigned long unused)
 						if ( charging_ic->status != CHG_IC_DEACTIVE_MODE )
 						{
 							//LDC("[FULLBAT]: Deactive Charger with state_now(%d)", charger_ic_state_now);
-							#if defined (TRICKLE_RECHECK)
-							batt_dev->Trickle_charge_check = NV_TRUE;
-							#endif // TRICKLE_RECHECK
 							batt_dev->charger_setting_chcomp = charging_ic->status;
-							charging_ic_deactive_for_recharge();
+							charging_ic_deactive_for_rechrge();
 						}
 					}
 					else
@@ -2204,6 +2941,7 @@ static void star_initial_charger_state(void)
 		case CHGSB_PGB_OFF_OFF:
 			batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 			charging_ic->status = CHG_IC_DEACTIVE_MODE;
+			charging_ic->status_past = CHG_IC_DEACTIVE_MODE;
 			batt_dev->ACLineStatus = NV_FALSE;
 			batt_dev->charging_source = NvCharger_Type_Battery;
 			batt_dev->charging_enabled = NvCharge_Control_Charging_Disable;
@@ -2213,6 +2951,7 @@ static void star_initial_charger_state(void)
 		case CHGSB_PGB_ON_ON:
 			batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 			charging_ic->status = CHG_IC_TA_MODE;
+			charging_ic->status_past = CHG_IC_DEACTIVE_MODE;
 			batt_dev->ACLineStatus = NV_TRUE;
 			batt_dev->charging_source = NvCharger_Type_AC;
 			batt_dev->charging_enabled = NvCharge_Control_Charging_Enable;
@@ -2224,6 +2963,7 @@ static void star_initial_charger_state(void)
 			{
 				batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 				charging_ic->status = CHG_IC_FACTORY_MODE;
+				charging_ic->status_past = CHG_IC_DEACTIVE_MODE;
 				batt_dev->ACLineStatus = NV_TRUE;
 				batt_dev->charging_source = NvCharger_Type_AC;
 				batt_dev->charging_enabled = NvCharge_Control_Charging_Enable;
@@ -2233,6 +2973,7 @@ static void star_initial_charger_state(void)
 			{
 				batt_dev->charger_state_machine = CHARGER_STATE_STANDBY;
 				charging_ic->status = CHG_IC_FACTORY_MODE;
+				charging_ic->status_past = CHG_IC_FACTORY_MODE;
 				batt_dev->ACLineStatus = NV_TRUE;
 				batt_dev->charging_source = NvCharger_Type_AC;
 				batt_dev->charging_enabled = NvCharge_Control_Charging_Enable;
@@ -2243,6 +2984,7 @@ static void star_initial_charger_state(void)
 		default:
 			batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 			charging_ic->status = CHG_IC_DEACTIVE_MODE;
+			charging_ic->status_past = CHG_IC_DEACTIVE_MODE;
 			batt_dev->ACLineStatus = NV_FALSE;
 			batt_dev->charging_source = NvCharger_Type_Battery;
 			batt_dev->charging_enabled = NvCharge_Control_Charging_Disable;
@@ -2286,10 +3028,34 @@ static int tegra_battery_probe(struct platform_device *pdev)
 	if (!debug_batt_dev) {
 		return -ENOMEM;
 	}
-	memset(debug_batt_dev, 0, sizeof(*debug_batt_dev));
+	memset(star_batt_dev, 0, sizeof(*star_batt_dev));
 #endif // DEBUGFS_STAR_BATT_TEST_MODE
 
+//20100926, , Communication with BatteryService for AT Command [START]
+	batt_dev->sleep_bat_check_period_to_cp = 30;
+#if defined (STAR_BATTERY_AT_COMMAND)
+	batt_dev->at_comm_want = AT_COMM_NO;
+	batt_dev->at_comm_ready = NV_FALSE;
+#else // STAR_BATTERY_AT_COMMAND
+	AtComm = kzalloc(sizeof(*AtComm), GFP_KERNEL);
+	if (!AtComm)
+		return -ENOMEM;
+	memset(AtComm, 0, sizeof(*AtComm));
+
+	AtComm->flag_at_comm_want = AT_COMM_CBC;
+	AtComm->flag_at_comm_ready = NV_TRUE;
+	mutex_init(&AtComm->mutex_lock);
+	AtComm->sdev.name = "at_comm";
+	AtComm->sdev.print_name = at_comm_print_name;
+
+	rc = switch_dev_register(&AtComm->sdev);
+	if (rc < 0)
+		goto err_switch_dev_register;
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
+
 	setup_timer(&(batt_dev->charger_state_read_timer), tegra_battery_gpio_read_timer_func, 0);
+	setup_timer(&(batt_dev->battery_gauge_timer), star_cbc_gauge_request_timer_func, 0);
 
 //20100609, , Charger Code : GPIO Setting [START]
 	pConn = NvOdmPeripheralGetGuid(NV_ODM_GUID('c','h','a','r','g','i','n','g'));
@@ -2363,23 +3129,23 @@ static int tegra_battery_probe(struct platform_device *pdev)
 	batt_dev->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 	batt_dev->BatteryLifePercent = 104; // default setting
 	batt_dev->BatteryGauge = 111;
-	batt_dev->sleep_bat_check_period = SLEEP_BAT_CHECK_PERIOD; // second
+	batt_dev->sleep_bat_check_period = 1200; // second
 	batt_dev->old_alarm_sec = 0;
 	batt_dev->old_checkbat_sec = 0;
 	batt_dev->last_cbc_time = 0;
-#if defined (TRICKLE_RECHECK)
-	batt_dev->Trickle_charge_check = NV_FALSE;
-#endif //  TRICKLE_RECHECK
+	batt_dev->gauge_follow_time = NvOsGetTimeMS();
+	batt_dev->cbc_request_time = CBC_REQUEST_TIME_FIRST;
+	batt_dev->cbc_request_state = Request_First_Time;
+	batt_dev->cbc_clear_state = Clear_No_Response_0;
 //20100824, , get capacity using battery voltage for demo [START]
+#if defined (USE_ONETIME_VOLTAGE_CAPACITY)
+	batt_dev->repeat_index = NV_TRUE; //NV_TRUE for getting capacity from Battery voltage
 	batt_dev->Capacity_first_time = NV_TRUE;
-	batt_dev->batt_vol = 3700; // default value 3.7V
-	batt_dev->batt_temp = 270; // default value 27 degree
-	star_batt_dev->prev_batt_vol = batt_dev->batt_vol;
-	star_batt_dev->prev_batt_temp = batt_dev->batt_temp;
-//20100824, , get capacity using battery voltage for demo [END]
 	batt_dev->BatteryGauge_on = NV_FALSE;
 	batt_dev->RIL_ready = NV_FALSE;
 	batt_dev->Boot_TA_setting = NV_FALSE;
+#endif // USE_ONETIME_VOLTAGE_CAPACITY
+//20100824, , get capacity using battery voltage for demo [END]
 	previous_guage = 100;
 
 	for (i = 0; i < ARRAY_SIZE(tegra_supplies); i++) {
@@ -2397,7 +3163,6 @@ static int tegra_battery_probe(struct platform_device *pdev)
 			return rc;
 #endif // CONFIG_MACH_STAR
 //20100630, , Change probe function structure [END]
-
 		}
 	}
 
@@ -2430,16 +3195,17 @@ static int tegra_battery_probe(struct platform_device *pdev)
 	rc = device_create_file(&pdev->dev, &star_cbc_attr);
 	if (rc) {goto err_device_create_fail;}
 
+	rc = device_create_file(&pdev->dev, &star_cbcdc_attr);
+	if (rc) {goto err_device_create_fail;}
+
 	rc = device_create_file(&pdev->dev, &tegra_battery_attr);
 	if (rc)
 	{
 //20100630, , Change probe function structure [START]
-
 #if defined (CONFIG_MACH_STAR)
 		LDB("[Critical] device_create_file FAILED");
 		goto err_device_create_fail;
 #else // Original Code
-
 		for (i = 0; i < ARRAY_SIZE(tegra_supplies); i++) {
 			power_supply_unregister(&tegra_supplies[i]);
 		}
@@ -2450,7 +3216,6 @@ static int tegra_battery_probe(struct platform_device *pdev)
 		return rc;
 #endif // CONFIG_MACH_STAR
 //20100630, , Change probe function structure [END]
-
 	}
 
 	queue_delayed_work(batt_dev->battery_workqueue, &batt_dev->battery_status_poll_work, HZ*6);
@@ -2459,7 +3224,6 @@ static int tegra_battery_probe(struct platform_device *pdev)
 #if defined(DEBUGFS_STAR_BATT_TEST_MODE)
 	star_battery_debug_init();
 #endif // DEBUGFS_STAR_BATT_TEST_MODE
-
 	return 0;
 
 //20100609, , Charger Code [START]
@@ -2480,7 +3244,14 @@ err_gpio_pin_acquire_fail:
 	NvOdmGpioClose(charging_ic->hGpio);
 err_open_gpio_fail:
 	del_timer_sync(&(batt_dev->charger_state_read_timer));
-
+	del_timer_sync(&(batt_dev->battery_gauge_timer));
+//20100926, , Communication with BatteryService for AT Command [START]
+#ifndef STAR_BATTERY_AT_COMMAND
+	switch_dev_unregister(&AtComm->sdev);
+err_switch_dev_register:
+	kfree(AtComm);
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
 #if defined(DEBUGFS_STAR_BATT_TEST_MODE)
 	kfree(debug_batt_dev);
 #endif // DEBUGFS_STAR_BATT_TEST_MODE
@@ -2492,22 +3263,25 @@ err_open_gpio_fail:
 //20100609, , Charger Code [END]
 }
 
+
 static void tegra_battery_shutdown(struct platform_device *pdev)
 {
-	int i;
+
+    int i =0;
 
 	bat_shutdown = 1;
 	printk("tegra_battery_shutdown\n");
 
 	NvOdmGpioInterruptUnregister(charging_ic->hGpio, charging_ic->hStatusPin, charging_ic->hCHGDone_int);
-	charging_ic_deactive_for_recharge();
-
+	charging_ic_deactive_for_rechrge();
+	
 	cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
 	cancel_delayed_work_sync(&batt_dev->battery_id_poll_work);
-	flush_workqueue(batt_dev->battery_workqueue);
-	destroy_workqueue(batt_dev->battery_workqueue);
+	    flush_workqueue(batt_dev->battery_workqueue);
+	    destroy_workqueue(batt_dev->battery_workqueue);
 
-	del_timer_sync(&(batt_dev->charger_state_read_timer));
+	    del_timer_sync(&(batt_dev->charger_state_read_timer));
+	   del_timer_sync(&(batt_dev->battery_gauge_timer));
 
 	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hStatusPin, 0x0);
 	NvOdmGpioConfig( charging_ic->hGpio, charging_ic->hStatusPin, NvOdmGpioPinMode_Output);
@@ -2521,9 +3295,10 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hPGBPin);
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hSetPin);
 
-	if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio);
+    if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio); 
 
 #if 0
+
 	for (i = 0; i < ARRAY_SIZE(tegra_supplies); i++) {
 		power_supply_unregister(&tegra_supplies[i]);
 	}
@@ -2541,47 +3316,36 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 		charging_ic = NULL;
 	}
 
-#if defined(DEBUGFS_STAR_BATT_TEST_MODE)
-	if (debug_batt_dev)
-	{
-		kfree(debug_batt_dev);
-		debug_batt_dev = NULL;
-	}
-#endif // DEBUGFS_STAR_BATT_TEST_MODE
-
 	if (batt_dev) {
 		device_remove_file(&pdev->dev, &tegra_battery_attr);
 
 		kfree(batt_dev);
 		batt_dev = NULL;
 	}
+
+	//20100926, , Communication with BatteryService for AT Command [START]
+#ifndef STAR_BATTERY_AT_COMMAND
+	if (AtComm)
+	{
+		switch_dev_unregister(&AtComm->sdev);
+		kfree(AtComm);
+		AtComm = NULL;
+	}
+#endif // STAR_BATTERY_AT_COMMAND
+	//20100926, , Communication with BatteryService for AT Command [END]
+
 }
 
 
 static int tegra_battery_remove(struct platform_device *pdev)
 {
 	int i;
-	bat_shutdown = 1;
 
-	NvOdmGpioInterruptUnregister(charging_ic->hGpio, charging_ic->hStatusPin, charging_ic->hCHGDone_int);
-	charging_ic_deactive_for_recharge();
-
-	cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
-	cancel_delayed_work_sync(&batt_dev->battery_id_poll_work);
-	flush_workqueue(batt_dev->battery_workqueue);
-	destroy_workqueue(batt_dev->battery_workqueue);
-
-	del_timer_sync(&(batt_dev->charger_state_read_timer));
-
+	//LDB("");
 //20100609, , Charger Code [START]
 #if defined (CONFIG_MACH_STAR)
-	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hStatusPin, 0x0);
-	NvOdmGpioConfig( charging_ic->hGpio, charging_ic->hStatusPin, NvOdmGpioPinMode_Output);
-
-	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hPGBPin, 0x0);
-	NvOdmGpioConfig( charging_ic->hGpio, charging_ic->hPGBPin, NvOdmGpioPinMode_Output);
-
-	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hSetPin, 0x0);
+	charging_ic_deactive();
+	NvOdmGpioInterruptUnregister(charging_ic->hGpio, charging_ic->hStatusPin, charging_ic->hCHGDone_int);
 
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hSetPin);
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hStatusPin);
@@ -2590,6 +3354,13 @@ static int tegra_battery_remove(struct platform_device *pdev)
 	NvOdmGpioClose(charging_ic->hGpio);
 #endif // CONFIG_MACH_STAR
 //20100609, , Charger Code [END]
+
+	cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
+	flush_workqueue(batt_dev->battery_workqueue);
+	destroy_workqueue(batt_dev->battery_workqueue);
+
+	del_timer_sync(&(batt_dev->charger_state_read_timer));
+	del_timer_sync(&(batt_dev->battery_gauge_timer));
 
 	for (i = 0; i < ARRAY_SIZE(tegra_supplies); i++) {
 		power_supply_unregister(&tegra_supplies[i]);
@@ -2607,20 +3378,23 @@ static int tegra_battery_remove(struct platform_device *pdev)
 		charging_ic = NULL;
 	}
 
-#if defined(DEBUGFS_STAR_BATT_TEST_MODE)
-	if (debug_batt_dev)
-	{
-		kfree(debug_batt_dev);
-		debug_batt_dev = NULL;
-	}
-#endif // DEBUGFS_STAR_BATT_TEST_MODE
-
 	if (batt_dev) {
 		device_remove_file(&pdev->dev, &tegra_battery_attr);
 
 		kfree(batt_dev);
 		batt_dev = NULL;
 	}
+
+//20100926, , Communication with BatteryService for AT Command [START]
+#ifndef STAR_BATTERY_AT_COMMAND
+	if (AtComm)
+	{
+		switch_dev_unregister(&AtComm->sdev);
+		kfree(AtComm);
+		AtComm = NULL;
+	}
+#endif // STAR_BATTERY_AT_COMMAND
+//20100926, , Communication with BatteryService for AT Command [END]
 
 	return 0;
 }
@@ -2640,8 +3414,6 @@ static int tegra_battery_suspend(struct platform_device *dev,
 			if ( alarm_sec == batt_dev->old_checkbat_sec )
 				alarm_sec = batt_dev->old_alarm_sec;
 			checkbat_sec = now_sec + batt_dev->sleep_bat_check_period;
-			//printk("[CHG_RTC] alarm_sec=0x%x, now_sec=0x%x\n", alarm_sec, now_sec);
-			//printk("[CHG_RTC] old_alarm_sec=0x%x, checkbat_sec=0x%x\n", batt_dev->old_alarm_sec, checkbat_sec);
 
 			if( batt_dev->old_alarm_sec < now_sec )
 			{
@@ -2702,28 +3474,6 @@ static int tegra_battery_suspend(struct platform_device *dev,
 					}
 				}
 			}
-/*
-			if (NvRmPmuReadRtc(s_hRmGlobal, &checkbat_sec))
-			{
-				// Call to verify that reverse conversion of seconds matches date
-				rtc_time_to_tm(checkbat_sec, &tm);
-				// Check if Local_rtc_time_to_tm can return values sent to mktime
-				LDB("rtc_currtime_to_tm: [%d/%d/%d][%d:%d:%d]: cur_time=0x%x ", 
-					(tm.tm_year + LINUX_RTC_BASE_YEAR), tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, checkbat_sec);
-			}
-			else
-				LDB("[Warning] CHR_RTC read Fail!!");
-
-			if (NvRmPmuReadAlarm(s_hRmGlobal, &checkbat_sec))
-			{
-				// Call to verify that reverse conversion of seconds matches date
-				rtc_time_to_tm(checkbat_sec, &tm);
-				// Check if Local_rtc_time_to_tm can return values sent to mktime
-				LDB("rtc_waketime_to_tm: [%d/%d/%d][%d:%d:%d]: final_alram=0x%x ", 
-					(tm.tm_year + LINUX_RTC_BASE_YEAR), tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, checkbat_sec);
-			}
-			else
-				LDB("[Warning] CHR_Alarm read Fail!!");*/
 		}
 		else
 			LDB("[Critical]: ReadAlarm && ReadRTC are failed!!!");
