@@ -802,6 +802,7 @@ static void fsl_queue_td(struct fsl_ep *ep, struct fsl_req *req)
 		lastreq = list_entry(ep->queue.prev, struct fsl_req, queue);
 		lastreq->tail->next_td_ptr =
 			cpu_to_hc32(req->head->td_dma & DTD_ADDR_MASK);
+		/* Ensure dTD's next dtd pointer to be updated */
 		wmb();
 		/* Read prime bit, if 1 goto done */
 		if (fsl_readl(&dr_regs->endpointprime) & bitmask)
@@ -1578,7 +1579,7 @@ static void udc_test_mode(struct fsl_udc *udc, u32 test_mode)
 		}
 
 		/* prime the data phase */
-		if (fsl_req_to_dtd(req, GFP_ATOMIC) == 0)
+		if ((fsl_req_to_dtd(req, GFP_ATOMIC) == 0))
 			fsl_queue_td(ep, req);
 		else			/* no mem */
 			goto stall;
@@ -2298,6 +2299,7 @@ static irqreturn_t fsl_udc_irq(int irq, void *_udc)
 	/* Disable ISR for OTG host mode */
 	if (udc->stopped)
 		return IRQ_NONE;
+
 	spin_lock_irqsave(&udc->lock, flags);
 	irq_src = fsl_readl(&dr_regs->usbsts) & fsl_readl(&dr_regs->usbintr);
 	/* Clear notification bits */
