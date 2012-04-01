@@ -57,8 +57,8 @@ extern NvRmDfs *fakeShmoo_Dfs;
 static struct proc_dir_entry *MAXSM_Proc_File;
 static char procfs_buffer_sm[MAXSM_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_sm = 0;
-int min_smfreq = 216000; // Min Screen Off Freq
-int max_smfreq = 816000; // Max Screen Off Freq
+extern unsigned int SMFREQLOW;
+extern unsigned int SMFREQHIGH;
 int maxsm_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSM_PROCFS_NAME);
@@ -75,7 +75,7 @@ int maxsm_procfile_write(struct file *file, const char *buffer, unsigned long co
 int temp_sm;
 temp_sm = 0;
 if ( sscanf(buffer,"%d",&temp_sm) < 1 ) return procfs_buffer_size_sm;
-if ( temp_sm < min_smfreq || temp_sm > max_smfreq ) return procfs_buffer_size_sm;
+if ( temp_sm < SMFREQLOW || temp_sm > SMFREQHIGH ) return procfs_buffer_size_sm;
 
 procfs_buffer_size_sm = count;
 if (procfs_buffer_size_sm > MAXSM_PROCFS_SIZE ) {

@@ -52,8 +52,8 @@ static struct proc_dir_entry *spica_dir;
 #ifdef CONFIG_OTF_VDE
 #define VDE_PROCFS_NAME "vdefreq"
 #define VDE_PROCFS_SIZE 8
-int min_vde = 500000; // Min allowed freq
-int max_vde = 700000; // Max allowed freq
+extern unsigned int VDELOW;
+extern unsigned int VDEHIGH;
 static struct proc_dir_entry *VDE_Proc_File;
 static char procfs_buffer_vde[VDE_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_vde = 0;
@@ -74,7 +74,7 @@ int vde_procfile_write(struct file *file, const char *buffer, unsigned long coun
 int temp_vde;
 temp_vde = 0;
 if ( sscanf(buffer,"%d",&temp_vde) < 1 ) return procfs_buffer_size_vde;
-if ( temp_vde < min_vde || temp_vde > max_vde ) return procfs_buffer_size_vde;
+if ( temp_vde < VDELOW || temp_vde > VDEHIGH ) return procfs_buffer_size_vde;
 
 procfs_buffer_size_vde = count;
 if (procfs_buffer_size_vde > VDE_PROCFS_SIZE ) {

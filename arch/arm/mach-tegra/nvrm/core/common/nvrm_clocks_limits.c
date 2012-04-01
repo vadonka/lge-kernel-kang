@@ -54,8 +54,8 @@ static struct proc_dir_entry *spica_dir;
 static struct proc_dir_entry *GPU_Proc_File;
 static char procfs_buffer_gpu[GPU_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_gpu = 0;
-int min_gpu = 280000; // Min GPU freq
-int max_gpu = 400000; // Max GPU freq
+extern unsigned int GPULOW; // Min GPU freq
+extern unsigned int GPUHIGH; // Max GPU freq
 int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "gpu_procfile_read (/proc/spica/%s) called\n", GPU_PROCFS_NAME);
@@ -72,7 +72,7 @@ int gpu_procfile_write(struct file *file, const char *buffer, unsigned long coun
 int temp_gpu;
 temp_gpu = 0;
 if ( sscanf(buffer,"%d",&temp_gpu) < 1 ) return procfs_buffer_size_gpu;
-if ( temp_gpu < min_gpu || temp_gpu > max_gpu ) return procfs_buffer_size_gpu;
+if ( temp_gpu < GPULOW || temp_gpu > GPUHIGH ) return procfs_buffer_size_gpu;
 
 procfs_buffer_size_gpu = count;
 if (procfs_buffer_size_gpu > GPU_PROCFS_SIZE ) {
@@ -121,8 +121,8 @@ module_exit(cleanup_gpu_procsfs);
 static struct proc_dir_entry *AVP_Proc_File;
 static char procfs_buffer_avp[AVP_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_avp = 0;
-int min_avp = 200000; // Min AVP freq
-int max_avp = 250000; // Max AVP freq
+extern unsigned int AVPLOW;
+extern unsigned int AVPHIGH;
 int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
@@ -139,7 +139,7 @@ int avp_procfile_write(struct file *file, const char *buffer, unsigned long coun
 int temp_avp;
 temp_avp = 0;
 if ( sscanf(buffer,"%d",&temp_avp) < 1 ) return procfs_buffer_size_avp;
-if ( temp_avp < min_avp || temp_avp > max_avp ) return procfs_buffer_size_avp;
+if ( temp_avp < AVPLOW || temp_avp > AVPHIGH ) return procfs_buffer_size_avp;
 
 procfs_buffer_size_avp = count;
 if (procfs_buffer_size_avp > AVP_PROCFS_SIZE ) {
