@@ -49,7 +49,7 @@
 #define DTIM_SKIP_SET_CMD			"DTIMSKIPSET"
 #define SETSUSPEND_CMD				"SETSUSPENDOPT"
 #define PNOSSIDCLR_SET_CMD			"PNOSSIDCLR"
-#define PNOSETUP_SET_CMD			"PNOSETUP " 
+#define PNOSETUP_SET_CMD			"PNOSETUP "
 #define PNOENABLE_SET_CMD			"PNOFORCE"
 #define PNODEBUG_SET_CMD			"PNODEBUG"
 
@@ -58,35 +58,36 @@
 
 
 typedef struct wl_iw_extra_params {
-	int 	target_channel; 
+	int 	target_channel;
 } wl_iw_extra_params_t;
 
 struct cntry_locales_custom {
-	char iso_abbrev[WLC_CNTRY_BUF_SZ];	
-	char custom_locale[WLC_CNTRY_BUF_SZ];	
-	int32 custom_locale_rev;		
+	char iso_abbrev[WLC_CNTRY_BUF_SZ];
+	char custom_locale[WLC_CNTRY_BUF_SZ];
+	int32 custom_locale_rev;
 };
 
 #define SOFTAP 1
 
 
-#define	WL_IW_RSSI_MINVAL		-200	
-#define	WL_IW_RSSI_NO_SIGNAL	-91	
-#define	WL_IW_RSSI_VERY_LOW	-80	
-#define	WL_IW_RSSI_LOW		-70	
-#define	WL_IW_RSSI_GOOD		-68	
-#define	WL_IW_RSSI_VERY_GOOD	-58	
-#define	WL_IW_RSSI_EXCELLENT	-57	
-#define	WL_IW_RSSI_INVALID	 0	
-#define MAX_WX_STRING 80
+#define	WL_IW_RSSI_MINVAL	-200
+#define	WL_IW_RSSI_NO_SIGNAL	-91
+#define	WL_IW_RSSI_VERY_LOW	-80
+#define	WL_IW_RSSI_LOW		-70
+#define	WL_IW_RSSI_GOOD		-68
+#define	WL_IW_RSSI_VERY_GOOD	-58
+#define	WL_IW_RSSI_EXCELLENT	-57
+#define	WL_IW_RSSI_INVALID	 0
+#define MAX_WX_STRING		80
 #define isprintf(c) bcm_isprint(c)
+
 #define WL_IW_SET_ACTIVE_SCAN	(SIOCIWFIRSTPRIV+1)
-#define WL_IW_GET_RSSI			(SIOCIWFIRSTPRIV+3)
+#define WL_IW_GET_RSSI		(SIOCIWFIRSTPRIV+3)
 #define WL_IW_SET_PASSIVE_SCAN	(SIOCIWFIRSTPRIV+5)
 #define WL_IW_GET_LINK_SPEED	(SIOCIWFIRSTPRIV+7)
 #define WL_IW_GET_CURR_MACADDR	(SIOCIWFIRSTPRIV+9)
-#define WL_IW_SET_STOP				(SIOCIWFIRSTPRIV+11)
-#define WL_IW_SET_START			(SIOCIWFIRSTPRIV+13)
+#define WL_IW_SET_STOP		(SIOCIWFIRSTPRIV+11)
+#define WL_IW_SET_START		(SIOCIWFIRSTPRIV+13)
 
 
 #define WL_SET_AP_CFG           (SIOCIWFIRSTPRIV+15)
@@ -107,10 +108,10 @@ struct cntry_locales_custom {
 #endif	/* defined(CONFIG_LGE_BCM432X_PATCH) && defined(SOFTAP) */
 
 
-#define 		G_SCAN_RESULTS 8*1024
-#define 		WE_ADD_EVENT_FIX	0x80
-#define          G_WLAN_SET_ON	0
-#define          G_WLAN_SET_OFF	1
+#define			G_SCAN_RESULTS 8*1024
+#define WE_ADD_EVENT_FIX	0x80
+#define G_WLAN_SET_ON		0
+#define G_WLAN_SET_OFF		1
 
 #define CHECK_EXTRA_FOR_NULL(extra) \
 if (!extra) { \
@@ -124,9 +125,9 @@ typedef struct wl_iw {
 	struct iw_statistics wstats;
 
 	int spy_num;
-	uint32 pwsec;			
-	uint32 gwsec;			
-	bool privacy_invoked; 		
+	uint32 pwsec;
+	uint32 gwsec;
+	bool privacy_invoked;
 
 	struct ether_addr spy_addr[IW_MAX_SPY];
 	struct iw_quality spy_qual[IW_MAX_SPY];
@@ -150,13 +151,13 @@ typedef struct wl_iw_ss_cache {
 } wl_iw_ss_cache_t;
 
 typedef struct wl_iw_ss_cache_ctrl {
-	wl_iw_ss_cache_t *m_cache_head;	
-	int m_link_down;		
-	int m_timer_expired;		
-	char m_active_bssid[ETHER_ADDR_LEN];	
-	uint m_prev_scan_mode;	
-	uint m_cons_br_scan_cnt;	
-	struct timer_list *m_timer;	
+	wl_iw_ss_cache_t *m_cache_head;
+	int m_link_down;
+	int m_timer_expired;
+	char m_active_bssid[ETHER_ADDR_LEN];
+	uint m_prev_scan_mode;
+	uint m_cons_br_scan_cnt;
+	struct timer_list *m_timer;
 } wl_iw_ss_cache_ctrl_t;
 
 typedef enum broadcast_first_scan {
@@ -174,31 +175,32 @@ struct ap_profile {
 	uint8	ssid[SSID_LEN];
 	uint8	sec[SEC_LEN];
 	uint8	key[KEY_LEN];
-	uint32	channel; 
+	uint32	channel;
 	uint32	preamble;
-	uint32	max_scb;	
-	uint32  closednet;  
+	uint32	max_scb;
+	uint32  closednet;
 	char country_code[WLC_CNTRY_BUF_SZ];
 };
 
 
-#define MACLIST_MODE_DISABLED	0
+#define MACLIST_MODE_DISABLED		0
 #define MACLIST_MODE_DENY		1
 #define MACLIST_MODE_ALLOW		2
 struct mflist {
 	uint count;
 	struct ether_addr ea[16];
 };
+
 struct mac_list_set {
 	uint32	mode;
 	struct mflist mac_list;
 };
-#endif   
+#endif
 
 #if WIRELESS_EXT > 12
 #include <net/iw_handler.h>
 extern const struct iw_handler_def wl_iw_handler_def;
-#endif 
+#endif
 
 extern int wl_iw_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
 extern void wl_iw_event(struct net_device *dev, wl_event_msg_t *e, void* data);
@@ -245,7 +247,7 @@ extern int dhd_get_dtim_skip(dhd_pub_t *dhd);
 #define PNO_TLV_RESERVED		'0'
 #define PNO_TLV_TYPE_SSID_IE		'S'
 #define PNO_TLV_TYPE_TIME		'T'
-#define  PNO_EVENT_UP			"PNO_EVENT"
+#define PNO_EVENT_UP			"PNO_EVENT"
 #define PNO_SCAN_MAX_FW		508	
 
 typedef struct cmd_tlv {
@@ -269,13 +271,13 @@ typedef struct cscan_tlv {
 #define CSCAN_TLV_PREFIX 			'S'
 #define CSCAN_TLV_VERSION			1
 #define CSCAN_TLV_SUBVERSION			0
-#define CSCAN_TLV_TYPE_SSID_IE          'S'
-#define CSCAN_TLV_TYPE_CHANNEL_IE   'C'
-#define CSCAN_TLV_TYPE_NPROBE_IE     'N'
-#define CSCAN_TLV_TYPE_ACTIVE_IE      'A'
-#define CSCAN_TLV_TYPE_PASSIVE_IE    'P'
-#define CSCAN_TLV_TYPE_HOME_IE         'H'
-#define CSCAN_TLV_TYPE_STYPE_IE        'T'
+#define CSCAN_TLV_TYPE_SSID_IE			'S'
+#define CSCAN_TLV_TYPE_CHANNEL_IE		'C'
+#define CSCAN_TLV_TYPE_NPROBE_IE		'N'
+#define CSCAN_TLV_TYPE_ACTIVE_IE		'A'
+#define CSCAN_TLV_TYPE_PASSIVE_IE		'P'
+#define CSCAN_TLV_TYPE_HOME_IE			'H'
+#define CSCAN_TLV_TYPE_STYPE_IE			'T'
 
 #ifdef SOFTAP_TLV_CFG
 
@@ -305,4 +307,4 @@ extern int wl_iw_parse_ssid_list(char** list_str, wlc_ssid_t* ssid, int idx, int
 extern int wl_iw_parse_channel_list(char** list_str, uint16* channel_list, int channel_num);
 
 
-#endif 
+#endif
