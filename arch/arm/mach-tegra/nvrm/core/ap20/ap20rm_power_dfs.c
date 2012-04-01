@@ -54,8 +54,8 @@ static struct proc_dir_entry *spica_dir;
 static unsigned long procfs_buffer_size_cpuon = 0;
 static struct proc_dir_entry *CPUON_Proc_File;
 static char procfs_buffer_cpuon[CPUON_PROCFS_SIZE];
-int min_mincpu = 216000;  // Min Freq
-int max_mincpu = 1015000; // Max Freq
+extern unsigned int ONMINLOW;
+extern unsigned int ONMINHIGH;
 int cpuon_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", CPUON_PROCFS_NAME);
@@ -72,7 +72,7 @@ int cpuon_procfile_write(struct file *file, const char *buffer, unsigned long co
 int temp_cpuon;
 temp_cpuon = 0;
 if ( sscanf(buffer,"%d",&temp_cpuon) < 1 ) return procfs_buffer_size_cpuon;
-if ( temp_cpuon < min_mincpu || temp_cpuon > max_mincpu ) return procfs_buffer_size_cpuon;
+if ( temp_cpuon < ONMINLOW || temp_cpuon > ONMINHIGH ) return procfs_buffer_size_cpuon;
 
 procfs_buffer_size_cpuon = count;
 if (procfs_buffer_size_cpuon > CPUON_PROCFS_SIZE ) {
@@ -121,8 +121,8 @@ module_exit(cleanup_cpuon_procsfs);
 static unsigned long procfs_buffer_size_ddr2 = 0;
 static struct proc_dir_entry *DDR2_Proc_File;
 static char procfs_buffer_ddr2[DDR2_PROCFS_SIZE];
-int min_ddr2 = 10000; // DDR2 Min Khz
-int max_ddr2 = 55000; // DDR2 Max Khz
+extern unsigned int DDR2MINLOW;
+extern unsigned int DDR2MINHIGH;
 int ddr2_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", DDR2_PROCFS_NAME);
@@ -139,7 +139,7 @@ int ddr_procfile_write(struct file *file, const char *buffer, unsigned long coun
 int temp_ddr2;
 temp_ddr2 = 0;
 if ( sscanf(buffer,"%d",&temp_ddr2) < 1 ) return procfs_buffer_size_ddr2;
-if ( temp_ddr2 < min_ddr2 || temp_ddr2 > max_ddr2 ) return procfs_buffer_size_ddr2;
+if ( temp_ddr2 < DDR2MINLOW || temp_ddr2 > DDR2MINHIGH ) return procfs_buffer_size_ddr2;
 
 procfs_buffer_size_ddr2 = count;
 if (procfs_buffer_size_ddr2 > DDR2_PROCFS_SIZE ) {
@@ -188,8 +188,8 @@ module_exit(cleanup_ddr2_procsfs);
 static unsigned long procfs_buffer_size_lpddr2 = 0;
 static struct proc_dir_entry *LPDDR2_Proc_File;
 static char procfs_buffer_lpddr2[LPDDR2_PROCFS_SIZE];
-int min_lpddr2 = 7000; // LPDDR2 Min Khz
-int max_lpddr2 = 20000; // LPDDR2 Max Khz
+extern unsigned int LPDDR2MINLOW;
+extern unsigned int LPDDR2MINHIGH;
 int lpddr2_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", LPDDR2_PROCFS_NAME);
@@ -206,7 +206,7 @@ int lpddr2_procfile_write(struct file *file, const char *buffer, unsigned long c
 int temp_lpddr2;
 temp_lpddr2 = 0;
 if ( sscanf(buffer,"%d",&temp_lpddr2) < 1 ) return procfs_buffer_size_lpddr2;
-if ( temp_lpddr2 < min_lpddr2 || temp_lpddr2 > max_lpddr2 ) return procfs_buffer_size_lpddr2;
+if ( temp_lpddr2 < LPDDR2MINLOW || temp_lpddr2 > LPDDR2MINHIGH ) return procfs_buffer_size_lpddr2;
 
 procfs_buffer_size_lpddr2 = count;
 if (procfs_buffer_size_lpddr2 > LPDDR2_PROCFS_SIZE ) {
@@ -254,8 +254,8 @@ module_exit(cleanup_lpddr2_procsfs);
 static unsigned long procfs_buffer_size_scmv = 0;
 static struct proc_dir_entry *SUSPENDMV_Proc_File;
 static char procfs_buffer_scmv[SUSPENDMV_PROCFS_SIZE];
-int min_scmv = 600;  // Suspend Core Min mV
-int max_scmv = 1100; // Suspend Core Max mV
+extern unsigned int SCMVLOW;
+extern unsigned int SCMVHIGH;
 int scmv_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 int ret;
 printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", SUSPENDMV_PROCFS_NAME);
@@ -274,7 +274,7 @@ temp_scmv = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_scmv) < 1 ) return procfs_buffer_size_scmv;
-if ( temp_scmv < min_scmv || temp_scmv > max_scmv ) return procfs_buffer_size_scmv;
+if ( temp_scmv < SCMVLOW || temp_scmv > SCMVHIGH ) return procfs_buffer_size_scmv;
 /* [End] */
 	procfs_buffer_size_scmv = count;
 if (procfs_buffer_size_scmv > SUSPENDMV_PROCFS_SIZE ) {

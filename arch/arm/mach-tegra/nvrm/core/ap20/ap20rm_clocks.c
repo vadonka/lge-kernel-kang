@@ -55,8 +55,8 @@ static struct proc_dir_entry *spica_dir;
 #ifdef CONFIG_OTF_CPU1
 #define CPUOFF_PROCFS_NAME "maxcpu1off"
 #define CPUOFF_PROCFS_SIZE 8
-int min_maxcpu = 216000;  // Min freq
-int max_maxcpu = 1015000; // Max freq
+extern unsigned int OFFMAXLOW;
+extern unsigned int OFFMAXHIGH;
 static struct proc_dir_entry *CPUOFF_Proc_File;
 static char procfs_buffer_cpuoff[CPUOFF_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_cpuoff = 0;
@@ -79,7 +79,7 @@ temp_cpuoff = 0;
 /* CAUTION: Don't change below 2 lines */
 /* [Start] */
 if ( sscanf(buffer,"%d",&temp_cpuoff) < 1 ) return procfs_buffer_size_cpuoff;
-if ( temp_cpuoff < min_maxcpu || temp_cpuoff > max_maxcpu ) return procfs_buffer_size_cpuoff;
+if ( temp_cpuoff < OFFMAXLOW || temp_cpuoff > OFFMAXHIGH ) return procfs_buffer_size_cpuoff;
 /* [End] */
     procfs_buffer_size_cpuoff = count;
 if (procfs_buffer_size_cpuoff > CPUOFF_PROCFS_SIZE ) {

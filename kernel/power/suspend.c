@@ -21,7 +21,6 @@
 #include <linux/earlysuspend.h>
 #include <linux/cpufreq.h>
 #include <linux/spica.h>
-//extern unsigned int oldmaxclock;
 extern unsigned int oldminclock;
 #endif // OTF_MAXSCOFF
 
