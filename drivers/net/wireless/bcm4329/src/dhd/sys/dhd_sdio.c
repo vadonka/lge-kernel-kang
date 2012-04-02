@@ -577,6 +577,7 @@ dhdsdio_htclk(dhd_bus_t *bus, bool on, bool pendok)
 			bcmsdh_cfg_write(sdh, SDIO_FUNC_1, SBSDIO_DEVICE_CTL, devctl, &err);
 			DHD_INFO(("CLKCTL: set PENDING\n"));
 			bus->clkstate = CLK_PENDING;
+
 			return BCME_OK;
 		} else if (bus->clkstate == CLK_PENDING) {
 			/* Cancel CA-only interrupt filter */
@@ -759,8 +760,8 @@ dhdsdio_clkctl(dhd_bus_t *bus, uint target, bool pendok)
 		/* Now request HT Avail on the backplane */
 		ret = dhdsdio_htclk(bus, TRUE, pendok);
 		if (ret == BCME_OK) {
-			dhd_os_wd_timer(bus->dhd, dhd_watchdog_ms);
-			bus->activity = TRUE;
+		dhd_os_wd_timer(bus->dhd, dhd_watchdog_ms);
+		bus->activity = TRUE;
 		}
 		break;
 
@@ -774,7 +775,7 @@ dhdsdio_clkctl(dhd_bus_t *bus, uint target, bool pendok)
 			DHD_ERROR(("dhdsdio_clkctl: request for %d -> %d\n",
 			           bus->clkstate, target));
 		if (ret == BCME_OK)
-			dhd_os_wd_timer(bus->dhd, dhd_watchdog_ms);
+		dhd_os_wd_timer(bus->dhd, dhd_watchdog_ms);
 		break;
 
 	case CLK_NONE:
@@ -1328,6 +1329,7 @@ dhd_bus_txctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 			bus->ctrl_frame_stat = FALSE;
 			ret = dhd_bcmsdh_send_buf(bus, bcmsdh_cur_sbwad(sdh), SDIO_FUNC_2, F2SYNC,
 			                          frame, len, NULL, NULL, NULL);
+
 			ASSERT(ret != BCME_PENDING);
 
 			if (ret < 0) {
@@ -1872,6 +1874,7 @@ dhdsdio_checkdied(dhd_bus_t *bus, uint8 *data, uint size)
 	if (sdpcm_shared.flags & (SDPCM_SHARED_ASSERT | SDPCM_SHARED_TRAP)) {
 		DHD_ERROR(("%s: %s\n", __FUNCTION__, strbuf.origbuf));
 	}
+
 
 done:
 	if (mbuffer)
@@ -4064,7 +4067,7 @@ dhdsdio_dpc(dhd_bus_t *bus)
 	bool resched = FALSE;	  /* Flag indicating resched wanted */
 #if defined(CONFIG_LGE_BCM432X_PATCH)		//by sjpark 11-02-01
 	int reset_flag = FALSE;
-#endif
+#endif	
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
 	/* Start with leftover status bits */
@@ -4273,11 +4276,11 @@ clkwait:
 	if ((bus->dhd->busstate == DHD_BUS_DOWN) || bcmsdh_regfail(sdh)) {
 		DHD_ERROR(("%s: failed backplane access over SDIO, halting operation %d \n",
 		           __FUNCTION__, bcmsdh_regfail(sdh)));
-// 20110201 mingi.sung@lge.com Disable SDIO interrupt when BUS is down [START]
+// 20110201  Disable SDIO interrupt when BUS is down [START]
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 		bcmsdh_intr_disable(bus->sdh);
 #endif
-// 20110201 mingi.sung@lge.com Disable SDIO interrupt when BUS is down [END]
+// 20110201  Disable SDIO interrupt when BUS is down [END]
 		bus->dhd->busstate = DHD_BUS_DOWN;
 		bus->intstatus = 0;
 #if defined(CONFIG_LGE_BCM432X_PATCH)		//by sjpark 11-02-01
@@ -4341,11 +4344,11 @@ dhdsdio_isr(void *arg)
 
 	DHD_TRACE(("%s: Enter\n", __FUNCTION__));
 
-// 20110212 mingi.sung@lge.com Prevent BUS IS DOWN error [START]
+// 20110212  Prevent BUS IS DOWN error [START]
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 	dhd_mmc_suspend = FALSE;
 #endif
-// 20110212 mingi.sung@lge.com Prevent BUS IS DOWN error [END]
+// 20110212  Prevent BUS IS DOWN error [END]
 
 	if (!bus) {
 		DHD_ERROR(("%s : bus is null pointer , exit \n", __FUNCTION__));
@@ -4646,6 +4649,7 @@ dhd_bus_watchdog(dhd_pub_t *dhdp)
 	if (bus->sleeping)
 		return FALSE;
 
+
 	/* Poll period: check device if appropriate. */
 	if (bus->poll && (++bus->polltick >= bus->pollrate)) {
 		uint32 intstatus = 0;
@@ -4714,6 +4718,7 @@ dhd_bus_watchdog(dhd_pub_t *dhdp)
 			}
 		}
 	}
+
 
 	return bus->ipend;
 }
@@ -5271,6 +5276,7 @@ dhd_bus_download_firmware(struct dhd_bus *bus, osl_t *osh,
 	bus->nv_path = nv_path;
 
 	ret = dhdsdio_download_firmware(bus, osh, bus->sdh);
+
 
 	return ret;
 }
@@ -5850,20 +5856,20 @@ dhd_bus_devreset(dhd_pub_t *dhdp, uint8 flag)
 					bcmerror = dhd_bus_init((dhd_pub_t *) bus->dhd, FALSE);
 					if (bcmerror == BCME_OK) {
 #if defined(OOB_INTR_ONLY)
-						dhd_enable_oob_intr(bus, TRUE);
+					dhd_enable_oob_intr(bus, TRUE);
 #endif /* defined(OOB_INTR_ONLY) */
 
-						bus->dhd->dongle_reset = FALSE;
-						bus->dhd->up = TRUE;
+					bus->dhd->dongle_reset = FALSE;
+					bus->dhd->up = TRUE;
 
 #if !defined(IGNORE_ETH0_DOWN)
-						/* Restore flow control  */
-						dhd_txflowcontrol(bus->dhd, 0, OFF);
-#endif
+					/* Restore flow control  */
+					dhd_txflowcontrol(bus->dhd, 0, OFF);
+#endif 
 						/* Turning on watchdog back */
 						dhd_os_wd_timer(dhdp, dhd_watchdog_ms);
 
-						DHD_TRACE(("%s: WLAN ON DONE\n", __FUNCTION__));
+					DHD_TRACE(("%s: WLAN ON DONE\n", __FUNCTION__));
 					} else {
 						dhd_bus_stop(bus, FALSE);
 						dhdsdio_release_dongle(bus, bus->dhd->osh);

@@ -39,15 +39,19 @@
 #ifdef  CONFIG_BCM4329_GPIO_WL_RESET
 #undef CONFIG_BCM4329_GPIO_WL_RESET
 #endif
+#if defined (CONFIG_MACH_STAR_MDM_C)
+#define CONFIG_BCM4329_GPIO_WL_RESET 131
+#else //TMUS_E
 #define CONFIG_BCM4329_GPIO_WL_RESET 177
+#endif
 // sunghoon.kim, 2010,11,05 , for remove CONFIG_BCM4329_GPIO_WL_RESET in defconfig [END]
 
-/* LGE_CHANGE_S [yoohoo@lge.com] 2009-05-14, support start/stop */
+/* LGE_CHANGE_S [] 2009-05-14, support start/stop */
 #if defined(CONFIG_LGE_BCM432X_PATCH)
 #include <asm/gpio.h>
 #include <linux/interrupt.h>
 #endif /* CONFIG_LGE_BCM432X_PATCH */
-/* LGE_CHANGE_E [yoohoo@lge.com] 2009-05-14, support start/stop */
+/* LGE_CHANGE_E [] 2009-05-14, support start/stop */
 
 #define WL_ERROR(x) printf x
 #define WL_TRACE(x)
@@ -248,15 +252,15 @@ void get_customized_country_code(char *country_iso_code, wl_country_t *cspec)
 	size = ARRAYSIZE(translate_custom_table);
 
 	if (cspec == 0)
-		return;
+		 return;
 
 	if (size == 0)
-		return;
+		 return;
 
 	for (i = 0; i < size; i++) {
-		if (strcmp(country_iso_code, translate_custom_table[i].iso_abbrev) == 0) {
-			memcpy(cspec->ccode, translate_custom_table[i].custom_locale, WLC_CNTRY_BUF_SZ);
-			cspec->rev = translate_custom_table[i].custom_locale_rev;
+	if (strcmp(country_iso_code, translate_custom_table[i].iso_abbrev) == 0) {
+		memcpy(cspec->ccode,  translate_custom_table[i].custom_locale, WLC_CNTRY_BUF_SZ);
+		cspec->rev = translate_custom_table[i].custom_locale_rev;
 		}
 	}
 	return;

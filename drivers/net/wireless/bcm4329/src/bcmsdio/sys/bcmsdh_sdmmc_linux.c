@@ -253,6 +253,7 @@ int sdio_function_init(void)
 	bzero(&sdmmc_dev, sizeof(sdmmc_dev));
 	error = sdio_register_driver(&bcmsdh_sdmmc_driver);
 
+
 	return error;
 }
 
@@ -263,6 +264,7 @@ extern int bcmsdh_remove(struct device *dev);
 void sdio_function_cleanup(void)
 {
 	sd_trace(("%s Enter\n", __FUNCTION__));
+
 
 	sdio_unregister_driver(&bcmsdh_sdmmc_driver);
 
