@@ -157,11 +157,11 @@ osl_attach(void *pdev, uint bustype, bool pkttag)
 	osh = kmalloc(sizeof(osl_t), GFP_ATOMIC);
 	ASSERT(osh);
 
-/* LGE_CHANGE_S, [dongp.kim@lge.com], 2010-04-22, WBT Fix */
+/* LGE_CHANGE_S, [], 2010-04-22, WBT Fix */
 // WBT Fix TD# 37025, 37026
 	if ( ! osh )
 	    return NULL;
-/* LGE_CHANGE_S, [dongp.kim@lge.com], 2010-04-22, WBT Fix */
+/* LGE_CHANGE_S, [], 2010-04-22, WBT Fix */
 
 	bzero(osh, sizeof(osl_t));
 
@@ -462,7 +462,7 @@ osl_malloc(osl_t *osh, uint size)
 {
 	void *addr;
 
-
+	
 	if (osh)
 		ASSERT(osh->magic == OS_HANDLE_MAGIC);
 

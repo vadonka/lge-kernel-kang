@@ -195,7 +195,7 @@ int bcmsdh_probe(struct device *dev)
 	irq_flags = \
 		IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL | IORESOURCE_IRQ_SHAREABLE;
 #else
-	 irq_flags = IRQF_TRIGGER_FALLING;
+	irq_flags = IRQF_TRIGGER_FALLING;
 #endif /* HW_OOB */
 	irq = dhd_customer_oob_irq_map(&irq_flags);
 	if  (irq < 0) {
@@ -301,7 +301,7 @@ int bcmsdh_remove(struct device *dev)
 	MFREE(osh, sdhc, sizeof(bcmsdh_hc_t));
 	osl_detach(osh);
 
-#if !defined(BCMLXSDMMC) || defined(OOB_INTR_ONLY)
+#if !defined(BCMLXSDMMC)
 	dev_set_drvdata(dev, NULL);
 #endif /* !defined(BCMLXSDMMC) */
 
@@ -345,18 +345,18 @@ static struct pci_driver bcmsdh_pci_driver = {
 #endif
 	suspend:	NULL,
 	resume:		NULL,
-};
+	};
 
 
 extern uint sd_pci_slot;	/* Force detection to a particular PCI */
-				/* slot only . Allows for having multiple */
-				/* WL devices at once in a PC */
-				/* Only one instance of dhd will be */
-				/* usable at a time */
-				/* Upper word is bus number, */
-				/* lower word is slot number */
-				/* Default value of 0xFFFFffff turns this */
-				/* off */
+							/* slot only . Allows for having multiple */
+							/* WL devices at once in a PC */
+							/* Only one instance of dhd will be */
+							/* usable at a time */
+							/* Upper word is bus number, */
+							/* lower word is slot number */
+							/* Default value of 0xFFFFffff turns this */
+							/* off */
 module_param(sd_pci_slot, uint, 0);
 
 
@@ -385,7 +385,7 @@ bcmsdh_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			          "Probing unknown device",
 			          pdev->bus->number, PCI_SLOT(pdev->devfn),
 			          pdev->vendor, pdev->device));
-			return -ENODEV;
+			          return -ENODEV;
 		}
 		SDLX_MSG(("%s: %s: bus %X, slot %X, vendor %X, device %X (good PCI location)\n",
 		          __FUNCTION__,
@@ -597,7 +597,6 @@ void bcmsdh_oob_intr_set(bool enable)
 	}
 	spin_unlock_irqrestore(&sdhcinfo->irq_lock, flags);
 }
-
 static irqreturn_t wlan_oob_irq(int irq, void *dev_id)
 {
 	dhd_pub_t *dhdp;
@@ -650,10 +649,10 @@ void bcmsdh_unregister_oob_intr(void)
 	SDLX_MSG(("%s: Enter\n", __FUNCTION__));
 
 	set_irq_wake(sdhcinfo->oob_irq, 0);
-		disable_irq(sdhcinfo->oob_irq);	/* just in case.. */
-		free_irq(sdhcinfo->oob_irq, NULL);
-		sdhcinfo->oob_irq_registered = FALSE;
-	}
+	disable_irq(sdhcinfo->oob_irq);	/* just in case.. */
+	free_irq(sdhcinfo->oob_irq, NULL);
+	sdhcinfo->oob_irq_registered = FALSE;
+}
 #endif /* defined(OOB_INTR_ONLY) */
 /* Module parameters specific to each host-controller driver */
 
