@@ -141,12 +141,12 @@ static int  gyro_sleep_mode = 0;
 /* wkkim add to read compass */
 NvBool compassI2CSetRegs(NvU8 offset, NvU8* value, NvU32 len);
 NvBool compassI2CGetRegs(NvU8 offset, NvU8* value, NvU32 len);
-extern int AMI304_Reset_Init(void);
+extern int AMI304_Reset_Init();
 extern int AMI304_Init(int mode);
 extern int kxtf9_get_acceleration_data_passthrough(int *xyz_data);
 extern int tegra_accel_hw_init(void);
 extern int lge_sensor_shutdown_proxi(void);
-extern int lge_sensor_restart_proximity(void);
+extern int lge_sensor_restart_proximity();
 extern int tegra_compass_hw_init(void);
 
 void NvOdmResetI2C(NvOdmGyroAccelHandle );
@@ -348,8 +348,6 @@ int lge_sensor_shoutdown_all(void)
 	lge_sensor_restart_proximity();
 
 	reboot	=	0;
-
-	return 0;
 }
 
 int lge_sensor_shutdown_gyro(void)
@@ -393,6 +391,9 @@ int lge_sensor_restart_gyro(void)
 void motion_sensor_power_on(void)
 {
 	static unsigned char   	tempbuf[4]={0,};
+	int err;
+	u8 databuf[10];
+	u8 ctrl1, ctrl2, ctrl3;
 
 	/* Accelerometer power on */
 #if DEBUG
@@ -419,6 +420,9 @@ void motion_sensor_power_on(void)
 void motion_sensor_power_off(void)
 {
 	static unsigned char   	tempbuf[4]={0,};
+	int err;
+	u8 databuf[10];
+	u8 ctrl1, ctrl3;
 
 	/* Accelerometer power off */
 	tempbuf[3] = ACCEL_PC1_OFF;
@@ -645,6 +649,7 @@ static void motion_accel_work_func(struct work_struct *work)
 static void motion_tilt_work_func(struct work_struct *work)
 {
 	int current_yaw = 0, current_pitch = 0, current_roll = 0;
+	int i = 0;
 
 	current_yaw   = atomic_read(&tilt_yaw);
 	current_pitch = atomic_read(&tilt_pitch);
@@ -767,14 +772,14 @@ static enum hrtimer_restart motion_composite_timer_func(struct hrtimer *timer)
 /*---------------------------------------------------------------------------
   sensor enable/disable (Sensor HAL)
   ---------------------------------------------------------------------------*/
-static ssize_t motion_accel_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_accel_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&accel_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_accel_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_accel_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -792,14 +797,14 @@ static ssize_t motion_accel_onoff_store(struct device *dev, struct device_attrib
 	return count;
 }
 
-static ssize_t motion_tilt_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_tilt_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&tilt_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_tilt_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_tilt_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -819,14 +824,14 @@ static ssize_t motion_tilt_onoff_store(struct device *dev, struct device_attribu
 	return count;
 }
 
-static ssize_t motion_gyro_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_gyro_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&gyro_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_gyro_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_gyro_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -845,14 +850,14 @@ static ssize_t motion_gyro_onoff_store(struct device *dev, struct device_attribu
 	return count;
 }
 
-static ssize_t motion_compass_onoff_show(struct device *dev,  struct device_attribute *attr, char *buf)
+static ssize_t motion_compass_onoff_show(struct device *dev,  struct device_attribute *attr,  char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&compass_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_compass_onoff_store(struct device *dev,  struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_compass_onoff_store(struct device *dev,  struct device_attribute *attr,  char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -866,14 +871,14 @@ static ssize_t motion_compass_onoff_store(struct device *dev,  struct device_att
 	return count;
 }
 
-static ssize_t motion_composite_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_composite_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&composite_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_composite_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_composite_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -892,14 +897,14 @@ static ssize_t motion_composite_onoff_store(struct device *dev, struct device_at
 	return count;
 }
 
-static ssize_t motion_tap_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_tap_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&tap_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -914,14 +919,14 @@ static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribut
 	return count;
 }
 
-static ssize_t motion_flip_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_flip_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&flip_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_flip_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_flip_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -937,7 +942,7 @@ static ssize_t motion_flip_onoff_store(struct device *dev, struct device_attribu
 	return count;
 }
 
-static ssize_t motion_shake_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_shake_onoff_show(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&shake_flag);
@@ -959,7 +964,7 @@ static ssize_t motion_shake_onoff_store(struct device *dev,  struct device_attri
 	return count;
 }
 
-static ssize_t motion_snap_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_snap_onoff_show(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&snap_flag);
@@ -1114,7 +1119,7 @@ ssize_t motion_composite_delay_store(struct device *dev, struct device_attribute
 	return count;
 }
 
-static ssize_t motion_cal_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_cal_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&cal_result);
@@ -1122,7 +1127,7 @@ static ssize_t motion_cal_onoff_show(struct device *dev, struct device_attribute
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_cal_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_cal_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -1153,13 +1158,13 @@ static ssize_t motion_sensors_reboot_store(struct device *dev,  struct device_at
 }
 
 //LGE_CHANGE_S [] 2011-03-04, [LGE_AP20] Virtual sensor supports
-static ssize_t motion_gravity_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_gravity_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = atomic_read(&gravity_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_gravity_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_gravity_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = simple_strtoul(buf, NULL, 10);
 	atomic_set(&gravity_flag, val ? 1 : 0);
@@ -1167,13 +1172,13 @@ static ssize_t motion_gravity_onoff_store(struct device *dev, struct device_attr
 	return count;
 }
 
-static ssize_t motion_linearaccel_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_linearaccel_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = atomic_read(&linearaccel_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_linearaccel_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_linearaccel_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = simple_strtoul(buf, NULL, 10);
 	atomic_set(&linearaccel_flag, val ? 1 : 0);
@@ -1181,13 +1186,13 @@ static ssize_t motion_linearaccel_onoff_store(struct device *dev, struct device_
 	return count;
 }
 
-static ssize_t motion_rotvector_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_rotvector_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = atomic_read(&rotvector_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_rotvector_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_rotvector_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val = simple_strtoul(buf, NULL, 10);
 	atomic_set(&rotvector_flag, val ? 1 : 0);
@@ -1271,6 +1276,8 @@ static int count = 0 ;
 static int star_motion_ioctl(struct inode *inode, struct file *file, unsigned int cmd,unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
+	unsigned char data[MAX_MOTION_DATA_LENGTH]={0,};
+	unsigned char tempbuf[200] = {0,};     /* MPU3050 i2c MAX data length */
 	unsigned char value;
 
 	int buf[13] = {0,};
@@ -1756,7 +1763,7 @@ static int star_accel_ioctl(struct inode *inode, struct file *file,
 #define CTRL_REG3		0x1D
 #define PC1_OFF			0x00
 	u8 ctrl[2] = { CTRL_REG1, PC1_OFF };
-	int err = 0;	// err is not initialized w/o calling kxtf9_update_odr
+	int err;
 	int tmp;
 	int xyz[3] = { 0 };
 	NvS32 x = 0, y = 0, z = 0;
@@ -1775,8 +1782,8 @@ static int star_accel_ioctl(struct inode *inode, struct file *file,
 				return -EINVAL;
 			//tf9->res_interval = max(tmp, tf9->pdata->min_interval);
 			//err = kxtf9_update_odr(tf9, tf9->res_interval);
-			//if (err < 0)
-			//	return err;
+			if (err < 0)
+				return err;
 			ctrl[0] = CTRL_REG3;
 			ctrl[1] = (ctrl[1] >> 1) | (ctrl[1] >> 3);
 			break;
@@ -1959,6 +1966,8 @@ static struct i2c_driver gyro_i2c_driver = {
 static unsigned short  mpu3050_i2c_through_pass_internal(unsigned char  enable)
 {
 	unsigned char val_shadow=0, dummy=0;
+	unsigned char value = 0;
+	unsigned char buf;
 	int status = 0;
 
 	status = NvGyroAccelI2CGetRegs(star_motion_dev->hOdmGyroAccel, MPU3050_GYRO_I2C_USER_CTRL ,&val_shadow , 1 );
@@ -2046,10 +2055,11 @@ unsigned short mpu3050_i2c_through_pass(unsigned char enable)
 
 void mpu3050_initialize(void)
 {
-#if 0
+	unsigned char buf[3] = {0,};
 	unsigned char value = 0;
 	int status = 0;
 
+#if 0
 	//  Read WHO AM I
 	value = 0;
 	//status = mpu3050_read_reg(mpu3050_i2c_client,MPU3050_GYRO_I2C_WHO_AM_I,&value);
@@ -2112,6 +2122,7 @@ static int __init star_motion_probe(struct platform_device *pdev)
 	unsigned char value = 0;
 	struct device *dev = &pdev->dev;
 	struct star_motion_device *gyroscope_accel = NULL;
+	struct input_dev *input_dev = NULL;
 
 #if DEBUG
 	lprintk("[MPU3050] ## [%s:%d]\n",__FUNCTION__, __LINE__);
@@ -2567,19 +2578,21 @@ void mpu3050_sleep_wake_up(void)
 }
 
 //jongik2.kim 20100910 i2c_fix [start]
-NvBool star_get_i2c_busy(void)
+NvBool star_get_i2c_busy()
 {
 	return i2c_busy_flag;
 }
 
-void star_set_i2c_busy(void)
+void star_set_i2c_busy()
 {
 	i2c_busy_flag = 1;
+	return 0;
 }
 
-void star_unset_i2c_busy(void)
+void star_unset_i2c_busy()
 {
 	i2c_busy_flag = 0;
+	return 0;
 }
 //jongik2.kim 20100910 i2c_fix [end]
 

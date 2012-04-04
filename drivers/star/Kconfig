@@ -9,13 +9,6 @@ config USE_DS_BATTERY_DRIVER
 	help
 	 Select Battery Driver type
 
-config USE_LITE_BATTERY_DRIVER
-	bool "Star Battery Driver Lite Version"
-	default n
-	depends on MACH_STAR && !USE_DS_BATTERY_DRIVER
-	help
-	 Select Battery Driver type
-
 config STAR_BATTERY_CHARGER
 	bool "Star Battery & Charger Driver"
 	default y
