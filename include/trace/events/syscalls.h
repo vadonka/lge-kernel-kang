@@ -1,5 +1,6 @@
 #undef TRACE_SYSTEM
-#define TRACE_SYSTEM syscalls
+#define TRACE_SYSTEM raw_syscalls
+#define TRACE_INCLUDE_FILE syscalls
 
 #if !defined(_TRACE_EVENTS_SYSCALLS_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_EVENTS_SYSCALLS_H
@@ -39,6 +40,8 @@ TRACE_EVENT_FN(sys_enter,
 	syscall_regfunc, syscall_unregfunc
 );
 
+TRACE_EVENT_FLAGS(sys_enter, TRACE_EVENT_FL_CAP_ANY)
+
 TRACE_EVENT_FN(sys_exit,
 
 	TP_PROTO(struct pt_regs *regs, long ret),
@@ -60,6 +63,8 @@ TRACE_EVENT_FN(sys_exit,
 
 	syscall_regfunc, syscall_unregfunc
 );
+
+TRACE_EVENT_FLAGS(sys_exit, TRACE_EVENT_FL_CAP_ANY)
 
 #endif /* CONFIG_HAVE_SYSCALL_TRACEPOINTS */
 

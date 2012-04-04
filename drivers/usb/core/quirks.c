@@ -44,6 +44,9 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* Logitech Webcam C250 */
 	{ USB_DEVICE(0x046d, 0x0804), .driver_info = USB_QUIRK_RESET_RESUME },
 
+	/* Logitech Webcam C300 */
+	{ USB_DEVICE(0x046d, 0x0805), .driver_info = USB_QUIRK_RESET_RESUME },
+
 	/* Logitech Webcam B/C500 */
 	{ USB_DEVICE(0x046d, 0x0807), .driver_info = USB_QUIRK_RESET_RESUME },
 
@@ -140,6 +143,10 @@ static const struct usb_device_id usb_quirk_list[] = {
 	/* SKYMEDI USB_DRIVE */
 	{ USB_DEVICE(0x1516, 0x8628), .driver_info = USB_QUIRK_RESET_RESUME },
 
+	/* BUILDWIN Photo Frame */
+	{ USB_DEVICE(0x1908, 0x1315), .driver_info =
+			USB_QUIRK_HONOR_BNUMINTERFACES },
+
 	/* INTEL VALUE SSD */
 	{ USB_DEVICE(0x8086, 0xf1a5), .driver_info = USB_QUIRK_RESET_RESUME },
 
@@ -172,12 +179,6 @@ void usb_detect_quirks(struct usb_device *udev)
 		dev_dbg(&udev->dev, "USB quirks for this device: %x\n",
 				udev->quirks);
 
-	/* By default, disable autosuspend for all non-hubs */
-#ifdef	CONFIG_USB_SUSPEND
-	if (udev->descriptor.bDeviceClass != USB_CLASS_HUB)
-		udev->autosuspend_disabled = 1;
-#endif
-
 	/* For the present, all devices default to USB-PERSIST enabled */
 #if 0		/* was: #ifdef CONFIG_PM */
 	/* Hubs are automatically enabled for USB-PERSIST */
@@ -189,6 +190,7 @@ void usb_detect_quirks(struct usb_device *udev)
 	 * for all devices.  It will affect things like hub resets
 	 * and EMF-related port disables.
 	 */
-	udev->persist_enabled = 1;
+	if (!(udev->quirks & USB_QUIRK_RESET_MORPHS))
+		udev->persist_enabled = 1;
 #endif	/* CONFIG_PM */
 }

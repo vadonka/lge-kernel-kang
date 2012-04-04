@@ -570,7 +570,7 @@ static ssize_t filter_write(struct file *file, const char __user *userbuf,
 	 * Now parse out the first token and use it as the name for the
 	 * driver to filter for.
 	 */
-	for (i = 0; i < NAME_MAX_LEN; ++i) {
+	for (i = 0; i < NAME_MAX_LEN - 1; ++i) {
 		current_driver_name[i] = buf[i];
 		if (isspace(buf[i]) || buf[i] == ' ' || buf[i] == 0)
 			break;
@@ -587,9 +587,10 @@ out_unlock:
 	return count;
 }
 
-const struct file_operations filter_fops = {
+static const struct file_operations filter_fops = {
 	.read  = filter_read,
 	.write = filter_write,
+	.llseek = default_llseek,
 };
 
 static int dma_debug_fs_init(void)
@@ -648,7 +649,7 @@ out_err:
 	return -ENOMEM;
 }
 
-static int device_dma_allocations(struct device *dev)
+static int device_dma_allocations(struct device *dev, struct dma_debug_entry **out_entry)
 {
 	struct dma_debug_entry *entry;
 	unsigned long flags;
@@ -659,8 +660,10 @@ static int device_dma_allocations(struct device *dev)
 	for (i = 0; i < HASH_SIZE; ++i) {
 		spin_lock(&dma_entry_hash[i].lock);
 		list_for_each_entry(entry, &dma_entry_hash[i].list, list) {
-			if (entry->dev == dev)
+			if (entry->dev == dev) {
 				count += 1;
+				*out_entry = entry;
+			}
 		}
 		spin_unlock(&dma_entry_hash[i].lock);
 	}
@@ -673,6 +676,7 @@ static int device_dma_allocations(struct device *dev)
 static int dma_debug_device_change(struct notifier_block *nb, unsigned long action, void *data)
 {
 	struct device *dev = data;
+	struct dma_debug_entry *uninitialized_var(entry);
 	int count;
 
 	if (global_disable)
@@ -680,12 +684,17 @@ static int dma_debug_device_change(struct notifier_block *nb, unsigned long acti
 
 	switch (action) {
 	case BUS_NOTIFY_UNBOUND_DRIVER:
-		count = device_dma_allocations(dev);
+		count = device_dma_allocations(dev, &entry);
 		if (count == 0)
 			break;
-		err_printk(dev, NULL, "DMA-API: device driver has pending "
+		err_printk(dev, entry, "DMA-API: device driver has pending "
 				"DMA allocations while released from device "
-				"[count=%d]\n", count);
+				"[count=%d]\n"
+				"One of leaked entries details: "
+				"[device address=0x%016llx] [size=%llu bytes] "
+				"[mapped with %s] [mapped as %s]\n",
+			count, entry->dev_addr, entry->size,
+			dir2name[entry->direction], type2name[entry->type]);
 		break;
 	default:
 		break;

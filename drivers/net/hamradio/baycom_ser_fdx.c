@@ -92,7 +92,7 @@
 
 static const char bc_drvname[] = "baycom_ser_fdx";
 static const char bc_drvinfo[] = KERN_INFO "baycom_ser_fdx: (C) 1996-2000 Thomas Sailer, HB9JNX/AE4WA\n"
-"baycom_ser_fdx: version 0.10 compiled " __TIME__ " " __DATE__ "\n";
+"baycom_ser_fdx: version 0.10\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -429,7 +429,7 @@ static int ser12_open(struct net_device *dev)
 		return -EINVAL;
 	}
 	if (!request_region(dev->base_addr, SER12_EXTENT, "baycom_ser_fdx")) {
-		printk(KERN_WARNING "BAYCOM_SER_FSX: I/O port 0x%04lx busy \n", 
+		printk(KERN_WARNING "BAYCOM_SER_FSX: I/O port 0x%04lx busy\n",
 		       dev->base_addr);
 		return -EACCES;
 	}

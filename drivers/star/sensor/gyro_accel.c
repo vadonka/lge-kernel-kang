@@ -13,6 +13,7 @@
 #include <linux/input.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include <linux/i2c.h>
 #include <asm/gpio.h>
 #include <asm/system.h>
@@ -129,8 +130,12 @@ struct star_motion_device {
 static struct star_motion_device   *star_motion_dev = NULL;
 void magnetic_input_report(int *); /* wkkim magnetic repot */
 
+#ifndef write_lock
 #define write_lock(lock)		_write_lock(lock)
+#endif
+#ifndef read_lock
 #define read_lock(lock)			_read_lock(lock)
+#endif
 rwlock_t getbuflock;
 static unsigned char accelrwbuf[200] = {0,};    /* MPU3050 i2c MAX data length */
 static unsigned char rwbuf[200] = {0,};     	 /* MPU3050 i2c MAX data length */
@@ -1268,7 +1273,7 @@ static int star_motion_release(struct inode *inode, struct file *file)
 	return 0;
 }
 static int count = 0 ;
-static int star_motion_ioctl(struct inode *inode, struct file *file, unsigned int cmd,unsigned long arg)
+static long star_motion_ioctl(struct file *file, unsigned int cmd,unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
 	unsigned char value;
@@ -1725,7 +1730,7 @@ static struct file_operations  star_motion_fops = {
 	.owner    = THIS_MODULE,
 	.open     = star_motion_open,
 	.release  = star_motion_release,
-	.ioctl    = star_motion_ioctl,
+	.unlocked_ioctl    = star_motion_ioctl,
 };
 
 static struct miscdevice  star_motion_misc_device = {
@@ -1746,7 +1751,7 @@ static int star_accel_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int star_accel_ioctl(struct inode *inode, struct file *file,
+static long star_accel_ioctl(struct file *file,
 		unsigned int cmd, unsigned long arg)
 {
 	void __user *argp = (void __user *)arg;
@@ -1868,7 +1873,7 @@ static int star_accel_ioctl(struct inode *inode, struct file *file,
 static struct file_operations  star_accel_fops = {
 	.owner    = THIS_MODULE,
 	.open     = star_accel_open,
-	.ioctl    = star_accel_ioctl,
+	.unlocked_ioctl    = star_accel_ioctl,
 };
 
 static struct miscdevice  star_accel_misc_device = {
@@ -2106,7 +2111,7 @@ static void gyro_late_resume(struct early_suspend *es)
 /*---------------------------------------------------------------------------
   platform device
   ---------------------------------------------------------------------------*/
-static int __init star_motion_probe(struct platform_device *pdev)
+static int __devinit star_motion_probe(struct platform_device *pdev)
 {
 	int err = 0;
 	unsigned char value = 0;
@@ -2492,7 +2497,7 @@ int lge_sensor_reset_gyro(void)
 	return SENSOR_OK;
 }
 
-static int star_motion_remove(struct platform_device *pdev)
+static int __devexit star_motion_remove(struct platform_device *pdev)
 {
 	//struct device *dev = &pdev->dev;
 	input_unregister_device(star_motion_dev->input_dev);
@@ -2600,7 +2605,7 @@ static NvS32 star_motion_suspend(struct platform_device *pdev)
 #endif
 static struct platform_driver star_motion_driver = {
 	.probe    	= star_motion_probe,
-	.remove   	= star_motion_remove,
+	.remove   	= __devexit_p(star_motion_remove),
 #ifndef CONFIG_HAS_EARLYSUSPEND
 	.suspend  	= star_motion_suspend,
 	.resume   	= star_motion_resume,

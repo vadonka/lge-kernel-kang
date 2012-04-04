@@ -20,11 +20,13 @@
  */
 #include <linux/device.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/spi/spi.h>
 
-#include <mach/omapfb.h>
-#include <mach/lcd_mipid.h>
+#include <plat/lcd_mipid.h>
+
+#include "omapfb.h"
 
 #define MIPID_MODULE_NAME		"lcd_mipid"
 
@@ -394,7 +396,7 @@ static void mipid_esd_start_check(struct mipid_device *md)
 static void mipid_esd_stop_check(struct mipid_device *md)
 {
 	if (md->esd_check != NULL)
-		cancel_rearming_delayed_workqueue(md->esd_wq, &md->esd_work);
+		cancel_delayed_work_sync(&md->esd_work);
 }
 
 static void mipid_esd_work(struct work_struct *work)
@@ -607,7 +609,7 @@ static struct spi_driver mipid_spi_driver = {
 	.remove	= __devexit_p(mipid_spi_remove),
 };
 
-static int mipid_drv_init(void)
+static int __init mipid_drv_init(void)
 {
 	spi_register_driver(&mipid_spi_driver);
 
@@ -615,7 +617,7 @@ static int mipid_drv_init(void)
 }
 module_init(mipid_drv_init);
 
-static void mipid_drv_cleanup(void)
+static void __exit mipid_drv_cleanup(void)
 {
 	spi_unregister_driver(&mipid_spi_driver);
 }

@@ -98,8 +98,8 @@
 #define ISP1301_I2C_INTERRUPT_RISING 0xE
 #define ISP1301_I2C_REG_CLEAR_ADDR 1
 
-struct i2c_driver isp1301_driver;
-struct i2c_client *isp1301_i2c_client;
+static struct i2c_driver isp1301_driver;
+static struct i2c_client *isp1301_i2c_client;
 
 extern int usb_disabled(void);
 extern int ocpi_enable(void);
@@ -120,12 +120,12 @@ static int isp1301_remove(struct i2c_client *client)
 	return 0;
 }
 
-const struct i2c_device_id isp1301_id[] = {
+static const struct i2c_device_id isp1301_id[] = {
 	{ "isp1301_pnx", 0 },
 	{ }
 };
 
-struct i2c_driver isp1301_driver = {
+static struct i2c_driver isp1301_driver = {
 	.driver = {
 		.name = "isp1301_pnx",
 	},
@@ -329,7 +329,7 @@ static int __devinit usb_hcd_pnx4008_probe(struct platform_device *pdev)
 	memset(&i2c_info, 0, sizeof(struct i2c_board_info));
 	strlcpy(i2c_info.type, "isp1301_pnx", I2C_NAME_SIZE);
 	isp1301_i2c_client = i2c_new_probed_device(i2c_adap, &i2c_info,
-						   normal_i2c);
+						   normal_i2c, NULL);
 	i2c_put_adapter(i2c_adap);
 	if (!isp1301_i2c_client) {
 		err("failed to connect I2C to ISP1301 USB Transceiver");

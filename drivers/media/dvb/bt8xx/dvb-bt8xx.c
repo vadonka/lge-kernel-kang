@@ -215,7 +215,7 @@ static int cx24108_tuner_set_params(struct dvb_frontend* fe, struct dvb_frontend
 		freq = 2150000; /* satellite IF is 950..2150MHz */
 
 	/* decide which VCO to use for the input frequency */
-	for(i = 1; (i < ARRAY_SIZE(osci)) && (osci[i] < freq); i++);
+	for(i = 1; (i < ARRAY_SIZE(osci) - 1) && (osci[i] < freq); i++);
 	printk("cx24108 debug: select vco #%d (f=%d)\n",i,freq);
 	band=bandsel[i];
 	/* the gain values must be set by SetSymbolrate */
@@ -427,10 +427,10 @@ static void or51211_reset(struct dvb_frontend * fe)
 	struct dvb_bt8xx_card *bt = fe->dvb->priv;
 
 	/* RESET DEVICE
-	 * reset is controled by GPIO-0
+	 * reset is controlled by GPIO-0
 	 * when set to 0 causes reset and when to 1 for normal op
 	 * must remain reset for 128 clock cycles on a 50Mhz clock
-	 * also PRM1 PRM2 & PRM4 are controled by GPIO-1,GPIO-2 & GPIO-4
+	 * also PRM1 PRM2 & PRM4 are controlled by GPIO-1,GPIO-2 & GPIO-4
 	 * We assume that the reset has be held low long enough or we
 	 * have been reset by a power on.  When the driver is unloaded
 	 * reset set to 0 so if reloaded we have been reset.

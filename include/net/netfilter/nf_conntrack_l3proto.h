@@ -16,8 +16,7 @@
 #include <linux/seq_file.h>
 #include <net/netfilter/nf_conntrack.h>
 
-struct nf_conntrack_l3proto
-{
+struct nf_conntrack_l3proto {
 	/* L3 Protocol Family number. ex) PF_INET */
 	u_int16_t l3proto;
 
@@ -74,7 +73,7 @@ struct nf_conntrack_l3proto
 	struct module *me;
 };
 
-extern struct nf_conntrack_l3proto *nf_ct_l3protos[AF_MAX];
+extern struct nf_conntrack_l3proto __rcu *nf_ct_l3protos[AF_MAX];
 
 /* Protocol registration. */
 extern int nf_conntrack_l3proto_register(struct nf_conntrack_l3proto *proto);

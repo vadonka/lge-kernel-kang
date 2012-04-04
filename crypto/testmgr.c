@@ -29,6 +29,17 @@
 #include <crypto/rng.h>
 
 #include "internal.h"
+
+#ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
+
+/* a perfect nop */
+int alg_test(const char *driver, const char *alg, u32 type, u32 mask)
+{
+	return 0;
+}
+
+#else
+
 #include "testmgr.h"
 
 /*
@@ -253,9 +264,9 @@ static int test_hash(struct crypto_ahash *tfm, struct hash_testvec *template,
 						   crypto_ahash_final(req));
 			if (ret) {
 				pr_err("alt: hash: final failed on test %d "
-			       "for %s: ret=%d\n", j, algo, -ret);
-			goto out;
-		}
+				       "for %s: ret=%d\n", j, algo, -ret);
+				goto out;
+			}
 		}
 
 		if (memcmp(result, template[i].digest,
@@ -1523,21 +1534,6 @@ static int alg_test_null(const struct alg_test_desc *desc,
 /* Please keep this list sorted by algorithm name. */
 static const struct alg_test_desc alg_test_descs[] = {
 	{
-		.alg = "__cbc-serpent-sse2",
-		.test = alg_test_null,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = NULL,
-					.count = 0
-				},
-				.dec = {
-					.vecs = NULL,
-					.count = 0
-				}
-			}
-		}
-	}, {
 		.alg = "__driver-cbc-aes-aesni",
 		.test = alg_test_null,
 		.suite = {
@@ -1553,37 +1549,7 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
-		.alg = "__driver-cbc-serpent-sse2",
-		.test = alg_test_null,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = NULL,
-					.count = 0
-				},
-				.dec = {
-					.vecs = NULL,
-					.count = 0
-				}
-			}
-		}
-	}, {
 		.alg = "__driver-ecb-aes-aesni",
-		.test = alg_test_null,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = NULL,
-					.count = 0
-				},
-				.dec = {
-					.vecs = NULL,
-					.count = 0
-				}
-			}
-		}
-	}, {
-		.alg = "__driver-ecb-serpent-sse2",
 		.test = alg_test_null,
 		.suite = {
 			.cipher = {
@@ -1709,21 +1675,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
-		.alg = "cbc(serpent)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = serpent_cbc_enc_tv_template,
-					.count = SERPENT_CBC_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = serpent_cbc_dec_tv_template,
-					.count = SERPENT_CBC_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
 		.alg = "cbc(twofish)",
 		.test = alg_test_skcipher,
 		.suite = {
@@ -1780,21 +1731,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
-		.alg = "cryptd(__driver-ecb-serpent-sse2)",
-		.test = alg_test_null,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = NULL,
-					.count = 0
-				},
-				.dec = {
-					.vecs = NULL,
-					.count = 0
-				}
-			}
-		}
-	}, {
 		.alg = "cryptd(__ghash-pclmulqdqni)",
 		.test = alg_test_null,
 		.suite = {
@@ -1816,51 +1752,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 				.dec = {
 					.vecs = aes_ctr_dec_tv_template,
 					.count = AES_CTR_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
-		.alg = "ctr(blowfish)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = bf_ctr_enc_tv_template,
-					.count = BF_CTR_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = bf_ctr_dec_tv_template,
-					.count = BF_CTR_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
-		.alg = "ctr(serpent)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = serpent_ctr_enc_tv_template,
-					.count = SERPENT_CTR_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = serpent_ctr_dec_tv_template,
-					.count = SERPENT_CTR_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
-		.alg = "ctr(twofish)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = tf_ctr_enc_tv_template,
-					.count = TF_CTR_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = tf_ctr_dec_tv_template,
-					.count = TF_CTR_DEC_TEST_VECTORS
 				}
 			}
 		}
@@ -2286,36 +2177,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
-		.alg = "lrw(serpent)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = serpent_lrw_enc_tv_template,
-					.count = SERPENT_LRW_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = serpent_lrw_dec_tv_template,
-					.count = SERPENT_LRW_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
-		.alg = "lrw(twofish)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = tf_lrw_enc_tv_template,
-					.count = TF_LRW_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = tf_lrw_dec_tv_template,
-					.count = TF_LRW_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
 		.alg = "lzo",
 		.test = alg_test_comp,
 		.suite = {
@@ -2623,36 +2484,6 @@ static const struct alg_test_desc alg_test_descs[] = {
 			}
 		}
 	}, {
-		.alg = "xts(serpent)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = serpent_xts_enc_tv_template,
-					.count = SERPENT_XTS_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = serpent_xts_dec_tv_template,
-					.count = SERPENT_XTS_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
-		.alg = "xts(twofish)",
-		.test = alg_test_skcipher,
-		.suite = {
-			.cipher = {
-				.enc = {
-					.vecs = tf_xts_enc_tv_template,
-					.count = TF_XTS_ENC_TEST_VECTORS
-				},
-				.dec = {
-					.vecs = tf_xts_dec_tv_template,
-					.count = TF_XTS_DEC_TEST_VECTORS
-				}
-			}
-		}
-	}, {
 		.alg = "zlib",
 		.test = alg_test_pcomp,
 		.suite = {
@@ -2752,4 +2583,7 @@ notest:
 non_fips_alg:
 	return -EINVAL;
 }
+
+#endif /* CONFIG_CRYPTO_MANAGER_DISABLE_TESTS */
+
 EXPORT_SYMBOL_GPL(alg_test);

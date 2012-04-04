@@ -100,7 +100,7 @@ sha512_transform(u64 *state, const u8 *input)
 			} else {
 				for (j = 0; j < 16; j++) {
 					BLEND_OP(i + j, W);
-	}
+				}
 			}
 		}
 

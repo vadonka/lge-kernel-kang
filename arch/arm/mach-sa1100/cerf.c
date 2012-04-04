@@ -96,7 +96,7 @@ static struct resource cerf_flash_resource = {
 static void __init cerf_init_irq(void)
 {
 	sa1100_init_irq();
-	set_irq_type(CERF_ETH_IRQ, IRQ_TYPE_EDGE_RISING);
+	irq_set_irq_type(CERF_ETH_IRQ, IRQ_TYPE_EDGE_RISING);
 }
 
 static struct map_desc cerf_io_desc[] __initdata = {
@@ -129,14 +129,12 @@ static struct mcp_plat_data cerf_mcp_data = {
 static void __init cerf_init(void)
 {
 	platform_add_devices(cerf_devices, ARRAY_SIZE(cerf_devices));
-	sa11x0_set_flash_data(&cerf_flash_data, &cerf_flash_resource, 1);
-	sa11x0_set_mcp_data(&cerf_mcp_data);
+	sa11x0_register_mtd(&cerf_flash_data, &cerf_flash_resource, 1);
+	sa11x0_register_mcp(&cerf_mcp_data);
 }
 
 MACHINE_START(CERF, "Intrinsyc CerfBoard/CerfCube")
 	/* Maintainer: support@intrinsyc.com */
-	.phys_io	= 0x80000000,
-	.io_pg_offst	= ((0xf8000000) >> 18) & 0xfffc,
 	.map_io		= cerf_map_io,
 	.init_irq	= cerf_init_irq,
 	.timer		= &sa1100_timer,

@@ -29,6 +29,7 @@
 #include <linux/interrupt.h>
 #include <linux/clk.h>
 #include <linux/err.h>
+#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/suspend.h>
 
@@ -213,10 +214,7 @@ static noinline void restore_cpu_complex(bool wait_plls)
 	 * by CPU boot-up code - wait for PLL stabilization if PLLX
 	 * was enabled, or if explicitly requested by caller */
 
-	reg = readl(clk_rst + CLK_RESET_PLLX_BASE);
-	/* mask out bit 27 - not to check PLL lock bit */
-	BUG_ON((reg & (~(1 << 27))) !=
-      (tegra_sctx.pllx_base & (~(1 << 27))));
+	BUG_ON(readl(clk_rst + CLK_RESET_PLLX_BASE) != tegra_sctx.pllx_base);
 
 	if ((tegra_sctx.pllx_base & (1<<30)) || wait_plls) {
 		while (readl(tmrus)-tegra_sctx.pllx_timeout >= 0x80000000UL)
@@ -237,7 +235,7 @@ static noinline void restore_cpu_complex(bool wait_plls)
 	writel(tegra_sctx.twd_load, twd_base + 0);
 
 	gic_dist_restore(0);
-	get_irq_chip(IRQ_LOCALTIMER)->unmask(IRQ_LOCALTIMER);
+	irq_get_chip(IRQ_LOCALTIMER)->irq_unmask(&irq_to_desc(IRQ_LOCALTIMER)->irq_data);
 
 	if(tegra_nvrm_lp2_persist())
 		enable_irq(INT_SYS_STATS_MON);
@@ -249,7 +247,7 @@ static noinline void suspend_cpu_complex(void)
 	int i;
 
 	if(tegra_nvrm_lp2_persist())
-		disable_irq_nosync(INT_SYS_STATS_MON);
+		disable_irq(INT_SYS_STATS_MON);
 
 	/* switch coresite to clk_m, save off original source */
 	tegra_sctx.clk_csite_src = readl(clk_rst + CLK_RESET_SOURCE_CSITE);
@@ -262,7 +260,6 @@ static noinline void suspend_cpu_complex(void)
 
 	tegra_sctx.twd_ctrl = readl(twd_base + 0x8);
 	tegra_sctx.twd_load = readl(twd_base + 0);
-	local_timer_stop();
 
 	reg = readl(flow_ctrl + FLOW_CTRL_CPU_CSR);
 	/* clear any pending events, set the WFE bitmap to specify just
@@ -528,13 +525,13 @@ static void tegra_suspend_dram(bool lp0_ok)
 	tegra_setup_wakepads(lp0_ok);
 	suspend_cpu_complex();
 	flush_cache_all();
-	outer_shutdown();
+	outer_disable();
 
 	__cortex_a9_save(mode);
 	restore_cpu_complex(false);
 
 	writel(orig, evp_reset);
-	outer_restart();
+	outer_enable();
 	writel(on_timer, pmc + PMC_CPUPWRGOOD_TIMER);
 	writel(off_timer, pmc + PMC_CPUPWROFF_TIMER);
 
@@ -750,12 +747,15 @@ static int tegra_suspend_enter(suspend_state_t state)
 		mc_data[1] = readl(mc + MC_SECURITY_SIZE);
 	}
 
+	/*
 	for_each_irq_desc(irq, desc) {
-		if ((desc->status & IRQ_WAKEUP) &&
-		    (desc->status & IRQ_SUSPENDED)) {
-			get_irq_chip(irq)->unmask(irq);
+		if (irqd_is_wakeup_set(&desc->irq_data) &&
+		    (desc->istate & IRQS_SUSPENDED)) {
+			irq_get_chip(irq)->irq_unmask(&desc->irq_data);
 		}
 	}
+	unmask_wakeup_suspended_irqs();
+	*/
 
 	if (!pdata->dram_suspend || !iram_save) {
 		/* lie about the power state so that the RM restarts DVFS */
@@ -764,12 +764,15 @@ static int tegra_suspend_enter(suspend_state_t state)
 	} else
 		tegra_suspend_dram(lp0_ok);
 
+	/*
 	for_each_irq_desc(irq, desc) {
-		if ((desc->status & IRQ_WAKEUP) &&
-		    (desc->status & IRQ_SUSPENDED)) {
-			get_irq_chip(irq)->mask(irq);
+		if (irqd_is_wakeup_set(&desc->irq_data) &&
+		    (desc->istate & IRQS_SUSPENDED)) {
+			irq_get_chip(irq)->irq_mask(&desc->irq_data);
 		}
 	}
+	mask_wakeup_suspended_irqs();
+	*/
 
 	/* Clear DPD sample */
 	writel(0x0, pmc + PMC_DPD_SAMPLE);

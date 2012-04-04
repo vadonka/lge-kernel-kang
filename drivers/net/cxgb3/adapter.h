@@ -48,10 +48,20 @@
 struct vlan_group;
 struct adapter;
 struct sge_qset;
+struct port_info;
 
-enum {			/* rx_offload flags */
-	T3_RX_CSUM	= 1 << 0,
-	T3_LRO		= 1 << 1,
+enum mac_idx_types {
+	LAN_MAC_IDX	= 0,
+	SAN_MAC_IDX,
+
+	MAX_MAC_IDX
+};
+
+struct iscsi_config {
+	__u8	mac_addr[ETH_ALEN];
+	__u32	flags;
+	int (*send)(struct port_info *pi, struct sk_buff **skb);
+	int (*recv)(struct port_info *pi, struct sk_buff *skb);
 };
 
 struct port_info {
@@ -59,7 +69,6 @@ struct port_info {
 	struct vlan_group *vlan_grp;
 	struct sge_qset *qs;
 	u8 port_id;
-	u8 rx_offload;
 	u8 nqsets;
 	u8 first_qset;
 	struct cphy phy;
@@ -68,6 +77,7 @@ struct port_info {
 	struct net_device_stats netstats;
 	int activity;
 	__be32 iscsi_ipv4addr;
+	struct iscsi_config iscsic;
 
 	int link_fault; /* link fault was detected */
 };
@@ -196,7 +206,6 @@ struct sge_qset {		/* an SGE queue set */
 	struct sge_fl fl[SGE_RXQ_PER_SET];
 	struct sge_txq txq[SGE_TXQ_PER_SET];
 	int nomem;
-	int lro_enabled;
 	void *lro_va;
 	struct net_device *netdev;
 	struct netdev_queue *tx_q;	/* associated netdev TX queue */
@@ -247,6 +256,10 @@ struct adapter {
 	struct work_struct ext_intr_handler_task;
 	struct work_struct fatal_error_handler_task;
 	struct work_struct link_fault_handler_task;
+
+	struct work_struct db_full_task;
+	struct work_struct db_empty_task;
+	struct work_struct db_drop_task;
 
 	struct dentry *debugfs_root;
 
@@ -316,9 +329,7 @@ int t3_sge_alloc_qset(struct adapter *adapter, unsigned int id, int nports,
 		      int irq_vec_idx, const struct qset_params *p,
 		      int ntxq, struct net_device *dev,
 		      struct netdev_queue *netdevq);
-int t3_get_desc(const struct sge_qset *qs, unsigned int qnum, unsigned int idx,
-		unsigned char *data);
-irqreturn_t t3_sge_intr_msix(int irq, void *cookie);
+extern struct workqueue_struct *cxgb3_wq;
 
 int t3_get_edc_fw(struct cphy *phy, int edc_idx, int size);
 

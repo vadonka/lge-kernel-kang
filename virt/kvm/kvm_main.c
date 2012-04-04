@@ -5,6 +5,7 @@
  * machines without emulation or binary translation.
  *
  * Copyright (C) 2006 Qumranet, Inc.
+ * Copyright 2010 Red Hat, Inc. and/or its affiliates.
  *
  * Authors:
  *   Avi Kivity   <avi@qumranet.com>
@@ -22,7 +23,6 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/percpu.h>
-#include <linux/gfp.h>
 #include <linux/mm.h>
 #include <linux/miscdevice.h>
 #include <linux/vmalloc.h>
@@ -30,7 +30,7 @@
 #include <linux/debugfs.h>
 #include <linux/highmem.h>
 #include <linux/file.h>
-#include <linux/sysdev.h>
+#include <linux/syscore_ops.h>
 #include <linux/cpu.h>
 #include <linux/sched.h>
 #include <linux/cpumask.h>
@@ -43,21 +43,18 @@
 #include <linux/swap.h>
 #include <linux/bitops.h>
 #include <linux/spinlock.h>
+#include <linux/compat.h>
+#include <linux/srcu.h>
+#include <linux/hugetlb.h>
+#include <linux/slab.h>
 
 #include <asm/processor.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
 #include "coalesced_mmio.h"
-#endif
-
-#ifdef KVM_CAP_DEVICE_ASSIGNMENT
-#include <linux/pci.h>
-#include <linux/interrupt.h>
-#include "irq.h"
-#endif
+#include "async_pf.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/kvm.h>
@@ -68,13 +65,15 @@ MODULE_LICENSE("GPL");
 /*
  * Ordering of locks:
  *
- * 		kvm->slots_lock --> kvm->lock --> kvm->irq_lock
+ * 		kvm->lock --> kvm->slots_lock --> kvm->irq_lock
  */
 
-DEFINE_SPINLOCK(kvm_lock);
+DEFINE_RAW_SPINLOCK(kvm_lock);
 LIST_HEAD(vm_list);
 
 static cpumask_var_t cpus_hardware_enabled;
+static int kvm_usage_count = 0;
+static atomic_t hardware_enable_failed;
 
 struct kmem_cache *kvm_vcpu_cache;
 EXPORT_SYMBOL_GPL(kvm_vcpu_cache);
@@ -85,620 +84,45 @@ struct dentry *kvm_debugfs_dir;
 
 static long kvm_vcpu_ioctl(struct file *file, unsigned int ioctl,
 			   unsigned long arg);
+static int hardware_enable_all(void);
+static void hardware_disable_all(void);
 
-static bool kvm_rebooting;
+static void kvm_io_bus_destroy(struct kvm_io_bus *bus);
+
+bool kvm_rebooting;
+EXPORT_SYMBOL_GPL(kvm_rebooting);
 
 static bool largepages_enabled = true;
 
-#ifdef KVM_CAP_DEVICE_ASSIGNMENT
-static struct kvm_assigned_dev_kernel *kvm_find_assigned_dev(struct list_head *head,
-						      int assigned_dev_id)
-{
-	struct list_head *ptr;
-	struct kvm_assigned_dev_kernel *match;
-
-	list_for_each(ptr, head) {
-		match = list_entry(ptr, struct kvm_assigned_dev_kernel, list);
-		if (match->assigned_dev_id == assigned_dev_id)
-			return match;
-	}
-	return NULL;
-}
-
-static int find_index_from_host_irq(struct kvm_assigned_dev_kernel
-				    *assigned_dev, int irq)
-{
-	int i, index;
-	struct msix_entry *host_msix_entries;
-
-	host_msix_entries = assigned_dev->host_msix_entries;
-
-	index = -1;
-	for (i = 0; i < assigned_dev->entries_nr; i++)
-		if (irq == host_msix_entries[i].vector) {
-			index = i;
-			break;
-		}
-	if (index < 0) {
-		printk(KERN_WARNING "Fail to find correlated MSI-X entry!\n");
-		return 0;
-	}
-
-	return index;
-}
-
-static void kvm_assigned_dev_interrupt_work_handler(struct work_struct *work)
-{
-	struct kvm_assigned_dev_kernel *assigned_dev;
-	struct kvm *kvm;
-	int i;
-
-	assigned_dev = container_of(work, struct kvm_assigned_dev_kernel,
-				    interrupt_work);
-	kvm = assigned_dev->kvm;
-
-	mutex_lock(&kvm->irq_lock);
-	spin_lock_irq(&assigned_dev->assigned_dev_lock);
-	if (assigned_dev->irq_requested_type & KVM_DEV_IRQ_HOST_MSIX) {
-		struct kvm_guest_msix_entry *guest_entries =
-			assigned_dev->guest_msix_entries;
-		for (i = 0; i < assigned_dev->entries_nr; i++) {
-			if (!(guest_entries[i].flags &
-					KVM_ASSIGNED_MSIX_PENDING))
-				continue;
-			guest_entries[i].flags &= ~KVM_ASSIGNED_MSIX_PENDING;
-			kvm_set_irq(assigned_dev->kvm,
-				    assigned_dev->irq_source_id,
-				    guest_entries[i].vector, 1);
-		}
-	} else
-		kvm_set_irq(assigned_dev->kvm, assigned_dev->irq_source_id,
-			    assigned_dev->guest_irq, 1);
-
-	spin_unlock_irq(&assigned_dev->assigned_dev_lock);
-	mutex_unlock(&assigned_dev->kvm->irq_lock);
-}
-
-static irqreturn_t kvm_assigned_dev_intr(int irq, void *dev_id)
-{
-	unsigned long flags;
-	struct kvm_assigned_dev_kernel *assigned_dev =
-		(struct kvm_assigned_dev_kernel *) dev_id;
-
-	spin_lock_irqsave(&assigned_dev->assigned_dev_lock, flags);
-	if (assigned_dev->irq_requested_type & KVM_DEV_IRQ_HOST_MSIX) {
-		int index = find_index_from_host_irq(assigned_dev, irq);
-		if (index < 0)
-			goto out;
-		assigned_dev->guest_msix_entries[index].flags |=
-			KVM_ASSIGNED_MSIX_PENDING;
-	}
-
-	schedule_work(&assigned_dev->interrupt_work);
-
-	if (assigned_dev->irq_requested_type & KVM_DEV_IRQ_GUEST_INTX) {
-		disable_irq_nosync(irq);
-		assigned_dev->host_irq_disabled = true;
-	}
-
-out:
-	spin_unlock_irqrestore(&assigned_dev->assigned_dev_lock, flags);
-	return IRQ_HANDLED;
-}
-
-/* Ack the irq line for an assigned device */
-static void kvm_assigned_dev_ack_irq(struct kvm_irq_ack_notifier *kian)
-{
-	struct kvm_assigned_dev_kernel *dev;
-	unsigned long flags;
-
-	if (kian->gsi == -1)
-		return;
-
-	dev = container_of(kian, struct kvm_assigned_dev_kernel,
-			   ack_notifier);
-
-	kvm_set_irq(dev->kvm, dev->irq_source_id, dev->guest_irq, 0);
-
-	/* The guest irq may be shared so this ack may be
-	 * from another device.
-	 */
-	spin_lock_irqsave(&dev->assigned_dev_lock, flags);
-	if (dev->host_irq_disabled) {
-		enable_irq(dev->host_irq);
-		dev->host_irq_disabled = false;
-	}
-	spin_unlock_irqrestore(&dev->assigned_dev_lock, flags);
-}
-
-static void deassign_guest_irq(struct kvm *kvm,
-			       struct kvm_assigned_dev_kernel *assigned_dev)
-{
-	kvm_unregister_irq_ack_notifier(kvm, &assigned_dev->ack_notifier);
-	assigned_dev->ack_notifier.gsi = -1;
-
-	if (assigned_dev->irq_source_id != -1)
-		kvm_free_irq_source_id(kvm, assigned_dev->irq_source_id);
-	assigned_dev->irq_source_id = -1;
-	assigned_dev->irq_requested_type &= ~(KVM_DEV_IRQ_GUEST_MASK);
-}
-
-/* The function implicit hold kvm->lock mutex due to cancel_work_sync() */
-static void deassign_host_irq(struct kvm *kvm,
-			      struct kvm_assigned_dev_kernel *assigned_dev)
-{
-	/*
-	 * In kvm_free_device_irq, cancel_work_sync return true if:
-	 * 1. work is scheduled, and then cancelled.
-	 * 2. work callback is executed.
-	 *
-	 * The first one ensured that the irq is disabled and no more events
-	 * would happen. But for the second one, the irq may be enabled (e.g.
-	 * for MSI). So we disable irq here to prevent further events.
-	 *
-	 * Notice this maybe result in nested disable if the interrupt type is
-	 * INTx, but it's OK for we are going to free it.
-	 *
-	 * If this function is a part of VM destroy, please ensure that till
-	 * now, the kvm state is still legal for probably we also have to wait
-	 * interrupt_work done.
-	 */
-	if (assigned_dev->irq_requested_type & KVM_DEV_IRQ_HOST_MSIX) {
-		int i;
-		for (i = 0; i < assigned_dev->entries_nr; i++)
-			disable_irq_nosync(assigned_dev->
-					   host_msix_entries[i].vector);
-
-		cancel_work_sync(&assigned_dev->interrupt_work);
-
-		for (i = 0; i < assigned_dev->entries_nr; i++)
-			free_irq(assigned_dev->host_msix_entries[i].vector,
-				 (void *)assigned_dev);
-
-		assigned_dev->entries_nr = 0;
-		kfree(assigned_dev->host_msix_entries);
-		kfree(assigned_dev->guest_msix_entries);
-		pci_disable_msix(assigned_dev->dev);
-	} else {
-		/* Deal with MSI and INTx */
-		disable_irq_nosync(assigned_dev->host_irq);
-		cancel_work_sync(&assigned_dev->interrupt_work);
-
-		free_irq(assigned_dev->host_irq, (void *)assigned_dev);
-
-		if (assigned_dev->irq_requested_type & KVM_DEV_IRQ_HOST_MSI)
-			pci_disable_msi(assigned_dev->dev);
-	}
-
-	assigned_dev->irq_requested_type &= ~(KVM_DEV_IRQ_HOST_MASK);
-}
-
-static int kvm_deassign_irq(struct kvm *kvm,
-			    struct kvm_assigned_dev_kernel *assigned_dev,
-			    unsigned long irq_requested_type)
-{
-	unsigned long guest_irq_type, host_irq_type;
-
-	if (!irqchip_in_kernel(kvm))
-		return -EINVAL;
-	/* no irq assignment to deassign */
-	if (!assigned_dev->irq_requested_type)
-		return -ENXIO;
-
-	host_irq_type = irq_requested_type & KVM_DEV_IRQ_HOST_MASK;
-	guest_irq_type = irq_requested_type & KVM_DEV_IRQ_GUEST_MASK;
-
-	if (host_irq_type)
-		deassign_host_irq(kvm, assigned_dev);
-	if (guest_irq_type)
-		deassign_guest_irq(kvm, assigned_dev);
-
-	return 0;
-}
-
-static void kvm_free_assigned_irq(struct kvm *kvm,
-				  struct kvm_assigned_dev_kernel *assigned_dev)
-{
-	kvm_deassign_irq(kvm, assigned_dev, assigned_dev->irq_requested_type);
-}
-
-static void kvm_free_assigned_device(struct kvm *kvm,
-				     struct kvm_assigned_dev_kernel
-				     *assigned_dev)
-{
-	kvm_free_assigned_irq(kvm, assigned_dev);
-
-	pci_reset_function(assigned_dev->dev);
-
-	pci_release_regions(assigned_dev->dev);
-	pci_disable_device(assigned_dev->dev);
-	pci_dev_put(assigned_dev->dev);
-
-	list_del(&assigned_dev->list);
-	kfree(assigned_dev);
-}
-
-void kvm_free_all_assigned_devices(struct kvm *kvm)
-{
-	struct list_head *ptr, *ptr2;
-	struct kvm_assigned_dev_kernel *assigned_dev;
-
-	list_for_each_safe(ptr, ptr2, &kvm->arch.assigned_dev_head) {
-		assigned_dev = list_entry(ptr,
-					  struct kvm_assigned_dev_kernel,
-					  list);
-
-		kvm_free_assigned_device(kvm, assigned_dev);
-	}
-}
-
-static int assigned_device_enable_host_intx(struct kvm *kvm,
-					    struct kvm_assigned_dev_kernel *dev)
-{
-	dev->host_irq = dev->dev->irq;
-	/* Even though this is PCI, we don't want to use shared
-	 * interrupts. Sharing host devices with guest-assigned devices
-	 * on the same interrupt line is not a happy situation: there
-	 * are going to be long delays in accepting, acking, etc.
-	 */
-	if (request_irq(dev->host_irq, kvm_assigned_dev_intr,
-			0, "kvm_assigned_intx_device", (void *)dev))
-		return -EIO;
-	return 0;
-}
-
-#ifdef __KVM_HAVE_MSI
-static int assigned_device_enable_host_msi(struct kvm *kvm,
-					   struct kvm_assigned_dev_kernel *dev)
-{
-	int r;
-
-	if (!dev->dev->msi_enabled) {
-		r = pci_enable_msi(dev->dev);
-		if (r)
-			return r;
-	}
-
-	dev->host_irq = dev->dev->irq;
-	if (request_irq(dev->host_irq, kvm_assigned_dev_intr, 0,
-			"kvm_assigned_msi_device", (void *)dev)) {
-		pci_disable_msi(dev->dev);
-		return -EIO;
-	}
-
-	return 0;
-}
-#endif
-
-#ifdef __KVM_HAVE_MSIX
-static int assigned_device_enable_host_msix(struct kvm *kvm,
-					    struct kvm_assigned_dev_kernel *dev)
-{
-	int i, r = -EINVAL;
-
-	/* host_msix_entries and guest_msix_entries should have been
-	 * initialized */
-	if (dev->entries_nr == 0)
-		return r;
-
-	r = pci_enable_msix(dev->dev, dev->host_msix_entries, dev->entries_nr);
-	if (r)
-		return r;
-
-	for (i = 0; i < dev->entries_nr; i++) {
-		r = request_irq(dev->host_msix_entries[i].vector,
-				kvm_assigned_dev_intr, 0,
-				"kvm_assigned_msix_device",
-				(void *)dev);
-		/* FIXME: free requested_irq's on failure */
-		if (r)
-			return r;
-	}
-
-	return 0;
-}
-
-#endif
-
-static int assigned_device_enable_guest_intx(struct kvm *kvm,
-				struct kvm_assigned_dev_kernel *dev,
-				struct kvm_assigned_irq *irq)
-{
-	dev->guest_irq = irq->guest_irq;
-	dev->ack_notifier.gsi = irq->guest_irq;
-	return 0;
-}
-
-#ifdef __KVM_HAVE_MSI
-static int assigned_device_enable_guest_msi(struct kvm *kvm,
-			struct kvm_assigned_dev_kernel *dev,
-			struct kvm_assigned_irq *irq)
-{
-	dev->guest_irq = irq->guest_irq;
-	dev->ack_notifier.gsi = -1;
-	dev->host_irq_disabled = false;
-	return 0;
-}
-#endif
-#ifdef __KVM_HAVE_MSIX
-static int assigned_device_enable_guest_msix(struct kvm *kvm,
-			struct kvm_assigned_dev_kernel *dev,
-			struct kvm_assigned_irq *irq)
-{
-	dev->guest_irq = irq->guest_irq;
-	dev->ack_notifier.gsi = -1;
-	dev->host_irq_disabled = false;
-	return 0;
-}
-#endif
-
-static int assign_host_irq(struct kvm *kvm,
-			   struct kvm_assigned_dev_kernel *dev,
-			   __u32 host_irq_type)
-{
-	int r = -EEXIST;
-
-	if (dev->irq_requested_type & KVM_DEV_IRQ_HOST_MASK)
-		return r;
-
-	switch (host_irq_type) {
-	case KVM_DEV_IRQ_HOST_INTX:
-		r = assigned_device_enable_host_intx(kvm, dev);
-		break;
-#ifdef __KVM_HAVE_MSI
-	case KVM_DEV_IRQ_HOST_MSI:
-		r = assigned_device_enable_host_msi(kvm, dev);
-		break;
-#endif
-#ifdef __KVM_HAVE_MSIX
-	case KVM_DEV_IRQ_HOST_MSIX:
-		r = assigned_device_enable_host_msix(kvm, dev);
-		break;
-#endif
-	default:
-		r = -EINVAL;
-	}
-
-	if (!r)
-		dev->irq_requested_type |= host_irq_type;
-
-	return r;
-}
-
-static int assign_guest_irq(struct kvm *kvm,
-			    struct kvm_assigned_dev_kernel *dev,
-			    struct kvm_assigned_irq *irq,
-			    unsigned long guest_irq_type)
-{
-	int id;
-	int r = -EEXIST;
-
-	if (dev->irq_requested_type & KVM_DEV_IRQ_GUEST_MASK)
-		return r;
-
-	id = kvm_request_irq_source_id(kvm);
-	if (id < 0)
-		return id;
-
-	dev->irq_source_id = id;
-
-	switch (guest_irq_type) {
-	case KVM_DEV_IRQ_GUEST_INTX:
-		r = assigned_device_enable_guest_intx(kvm, dev, irq);
-		break;
-#ifdef __KVM_HAVE_MSI
-	case KVM_DEV_IRQ_GUEST_MSI:
-		r = assigned_device_enable_guest_msi(kvm, dev, irq);
-		break;
-#endif
-#ifdef __KVM_HAVE_MSIX
-	case KVM_DEV_IRQ_GUEST_MSIX:
-		r = assigned_device_enable_guest_msix(kvm, dev, irq);
-		break;
-#endif
-	default:
-		r = -EINVAL;
-	}
-
-	if (!r) {
-		dev->irq_requested_type |= guest_irq_type;
-		kvm_register_irq_ack_notifier(kvm, &dev->ack_notifier);
-	} else
-		kvm_free_irq_source_id(kvm, dev->irq_source_id);
-
-	return r;
-}
-
-/* TODO Deal with KVM_DEV_IRQ_ASSIGNED_MASK_MSIX */
-static int kvm_vm_ioctl_assign_irq(struct kvm *kvm,
-				   struct kvm_assigned_irq *assigned_irq)
-{
-	int r = -EINVAL;
-	struct kvm_assigned_dev_kernel *match;
-	unsigned long host_irq_type, guest_irq_type;
-
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
-
-	if (!irqchip_in_kernel(kvm))
-		return r;
-
-	mutex_lock(&kvm->lock);
-	r = -ENODEV;
-	match = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      assigned_irq->assigned_dev_id);
-	if (!match)
-		goto out;
-
-	host_irq_type = (assigned_irq->flags & KVM_DEV_IRQ_HOST_MASK);
-	guest_irq_type = (assigned_irq->flags & KVM_DEV_IRQ_GUEST_MASK);
-
-	r = -EINVAL;
-	/* can only assign one type at a time */
-	if (hweight_long(host_irq_type) > 1)
-		goto out;
-	if (hweight_long(guest_irq_type) > 1)
-		goto out;
-	if (host_irq_type == 0 && guest_irq_type == 0)
-		goto out;
-
-	r = 0;
-	if (host_irq_type)
-		r = assign_host_irq(kvm, match, host_irq_type);
-	if (r)
-		goto out;
-
-	if (guest_irq_type)
-		r = assign_guest_irq(kvm, match, assigned_irq, guest_irq_type);
-out:
-	mutex_unlock(&kvm->lock);
-	return r;
-}
-
-static int kvm_vm_ioctl_deassign_dev_irq(struct kvm *kvm,
-					 struct kvm_assigned_irq
-					 *assigned_irq)
-{
-	int r = -ENODEV;
-	struct kvm_assigned_dev_kernel *match;
-
-	mutex_lock(&kvm->lock);
-
-	match = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      assigned_irq->assigned_dev_id);
-	if (!match)
-		goto out;
-
-	r = kvm_deassign_irq(kvm, match, assigned_irq->flags);
-out:
-	mutex_unlock(&kvm->lock);
-	return r;
-}
-
-static int kvm_vm_ioctl_assign_device(struct kvm *kvm,
-				      struct kvm_assigned_pci_dev *assigned_dev)
-{
-	int r = 0;
-	struct kvm_assigned_dev_kernel *match;
-	struct pci_dev *dev;
-
-	down_read(&kvm->slots_lock);
-	mutex_lock(&kvm->lock);
-
-	match = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      assigned_dev->assigned_dev_id);
-	if (match) {
-		/* device already assigned */
-		r = -EEXIST;
-		goto out;
-	}
-
-	match = kzalloc(sizeof(struct kvm_assigned_dev_kernel), GFP_KERNEL);
-	if (match == NULL) {
-		printk(KERN_INFO "%s: Couldn't allocate memory\n",
-		       __func__);
-		r = -ENOMEM;
-		goto out;
-	}
-	dev = pci_get_bus_and_slot(assigned_dev->busnr,
-				   assigned_dev->devfn);
-	if (!dev) {
-		printk(KERN_INFO "%s: host device not found\n", __func__);
-		r = -EINVAL;
-		goto out_free;
-	}
-	if (pci_enable_device(dev)) {
-		printk(KERN_INFO "%s: Could not enable PCI device\n", __func__);
-		r = -EBUSY;
-		goto out_put;
-	}
-	r = pci_request_regions(dev, "kvm_assigned_device");
-	if (r) {
-		printk(KERN_INFO "%s: Could not get access to device regions\n",
-		       __func__);
-		goto out_disable;
-	}
-
-	pci_reset_function(dev);
-
-	match->assigned_dev_id = assigned_dev->assigned_dev_id;
-	match->host_busnr = assigned_dev->busnr;
-	match->host_devfn = assigned_dev->devfn;
-	match->flags = assigned_dev->flags;
-	match->dev = dev;
-	spin_lock_init(&match->assigned_dev_lock);
-	match->irq_source_id = -1;
-	match->kvm = kvm;
-	match->ack_notifier.irq_acked = kvm_assigned_dev_ack_irq;
-	INIT_WORK(&match->interrupt_work,
-		  kvm_assigned_dev_interrupt_work_handler);
-
-	list_add(&match->list, &kvm->arch.assigned_dev_head);
-
-	if (assigned_dev->flags & KVM_DEV_ASSIGN_ENABLE_IOMMU) {
-		if (!kvm->arch.iommu_domain) {
-			r = kvm_iommu_map_guest(kvm);
-			if (r)
-				goto out_list_del;
-		}
-		r = kvm_assign_device(kvm, match);
-		if (r)
-			goto out_list_del;
-	}
-
-out:
-	mutex_unlock(&kvm->lock);
-	up_read(&kvm->slots_lock);
-	return r;
-out_list_del:
-	list_del(&match->list);
-	pci_release_regions(dev);
-out_disable:
-	pci_disable_device(dev);
-out_put:
-	pci_dev_put(dev);
-out_free:
-	kfree(match);
-	mutex_unlock(&kvm->lock);
-	up_read(&kvm->slots_lock);
-	return r;
-}
-#endif
-
-#ifdef KVM_CAP_DEVICE_DEASSIGNMENT
-static int kvm_vm_ioctl_deassign_device(struct kvm *kvm,
-		struct kvm_assigned_pci_dev *assigned_dev)
-{
-	int r = 0;
-	struct kvm_assigned_dev_kernel *match;
-
-	mutex_lock(&kvm->lock);
-
-	match = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      assigned_dev->assigned_dev_id);
-	if (!match) {
-		printk(KERN_INFO "%s: device hasn't been assigned before, "
-		  "so cannot be deassigned\n", __func__);
-		r = -EINVAL;
-		goto out;
-	}
-
-	if (match->flags & KVM_DEV_ASSIGN_ENABLE_IOMMU)
-		kvm_deassign_device(kvm, match);
-
-	kvm_free_assigned_device(kvm, match);
-
-out:
-	mutex_unlock(&kvm->lock);
-	return r;
-}
-#endif
+static struct page *hwpoison_page;
+static pfn_t hwpoison_pfn;
+
+static struct page *fault_page;
+static pfn_t fault_pfn;
 
 inline int kvm_is_mmio_pfn(pfn_t pfn)
 {
 	if (pfn_valid(pfn)) {
-		struct page *page = compound_head(pfn_to_page(pfn));
-		return PageReserved(page);
+		int reserved;
+		struct page *tail = pfn_to_page(pfn);
+		struct page *head = compound_trans_head(tail);
+		reserved = PageReserved(head);
+		if (head != tail) {
+			/*
+			 * "head" is not a dangling pointer
+			 * (compound_trans_head takes care of that)
+			 * but the hugepage may have been splitted
+			 * from under us (and we may not hold a
+			 * reference count on the head page so it can
+			 * be reused before we run PageReferenced), so
+			 * we've to check PageTail before returning
+			 * what we just read.
+			 */
+			smp_rmb();
+			if (PageTail(tail))
+				return reserved;
+		}
+		return PageReserved(tail);
 	}
 
 	return true;
@@ -712,6 +136,14 @@ void vcpu_load(struct kvm_vcpu *vcpu)
 	int cpu;
 
 	mutex_lock(&vcpu->mutex);
+	if (unlikely(vcpu->pid != current->pids[PIDTYPE_PID].pid)) {
+		/* The thread running this VCPU changed. */
+		struct pid *oldpid = vcpu->pid;
+		struct pid *newpid = get_task_pid(current, PIDTYPE_PID);
+		rcu_assign_pointer(vcpu->pid, newpid);
+		synchronize_rcu();
+		put_pid(oldpid);
+	}
 	cpu = get_cpu();
 	preempt_notifier_register(&vcpu->preempt_notifier);
 	kvm_arch_vcpu_load(vcpu, cpu);
@@ -740,13 +172,16 @@ static bool make_all_cpus_request(struct kvm *kvm, unsigned int req)
 
 	zalloc_cpumask_var(&cpus, GFP_ATOMIC);
 
-	spin_lock(&kvm->requests_lock);
-	me = smp_processor_id();
+	me = get_cpu();
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (test_and_set_bit(req, &vcpu->requests))
-			continue;
+		kvm_make_request(req, vcpu);
 		cpu = vcpu->cpu;
-		if (cpus != NULL && cpu != -1 && cpu != me)
+
+		/* Set ->requests bit before we read ->mode */
+		smp_mb();
+
+		if (cpus != NULL && cpu != -1 && cpu != me &&
+		      kvm_vcpu_exiting_guest_mode(vcpu) != OUTSIDE_GUEST_MODE)
 			cpumask_set_cpu(cpu, cpus);
 	}
 	if (unlikely(cpus == NULL))
@@ -755,15 +190,19 @@ static bool make_all_cpus_request(struct kvm *kvm, unsigned int req)
 		smp_call_function_many(cpus, ack_flush, NULL, 1);
 	else
 		called = false;
-	spin_unlock(&kvm->requests_lock);
+	put_cpu();
 	free_cpumask_var(cpus);
 	return called;
 }
 
 void kvm_flush_remote_tlbs(struct kvm *kvm)
 {
+	int dirty_count = kvm->tlbs_dirty;
+
+	smp_mb();
 	if (make_all_cpus_request(kvm, KVM_REQ_TLB_FLUSH))
 		++kvm->stat.remote_tlb_flush;
+	cmpxchg(&kvm->tlbs_dirty, dirty_count, 0);
 }
 
 void kvm_reload_remote_mmus(struct kvm *kvm)
@@ -780,7 +219,9 @@ int kvm_vcpu_init(struct kvm_vcpu *vcpu, struct kvm *kvm, unsigned id)
 	vcpu->cpu = -1;
 	vcpu->kvm = kvm;
 	vcpu->vcpu_id = id;
+	vcpu->pid = NULL;
 	init_waitqueue_head(&vcpu->wq);
+	kvm_async_pf_vcpu_init(vcpu);
 
 	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!page) {
@@ -803,6 +244,7 @@ EXPORT_SYMBOL_GPL(kvm_vcpu_init);
 
 void kvm_vcpu_uninit(struct kvm_vcpu *vcpu)
 {
+	put_pid(vcpu->pid);
 	kvm_arch_vcpu_uninit(vcpu);
 	free_page((unsigned long)vcpu->run);
 }
@@ -819,7 +261,7 @@ static void kvm_mmu_notifier_invalidate_page(struct mmu_notifier *mn,
 					     unsigned long address)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
-	int need_tlb_flush;
+	int need_tlb_flush, idx;
 
 	/*
 	 * When ->invalidate_page runs, the linux pte has been zapped
@@ -839,10 +281,12 @@ static void kvm_mmu_notifier_invalidate_page(struct mmu_notifier *mn,
 	 * pte after kvm_unmap_hva returned, without noticing the page
 	 * is going to be freed.
 	 */
+	idx = srcu_read_lock(&kvm->srcu);
 	spin_lock(&kvm->mmu_lock);
 	kvm->mmu_notifier_seq++;
-	need_tlb_flush = kvm_unmap_hva(kvm, address);
+	need_tlb_flush = kvm_unmap_hva(kvm, address) | kvm->tlbs_dirty;
 	spin_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, idx);
 
 	/* we've to flush the tlb before the pages can be freed */
 	if (need_tlb_flush)
@@ -856,11 +300,14 @@ static void kvm_mmu_notifier_change_pte(struct mmu_notifier *mn,
 					pte_t pte)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
+	int idx;
 
+	idx = srcu_read_lock(&kvm->srcu);
 	spin_lock(&kvm->mmu_lock);
 	kvm->mmu_notifier_seq++;
 	kvm_set_spte_hva(kvm, address, pte);
 	spin_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, idx);
 }
 
 static void kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
@@ -869,8 +316,9 @@ static void kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 						    unsigned long end)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
-	int need_tlb_flush = 0;
+	int need_tlb_flush = 0, idx;
 
+	idx = srcu_read_lock(&kvm->srcu);
 	spin_lock(&kvm->mmu_lock);
 	/*
 	 * The count increase must become visible at unlock time as no
@@ -880,7 +328,9 @@ static void kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 	kvm->mmu_notifier_count++;
 	for (; start < end; start += PAGE_SIZE)
 		need_tlb_flush |= kvm_unmap_hva(kvm, start);
+	need_tlb_flush |= kvm->tlbs_dirty;
 	spin_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, idx);
 
 	/* we've to flush the tlb before the pages can be freed */
 	if (need_tlb_flush)
@@ -918,14 +368,32 @@ static int kvm_mmu_notifier_clear_flush_young(struct mmu_notifier *mn,
 					      unsigned long address)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
-	int young;
+	int young, idx;
 
+	idx = srcu_read_lock(&kvm->srcu);
 	spin_lock(&kvm->mmu_lock);
 	young = kvm_age_hva(kvm, address);
 	spin_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, idx);
 
 	if (young)
 		kvm_flush_remote_tlbs(kvm);
+
+	return young;
+}
+
+static int kvm_mmu_notifier_test_young(struct mmu_notifier *mn,
+				       struct mm_struct *mm,
+				       unsigned long address)
+{
+	struct kvm *kvm = mmu_notifier_to_kvm(mn);
+	int young, idx;
+
+	idx = srcu_read_lock(&kvm->srcu);
+	spin_lock(&kvm->mmu_lock);
+	young = kvm_test_age_hva(kvm, address);
+	spin_unlock(&kvm->mmu_lock);
+	srcu_read_unlock(&kvm->srcu, idx);
 
 	return young;
 }
@@ -934,7 +402,11 @@ static void kvm_mmu_notifier_release(struct mmu_notifier *mn,
 				     struct mm_struct *mm)
 {
 	struct kvm *kvm = mmu_notifier_to_kvm(mn);
+	int idx;
+
+	idx = srcu_read_lock(&kvm->srcu);
 	kvm_arch_flush_shadow(kvm);
+	srcu_read_unlock(&kvm->srcu, idx);
 }
 
 static const struct mmu_notifier_ops kvm_mmu_notifier_ops = {
@@ -942,69 +414,103 @@ static const struct mmu_notifier_ops kvm_mmu_notifier_ops = {
 	.invalidate_range_start	= kvm_mmu_notifier_invalidate_range_start,
 	.invalidate_range_end	= kvm_mmu_notifier_invalidate_range_end,
 	.clear_flush_young	= kvm_mmu_notifier_clear_flush_young,
+	.test_young		= kvm_mmu_notifier_test_young,
 	.change_pte		= kvm_mmu_notifier_change_pte,
 	.release		= kvm_mmu_notifier_release,
 };
+
+static int kvm_init_mmu_notifier(struct kvm *kvm)
+{
+	kvm->mmu_notifier.ops = &kvm_mmu_notifier_ops;
+	return mmu_notifier_register(&kvm->mmu_notifier, current->mm);
+}
+
+#else  /* !(CONFIG_MMU_NOTIFIER && KVM_ARCH_WANT_MMU_NOTIFIER) */
+
+static int kvm_init_mmu_notifier(struct kvm *kvm)
+{
+	return 0;
+}
+
 #endif /* CONFIG_MMU_NOTIFIER && KVM_ARCH_WANT_MMU_NOTIFIER */
 
 static struct kvm *kvm_create_vm(void)
 {
-	struct kvm *kvm = kvm_arch_create_vm();
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
-	struct page *page;
-#endif
+	int r, i;
+	struct kvm *kvm = kvm_arch_alloc_vm();
 
-	if (IS_ERR(kvm))
-		goto out;
-#ifdef CONFIG_HAVE_KVM_IRQCHIP
-	INIT_LIST_HEAD(&kvm->irq_routing);
-	INIT_HLIST_HEAD(&kvm->mask_notifier_list);
-#endif
-
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
-	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
-	if (!page) {
-		kfree(kvm);
+	if (!kvm)
 		return ERR_PTR(-ENOMEM);
-	}
-	kvm->coalesced_mmio_ring =
-			(struct kvm_coalesced_mmio_ring *)page_address(page);
+
+	r = kvm_arch_init_vm(kvm);
+	if (r)
+		goto out_err_nodisable;
+
+	r = hardware_enable_all();
+	if (r)
+		goto out_err_nodisable;
+
+#ifdef CONFIG_HAVE_KVM_IRQCHIP
+	INIT_HLIST_HEAD(&kvm->mask_notifier_list);
+	INIT_HLIST_HEAD(&kvm->irq_ack_notifier_list);
 #endif
 
-#if defined(CONFIG_MMU_NOTIFIER) && defined(KVM_ARCH_WANT_MMU_NOTIFIER)
-	{
-		int err;
-		kvm->mmu_notifier.ops = &kvm_mmu_notifier_ops;
-		err = mmu_notifier_register(&kvm->mmu_notifier, current->mm);
-		if (err) {
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
-			put_page(page);
-#endif
-			kfree(kvm);
-			return ERR_PTR(err);
-		}
+	r = -ENOMEM;
+	kvm->memslots = kzalloc(sizeof(struct kvm_memslots), GFP_KERNEL);
+	if (!kvm->memslots)
+		goto out_err_nosrcu;
+	if (init_srcu_struct(&kvm->srcu))
+		goto out_err_nosrcu;
+	for (i = 0; i < KVM_NR_BUSES; i++) {
+		kvm->buses[i] = kzalloc(sizeof(struct kvm_io_bus),
+					GFP_KERNEL);
+		if (!kvm->buses[i])
+			goto out_err;
 	}
-#endif
 
+	spin_lock_init(&kvm->mmu_lock);
 	kvm->mm = current->mm;
 	atomic_inc(&kvm->mm->mm_count);
-	spin_lock_init(&kvm->mmu_lock);
-	spin_lock_init(&kvm->requests_lock);
-	kvm_io_bus_init(&kvm->pio_bus);
 	kvm_eventfd_init(kvm);
 	mutex_init(&kvm->lock);
 	mutex_init(&kvm->irq_lock);
-	kvm_io_bus_init(&kvm->mmio_bus);
-	init_rwsem(&kvm->slots_lock);
+	mutex_init(&kvm->slots_lock);
 	atomic_set(&kvm->users_count, 1);
-	spin_lock(&kvm_lock);
+
+	r = kvm_init_mmu_notifier(kvm);
+	if (r)
+		goto out_err;
+
+	raw_spin_lock(&kvm_lock);
 	list_add(&kvm->vm_list, &vm_list);
-	spin_unlock(&kvm_lock);
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
-	kvm_coalesced_mmio_init(kvm);
-#endif
-out:
+	raw_spin_unlock(&kvm_lock);
+
 	return kvm;
+
+out_err:
+	cleanup_srcu_struct(&kvm->srcu);
+out_err_nosrcu:
+	hardware_disable_all();
+out_err_nodisable:
+	for (i = 0; i < KVM_NR_BUSES; i++)
+		kfree(kvm->buses[i]);
+	kfree(kvm->memslots);
+	kvm_arch_free_vm(kvm);
+	return ERR_PTR(r);
+}
+
+static void kvm_destroy_dirty_bitmap(struct kvm_memory_slot *memslot)
+{
+	if (!memslot->dirty_bitmap)
+		return;
+
+	if (2 * kvm_dirty_bitmap_bytes(memslot) > PAGE_SIZE)
+		vfree(memslot->dirty_bitmap_head);
+	else
+		kfree(memslot->dirty_bitmap_head);
+
+	memslot->dirty_bitmap = NULL;
+	memslot->dirty_bitmap_head = NULL;
 }
 
 /*
@@ -1019,7 +525,7 @@ static void kvm_free_physmem_slot(struct kvm_memory_slot *free,
 		vfree(free->rmap);
 
 	if (!dont || free->dirty_bitmap != dont->dirty_bitmap)
-		vfree(free->dirty_bitmap);
+		kvm_destroy_dirty_bitmap(free);
 
 
 	for (i = 0; i < KVM_NR_PAGE_SIZES - 1; ++i) {
@@ -1030,39 +536,43 @@ static void kvm_free_physmem_slot(struct kvm_memory_slot *free,
 	}
 
 	free->npages = 0;
-	free->dirty_bitmap = NULL;
 	free->rmap = NULL;
 }
 
 void kvm_free_physmem(struct kvm *kvm)
 {
 	int i;
+	struct kvm_memslots *slots = kvm->memslots;
 
-	for (i = 0; i < kvm->nmemslots; ++i)
-		kvm_free_physmem_slot(&kvm->memslots[i], NULL);
+	for (i = 0; i < slots->nmemslots; ++i)
+		kvm_free_physmem_slot(&slots->memslots[i], NULL);
+
+	kfree(kvm->memslots);
 }
 
 static void kvm_destroy_vm(struct kvm *kvm)
 {
+	int i;
 	struct mm_struct *mm = kvm->mm;
 
 	kvm_arch_sync_events(kvm);
-	spin_lock(&kvm_lock);
+	raw_spin_lock(&kvm_lock);
 	list_del(&kvm->vm_list);
-	spin_unlock(&kvm_lock);
+	raw_spin_unlock(&kvm_lock);
 	kvm_free_irq_routing(kvm);
-	kvm_io_bus_destroy(&kvm->pio_bus);
-	kvm_io_bus_destroy(&kvm->mmio_bus);
-#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
-	if (kvm->coalesced_mmio_ring != NULL)
-		free_page((unsigned long)kvm->coalesced_mmio_ring);
-#endif
+	for (i = 0; i < KVM_NR_BUSES; i++)
+		kvm_io_bus_destroy(kvm->buses[i]);
+	kvm_coalesced_mmio_free(kvm);
 #if defined(CONFIG_MMU_NOTIFIER) && defined(KVM_ARCH_WANT_MMU_NOTIFIER)
 	mmu_notifier_unregister(&kvm->mmu_notifier, kvm->mm);
 #else
 	kvm_arch_flush_shadow(kvm);
 #endif
 	kvm_arch_destroy_vm(kvm);
+	kvm_free_physmem(kvm);
+	cleanup_srcu_struct(&kvm->srcu);
+	kvm_arch_free_vm(kvm);
+	hardware_disable_all();
 	mmdrop(mm);
 }
 
@@ -1090,6 +600,29 @@ static int kvm_vm_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+#ifndef CONFIG_S390
+/*
+ * Allocation size is twice as large as the actual dirty bitmap size.
+ * This makes it possible to do double buffering: see x86's
+ * kvm_vm_ioctl_get_dirty_log().
+ */
+static int kvm_create_dirty_bitmap(struct kvm_memory_slot *memslot)
+{
+	unsigned long dirty_bytes = 2 * kvm_dirty_bitmap_bytes(memslot);
+
+	if (dirty_bytes > PAGE_SIZE)
+		memslot->dirty_bitmap = vzalloc(dirty_bytes);
+	else
+		memslot->dirty_bitmap = kzalloc(dirty_bytes, GFP_KERNEL);
+
+	if (!memslot->dirty_bitmap)
+		return -ENOMEM;
+
+	memslot->dirty_bitmap_head = memslot->dirty_bitmap;
+	return 0;
+}
+#endif /* !CONFIG_S390 */
+
 /*
  * Allocate some memory and give it an address in the guest physical address
  * space.
@@ -1108,6 +641,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	unsigned long i;
 	struct kvm_memory_slot *memslot;
 	struct kvm_memory_slot old, new;
+	struct kvm_memslots *slots, *old_memslots;
 
 	r = -EINVAL;
 	/* General sanity checks */
@@ -1115,22 +649,32 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		goto out;
 	if (mem->guest_phys_addr & (PAGE_SIZE - 1))
 		goto out;
-	if (user_alloc && (mem->userspace_addr & (PAGE_SIZE - 1)))
+	/* We can read the guest memory with __xxx_user() later on. */
+	if (user_alloc &&
+	    ((mem->userspace_addr & (PAGE_SIZE - 1)) ||
+	     !access_ok(VERIFY_WRITE,
+			(void __user *)(unsigned long)mem->userspace_addr,
+			mem->memory_size)))
 		goto out;
 	if (mem->slot >= KVM_MEMORY_SLOTS + KVM_PRIVATE_MEM_SLOTS)
 		goto out;
 	if (mem->guest_phys_addr + mem->memory_size < mem->guest_phys_addr)
 		goto out;
 
-	memslot = &kvm->memslots[mem->slot];
+	memslot = &kvm->memslots->memslots[mem->slot];
 	base_gfn = mem->guest_phys_addr >> PAGE_SHIFT;
 	npages = mem->memory_size >> PAGE_SHIFT;
+
+	r = -EINVAL;
+	if (npages > KVM_MEM_MAX_NR_PAGES)
+		goto out;
 
 	if (!npages)
 		mem->flags &= ~KVM_MEM_LOG_DIRTY_PAGES;
 
 	new = old = *memslot;
 
+	new.id = mem->slot;
 	new.base_gfn = base_gfn;
 	new.npages = npages;
 	new.flags = mem->flags;
@@ -1143,7 +687,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	/* Check for overlaps */
 	r = -EEXIST;
 	for (i = 0; i < KVM_MEMORY_SLOTS; ++i) {
-		struct kvm_memory_slot *s = &kvm->memslots[i];
+		struct kvm_memory_slot *s = &kvm->memslots->memslots[i];
 
 		if (s == memslot || !s->npages)
 			continue;
@@ -1161,23 +705,13 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	/* Allocate if a slot is being created */
 #ifndef CONFIG_S390
 	if (npages && !new.rmap) {
-		new.rmap = vmalloc(npages * sizeof(struct page *));
+		new.rmap = vzalloc(npages * sizeof(*new.rmap));
 
 		if (!new.rmap)
 			goto out_free;
 
-		memset(new.rmap, 0, npages * sizeof(*new.rmap));
-
 		new.user_alloc = user_alloc;
-		/*
-		 * hva_to_rmmap() serialzies with the mmu_lock and to be
-		 * safe it has to ignore memslots with !user_alloc &&
-		 * !userspace_addr.
-		 */
-		if (user_alloc)
-			new.userspace_addr = mem->userspace_addr;
-		else
-			new.userspace_addr = 0;
+		new.userspace_addr = mem->userspace_addr;
 	}
 	if (!npages)
 		goto skip_lpage;
@@ -1194,21 +728,18 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		if (new.lpage_info[i])
 			continue;
 
-		lpages = 1 + (base_gfn + npages - 1) /
-			     KVM_PAGES_PER_HPAGE(level);
-		lpages -= base_gfn / KVM_PAGES_PER_HPAGE(level);
+		lpages = 1 + ((base_gfn + npages - 1)
+			     >> KVM_HPAGE_GFN_SHIFT(level));
+		lpages -= base_gfn >> KVM_HPAGE_GFN_SHIFT(level);
 
-		new.lpage_info[i] = vmalloc(lpages * sizeof(*new.lpage_info[i]));
+		new.lpage_info[i] = vzalloc(lpages * sizeof(*new.lpage_info[i]));
 
 		if (!new.lpage_info[i])
 			goto out_free;
 
-		memset(new.lpage_info[i], 0,
-		       lpages * sizeof(*new.lpage_info[i]));
-
-		if (base_gfn % KVM_PAGES_PER_HPAGE(level))
+		if (base_gfn & (KVM_PAGES_PER_HPAGE(level) - 1))
 			new.lpage_info[i][0].write_count = 1;
-		if ((base_gfn+npages) % KVM_PAGES_PER_HPAGE(level))
+		if ((base_gfn+npages) & (KVM_PAGES_PER_HPAGE(level) - 1))
 			new.lpage_info[i][lpages - 1].write_count = 1;
 		ugfn = new.userspace_addr >> PAGE_SHIFT;
 		/*
@@ -1226,14 +757,9 @@ skip_lpage:
 
 	/* Allocate page dirty bitmap if needed */
 	if ((new.flags & KVM_MEM_LOG_DIRTY_PAGES) && !new.dirty_bitmap) {
-		unsigned long dirty_bytes = kvm_dirty_bitmap_bytes(&new);
-
-		new.dirty_bitmap = vmalloc(dirty_bytes);
-		if (!new.dirty_bitmap)
+		if (kvm_create_dirty_bitmap(&new) < 0)
 			goto out_free;
-		memset(new.dirty_bitmap, 0, dirty_bytes);
-		if (old.npages)
-			kvm_arch_flush_shadow(kvm);
+		/* destroy any largepage mappings for dirty tracking */
 	}
 #else  /* not defined CONFIG_S390 */
 	new.user_alloc = user_alloc;
@@ -1241,36 +767,69 @@ skip_lpage:
 		new.userspace_addr = mem->userspace_addr;
 #endif /* not defined CONFIG_S390 */
 
-	if (!npages)
+	if (!npages) {
+		r = -ENOMEM;
+		slots = kzalloc(sizeof(struct kvm_memslots), GFP_KERNEL);
+		if (!slots)
+			goto out_free;
+		memcpy(slots, kvm->memslots, sizeof(struct kvm_memslots));
+		if (mem->slot >= slots->nmemslots)
+			slots->nmemslots = mem->slot + 1;
+		slots->generation++;
+		slots->memslots[mem->slot].flags |= KVM_MEMSLOT_INVALID;
+
+		old_memslots = kvm->memslots;
+		rcu_assign_pointer(kvm->memslots, slots);
+		synchronize_srcu_expedited(&kvm->srcu);
+		/* From this point no new shadow pages pointing to a deleted
+		 * memslot will be created.
+		 *
+		 * validation of sp->gfn happens in:
+		 * 	- gfn_to_hva (kvm_read_guest, gfn_to_pfn)
+		 * 	- kvm_is_visible_gfn (mmu_check_roots)
+		 */
 		kvm_arch_flush_shadow(kvm);
-
-	spin_lock(&kvm->mmu_lock);
-	if (mem->slot >= kvm->nmemslots)
-		kvm->nmemslots = mem->slot + 1;
-
-	*memslot = new;
-	spin_unlock(&kvm->mmu_lock);
-
-	r = kvm_arch_set_memory_region(kvm, mem, old, user_alloc);
-	if (r) {
-		spin_lock(&kvm->mmu_lock);
-		*memslot = old;
-		spin_unlock(&kvm->mmu_lock);
-		goto out_free;
+		kfree(old_memslots);
 	}
 
-	kvm_free_physmem_slot(&old, npages ? &new : NULL);
-	/* Slot deletion case: we have to update the current slot */
-	spin_lock(&kvm->mmu_lock);
-	if (!npages)
-		*memslot = old;
-	spin_unlock(&kvm->mmu_lock);
-#ifdef CONFIG_DMAR
-	/* map the pages in iommu page table */
-	r = kvm_iommu_map_pages(kvm, base_gfn, npages);
+	r = kvm_arch_prepare_memory_region(kvm, &new, old, mem, user_alloc);
 	if (r)
-		goto out;
-#endif
+		goto out_free;
+
+	/* map the pages in iommu page table */
+	if (npages) {
+		r = kvm_iommu_map_pages(kvm, &new);
+		if (r)
+			goto out_free;
+	}
+
+	r = -ENOMEM;
+	slots = kzalloc(sizeof(struct kvm_memslots), GFP_KERNEL);
+	if (!slots)
+		goto out_free;
+	memcpy(slots, kvm->memslots, sizeof(struct kvm_memslots));
+	if (mem->slot >= slots->nmemslots)
+		slots->nmemslots = mem->slot + 1;
+	slots->generation++;
+
+	/* actual memory is freed via old in kvm_free_physmem_slot below */
+	if (!npages) {
+		new.rmap = NULL;
+		new.dirty_bitmap = NULL;
+		for (i = 0; i < KVM_NR_PAGE_SIZES - 1; ++i)
+			new.lpage_info[i] = NULL;
+	}
+
+	slots->memslots[mem->slot] = new;
+	old_memslots = kvm->memslots;
+	rcu_assign_pointer(kvm->memslots, slots);
+	synchronize_srcu_expedited(&kvm->srcu);
+
+	kvm_arch_commit_memory_region(kvm, mem, old, user_alloc);
+
+	kvm_free_physmem_slot(&old, &new);
+	kfree(old_memslots);
+
 	return 0;
 
 out_free:
@@ -1287,9 +846,9 @@ int kvm_set_memory_region(struct kvm *kvm,
 {
 	int r;
 
-	down_write(&kvm->slots_lock);
+	mutex_lock(&kvm->slots_lock);
 	r = __kvm_set_memory_region(kvm, mem, user_alloc);
-	up_write(&kvm->slots_lock);
+	mutex_unlock(&kvm->slots_lock);
 	return r;
 }
 EXPORT_SYMBOL_GPL(kvm_set_memory_region);
@@ -1316,7 +875,7 @@ int kvm_get_dirty_log(struct kvm *kvm,
 	if (log->slot >= KVM_MEMORY_SLOTS)
 		goto out;
 
-	memslot = &kvm->memslots[log->slot];
+	memslot = &kvm->memslots->memslots[log->slot];
 	r = -ENOENT;
 	if (!memslot->dirty_bitmap)
 		goto out;
@@ -1346,15 +905,27 @@ EXPORT_SYMBOL_GPL(kvm_disable_largepages);
 
 int is_error_page(struct page *page)
 {
-	return page == bad_page;
+	return page == bad_page || page == hwpoison_page || page == fault_page;
 }
 EXPORT_SYMBOL_GPL(is_error_page);
 
 int is_error_pfn(pfn_t pfn)
 {
-	return pfn == bad_pfn;
+	return pfn == bad_pfn || pfn == hwpoison_pfn || pfn == fault_pfn;
 }
 EXPORT_SYMBOL_GPL(is_error_pfn);
+
+int is_hwpoison_pfn(pfn_t pfn)
+{
+	return pfn == hwpoison_pfn;
+}
+EXPORT_SYMBOL_GPL(is_hwpoison_pfn);
+
+int is_fault_pfn(pfn_t pfn)
+{
+	return pfn == fault_pfn;
+}
+EXPORT_SYMBOL_GPL(is_fault_pfn);
 
 static inline unsigned long bad_hva(void)
 {
@@ -1367,12 +938,13 @@ int kvm_is_error_hva(unsigned long addr)
 }
 EXPORT_SYMBOL_GPL(kvm_is_error_hva);
 
-struct kvm_memory_slot *gfn_to_memslot_unaliased(struct kvm *kvm, gfn_t gfn)
+static struct kvm_memory_slot *__gfn_to_memslot(struct kvm_memslots *slots,
+						gfn_t gfn)
 {
 	int i;
 
-	for (i = 0; i < kvm->nmemslots; ++i) {
-		struct kvm_memory_slot *memslot = &kvm->memslots[i];
+	for (i = 0; i < slots->nmemslots; ++i) {
+		struct kvm_memory_slot *memslot = &slots->memslots[i];
 
 		if (gfn >= memslot->base_gfn
 		    && gfn < memslot->base_gfn + memslot->npages)
@@ -1380,21 +952,23 @@ struct kvm_memory_slot *gfn_to_memslot_unaliased(struct kvm *kvm, gfn_t gfn)
 	}
 	return NULL;
 }
-EXPORT_SYMBOL_GPL(gfn_to_memslot_unaliased);
 
 struct kvm_memory_slot *gfn_to_memslot(struct kvm *kvm, gfn_t gfn)
 {
-	gfn = unalias_gfn(kvm, gfn);
-	return gfn_to_memslot_unaliased(kvm, gfn);
+	return __gfn_to_memslot(kvm_memslots(kvm), gfn);
 }
+EXPORT_SYMBOL_GPL(gfn_to_memslot);
 
 int kvm_is_visible_gfn(struct kvm *kvm, gfn_t gfn)
 {
 	int i;
+	struct kvm_memslots *slots = kvm_memslots(kvm);
 
-	gfn = unalias_gfn(kvm, gfn);
 	for (i = 0; i < KVM_MEMORY_SLOTS; ++i) {
-		struct kvm_memory_slot *memslot = &kvm->memslots[i];
+		struct kvm_memory_slot *memslot = &slots->memslots[i];
+
+		if (memslot->flags & KVM_MEMSLOT_INVALID)
+			continue;
 
 		if (gfn >= memslot->base_gfn
 		    && gfn < memslot->base_gfn + memslot->npages)
@@ -1404,26 +978,168 @@ int kvm_is_visible_gfn(struct kvm *kvm, gfn_t gfn)
 }
 EXPORT_SYMBOL_GPL(kvm_is_visible_gfn);
 
+unsigned long kvm_host_page_size(struct kvm *kvm, gfn_t gfn)
+{
+	struct vm_area_struct *vma;
+	unsigned long addr, size;
+
+	size = PAGE_SIZE;
+
+	addr = gfn_to_hva(kvm, gfn);
+	if (kvm_is_error_hva(addr))
+		return PAGE_SIZE;
+
+	down_read(&current->mm->mmap_sem);
+	vma = find_vma(current->mm, addr);
+	if (!vma)
+		goto out;
+
+	size = vma_kernel_pagesize(vma);
+
+out:
+	up_read(&current->mm->mmap_sem);
+
+	return size;
+}
+
+static unsigned long gfn_to_hva_many(struct kvm_memory_slot *slot, gfn_t gfn,
+				     gfn_t *nr_pages)
+{
+	if (!slot || slot->flags & KVM_MEMSLOT_INVALID)
+		return bad_hva();
+
+	if (nr_pages)
+		*nr_pages = slot->npages - (gfn - slot->base_gfn);
+
+	return gfn_to_hva_memslot(slot, gfn);
+}
+
 unsigned long gfn_to_hva(struct kvm *kvm, gfn_t gfn)
 {
-	struct kvm_memory_slot *slot;
-
-	gfn = unalias_gfn(kvm, gfn);
-	slot = gfn_to_memslot_unaliased(kvm, gfn);
-	if (!slot)
-		return bad_hva();
-	return (slot->userspace_addr + (gfn - slot->base_gfn) * PAGE_SIZE);
+	return gfn_to_hva_many(gfn_to_memslot(kvm, gfn), gfn, NULL);
 }
 EXPORT_SYMBOL_GPL(gfn_to_hva);
 
-pfn_t gfn_to_pfn(struct kvm *kvm, gfn_t gfn)
+static pfn_t get_fault_pfn(void)
+{
+	get_page(fault_page);
+	return fault_pfn;
+}
+
+int get_user_page_nowait(struct task_struct *tsk, struct mm_struct *mm,
+	unsigned long start, int write, struct page **page)
+{
+	int flags = FOLL_TOUCH | FOLL_NOWAIT | FOLL_HWPOISON | FOLL_GET;
+
+	if (write)
+		flags |= FOLL_WRITE;
+
+	return __get_user_pages(tsk, mm, start, 1, flags, page, NULL, NULL);
+}
+
+static inline int check_user_page_hwpoison(unsigned long addr)
+{
+	int rc, flags = FOLL_TOUCH | FOLL_HWPOISON | FOLL_WRITE;
+
+	rc = __get_user_pages(current, current->mm, addr, 1,
+			      flags, NULL, NULL, NULL);
+	return rc == -EHWPOISON;
+}
+
+static pfn_t hva_to_pfn(struct kvm *kvm, unsigned long addr, bool atomic,
+			bool *async, bool write_fault, bool *writable)
 {
 	struct page *page[1];
-	unsigned long addr;
-	int npages;
+	int npages = 0;
 	pfn_t pfn;
 
-	might_sleep();
+	/* we can do it either atomically or asynchronously, not both */
+	BUG_ON(atomic && async);
+
+	BUG_ON(!write_fault && !writable);
+
+	if (writable)
+		*writable = true;
+
+	if (atomic || async)
+		npages = __get_user_pages_fast(addr, 1, 1, page);
+
+	if (unlikely(npages != 1) && !atomic) {
+		might_sleep();
+
+		if (writable)
+			*writable = write_fault;
+
+		if (async) {
+			down_read(&current->mm->mmap_sem);
+			npages = get_user_page_nowait(current, current->mm,
+						     addr, write_fault, page);
+			up_read(&current->mm->mmap_sem);
+		} else
+			npages = get_user_pages_fast(addr, 1, write_fault,
+						     page);
+
+		/* map read fault as writable if possible */
+		if (unlikely(!write_fault) && npages == 1) {
+			struct page *wpage[1];
+
+			npages = __get_user_pages_fast(addr, 1, 1, wpage);
+			if (npages == 1) {
+				*writable = true;
+				put_page(page[0]);
+				page[0] = wpage[0];
+			}
+			npages = 1;
+		}
+	}
+
+	if (unlikely(npages != 1)) {
+		struct vm_area_struct *vma;
+
+		if (atomic)
+			return get_fault_pfn();
+
+		down_read(&current->mm->mmap_sem);
+		if (npages == -EHWPOISON ||
+			(!async && check_user_page_hwpoison(addr))) {
+			up_read(&current->mm->mmap_sem);
+			get_page(hwpoison_page);
+			return page_to_pfn(hwpoison_page);
+		}
+
+		vma = find_vma_intersection(current->mm, addr, addr+1);
+
+		if (vma == NULL)
+			pfn = get_fault_pfn();
+		else if ((vma->vm_flags & VM_PFNMAP)) {
+			pfn = ((addr - vma->vm_start) >> PAGE_SHIFT) +
+				vma->vm_pgoff;
+			BUG_ON(!kvm_is_mmio_pfn(pfn));
+		} else {
+			if (async && (vma->vm_flags & VM_WRITE))
+				*async = true;
+			pfn = get_fault_pfn();
+		}
+		up_read(&current->mm->mmap_sem);
+	} else
+		pfn = page_to_pfn(page[0]);
+
+	return pfn;
+}
+
+pfn_t hva_to_pfn_atomic(struct kvm *kvm, unsigned long addr)
+{
+	return hva_to_pfn(kvm, addr, true, NULL, true, NULL);
+}
+EXPORT_SYMBOL_GPL(hva_to_pfn_atomic);
+
+static pfn_t __gfn_to_pfn(struct kvm *kvm, gfn_t gfn, bool atomic, bool *async,
+			  bool write_fault, bool *writable)
+{
+	unsigned long addr;
+
+	if (async)
+		*async = false;
 
 	addr = gfn_to_hva(kvm, gfn);
 	if (kvm_is_error_hva(addr)) {
@@ -1431,31 +1147,58 @@ pfn_t gfn_to_pfn(struct kvm *kvm, gfn_t gfn)
 		return page_to_pfn(bad_page);
 	}
 
-	npages = get_user_pages_fast(addr, 1, 1, page);
-
-	if (unlikely(npages != 1)) {
-		struct vm_area_struct *vma;
-
-		down_read(&current->mm->mmap_sem);
-		vma = find_vma(current->mm, addr);
-
-		if (vma == NULL || addr < vma->vm_start ||
-		    !(vma->vm_flags & VM_PFNMAP)) {
-			up_read(&current->mm->mmap_sem);
-			get_page(bad_page);
-			return page_to_pfn(bad_page);
-		}
-
-		pfn = ((addr - vma->vm_start) >> PAGE_SHIFT) + vma->vm_pgoff;
-		up_read(&current->mm->mmap_sem);
-		BUG_ON(!kvm_is_mmio_pfn(pfn));
-	} else
-		pfn = page_to_pfn(page[0]);
-
-	return pfn;
+	return hva_to_pfn(kvm, addr, atomic, async, write_fault, writable);
 }
 
+pfn_t gfn_to_pfn_atomic(struct kvm *kvm, gfn_t gfn)
+{
+	return __gfn_to_pfn(kvm, gfn, true, NULL, true, NULL);
+}
+EXPORT_SYMBOL_GPL(gfn_to_pfn_atomic);
+
+pfn_t gfn_to_pfn_async(struct kvm *kvm, gfn_t gfn, bool *async,
+		       bool write_fault, bool *writable)
+{
+	return __gfn_to_pfn(kvm, gfn, false, async, write_fault, writable);
+}
+EXPORT_SYMBOL_GPL(gfn_to_pfn_async);
+
+pfn_t gfn_to_pfn(struct kvm *kvm, gfn_t gfn)
+{
+	return __gfn_to_pfn(kvm, gfn, false, NULL, true, NULL);
+}
 EXPORT_SYMBOL_GPL(gfn_to_pfn);
+
+pfn_t gfn_to_pfn_prot(struct kvm *kvm, gfn_t gfn, bool write_fault,
+		      bool *writable)
+{
+	return __gfn_to_pfn(kvm, gfn, false, NULL, write_fault, writable);
+}
+EXPORT_SYMBOL_GPL(gfn_to_pfn_prot);
+
+pfn_t gfn_to_pfn_memslot(struct kvm *kvm,
+			 struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	unsigned long addr = gfn_to_hva_memslot(slot, gfn);
+	return hva_to_pfn(kvm, addr, false, NULL, true, NULL);
+}
+
+int gfn_to_page_many_atomic(struct kvm *kvm, gfn_t gfn, struct page **pages,
+								  int nr_pages)
+{
+	unsigned long addr;
+	gfn_t entry;
+
+	addr = gfn_to_hva_many(gfn_to_memslot(kvm, gfn), gfn, &entry);
+	if (kvm_is_error_hva(addr))
+		return -1;
+
+	if (entry < nr_pages)
+		return 0;
+
+	return __get_user_pages_fast(addr, nr_pages, 1, pages);
+}
+EXPORT_SYMBOL_GPL(gfn_to_page_many_atomic);
 
 struct page *gfn_to_page(struct kvm *kvm, gfn_t gfn)
 {
@@ -1546,7 +1289,7 @@ int kvm_read_guest_page(struct kvm *kvm, gfn_t gfn, void *data, int offset,
 	addr = gfn_to_hva(kvm, gfn);
 	if (kvm_is_error_hva(addr))
 		return -EFAULT;
-	r = copy_from_user(data, (void __user *)addr + offset, len);
+	r = __copy_from_user(data, (void __user *)addr + offset, len);
 	if (r)
 		return -EFAULT;
 	return 0;
@@ -1630,9 +1373,51 @@ int kvm_write_guest(struct kvm *kvm, gpa_t gpa, const void *data,
 	return 0;
 }
 
+int kvm_gfn_to_hva_cache_init(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
+			      gpa_t gpa)
+{
+	struct kvm_memslots *slots = kvm_memslots(kvm);
+	int offset = offset_in_page(gpa);
+	gfn_t gfn = gpa >> PAGE_SHIFT;
+
+	ghc->gpa = gpa;
+	ghc->generation = slots->generation;
+	ghc->memslot = __gfn_to_memslot(slots, gfn);
+	ghc->hva = gfn_to_hva_many(ghc->memslot, gfn, NULL);
+	if (!kvm_is_error_hva(ghc->hva))
+		ghc->hva += offset;
+	else
+		return -EFAULT;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(kvm_gfn_to_hva_cache_init);
+
+int kvm_write_guest_cached(struct kvm *kvm, struct gfn_to_hva_cache *ghc,
+			   void *data, unsigned long len)
+{
+	struct kvm_memslots *slots = kvm_memslots(kvm);
+	int r;
+
+	if (slots->generation != ghc->generation)
+		kvm_gfn_to_hva_cache_init(kvm, ghc, ghc->gpa);
+
+	if (kvm_is_error_hva(ghc->hva))
+		return -EFAULT;
+
+	r = copy_to_user((void __user *)ghc->hva, data, len);
+	if (r)
+		return -EFAULT;
+	mark_page_dirty_in_slot(kvm, ghc->memslot, ghc->gpa >> PAGE_SHIFT);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(kvm_write_guest_cached);
+
 int kvm_clear_guest_page(struct kvm *kvm, gfn_t gfn, int offset, int len)
 {
-	return kvm_write_guest_page(kvm, gfn, empty_zero_page, offset, len);
+	return kvm_write_guest_page(kvm, gfn, (const void *) empty_zero_page,
+				    offset, len);
 }
 EXPORT_SYMBOL_GPL(kvm_clear_guest_page);
 
@@ -1655,22 +1440,22 @@ int kvm_clear_guest(struct kvm *kvm, gpa_t gpa, unsigned long len)
 }
 EXPORT_SYMBOL_GPL(kvm_clear_guest);
 
+void mark_page_dirty_in_slot(struct kvm *kvm, struct kvm_memory_slot *memslot,
+			     gfn_t gfn)
+{
+	if (memslot && memslot->dirty_bitmap) {
+		unsigned long rel_gfn = gfn - memslot->base_gfn;
+
+		__set_bit_le(rel_gfn, memslot->dirty_bitmap);
+	}
+}
+
 void mark_page_dirty(struct kvm *kvm, gfn_t gfn)
 {
 	struct kvm_memory_slot *memslot;
 
-	gfn = unalias_gfn(kvm, gfn);
-	memslot = gfn_to_memslot_unaliased(kvm, gfn);
-	if (memslot && memslot->dirty_bitmap) {
-		unsigned long rel_gfn = gfn - memslot->base_gfn;
-		unsigned long *p = memslot->dirty_bitmap +
-					rel_gfn / BITS_PER_LONG;
-		int offset = rel_gfn % BITS_PER_LONG;
-
-		/* avoid RMW */
-		if (!test_bit(offset, p))
-			set_bit(offset, p);
-	}
+	memslot = gfn_to_memslot(kvm, gfn);
+	mark_page_dirty_in_slot(kvm, memslot, gfn);
 }
 
 /*
@@ -1684,7 +1469,7 @@ void kvm_vcpu_block(struct kvm_vcpu *vcpu)
 		prepare_to_wait(&vcpu->wq, &wait, TASK_INTERRUPTIBLE);
 
 		if (kvm_arch_vcpu_runnable(vcpu)) {
-			set_bit(KVM_REQ_UNHALT, &vcpu->requests);
+			kvm_make_request(KVM_REQ_UNHALT, vcpu);
 			break;
 		}
 		if (kvm_cpu_has_pending_timer(vcpu))
@@ -1692,9 +1477,7 @@ void kvm_vcpu_block(struct kvm_vcpu *vcpu)
 		if (signal_pending(current))
 			break;
 
-		vcpu_put(vcpu);
 		schedule();
-		vcpu_load(vcpu);
 	}
 
 	finish_wait(&vcpu->wq, &wait);
@@ -1707,6 +1490,58 @@ void kvm_resched(struct kvm_vcpu *vcpu)
 	cond_resched();
 }
 EXPORT_SYMBOL_GPL(kvm_resched);
+
+void kvm_vcpu_on_spin(struct kvm_vcpu *me)
+{
+	struct kvm *kvm = me->kvm;
+	struct kvm_vcpu *vcpu;
+	int last_boosted_vcpu = me->kvm->last_boosted_vcpu;
+	int yielded = 0;
+	int pass;
+	int i;
+
+	/*
+	 * We boost the priority of a VCPU that is runnable but not
+	 * currently running, because it got preempted by something
+	 * else and called schedule in __vcpu_run.  Hopefully that
+	 * VCPU is holding the lock that we need and will release it.
+	 * We approximate round-robin by starting at the last boosted VCPU.
+	 */
+	for (pass = 0; pass < 2 && !yielded; pass++) {
+		kvm_for_each_vcpu(i, vcpu, kvm) {
+			struct task_struct *task = NULL;
+			struct pid *pid;
+			if (!pass && i < last_boosted_vcpu) {
+				i = last_boosted_vcpu;
+				continue;
+			} else if (pass && i > last_boosted_vcpu)
+				break;
+			if (vcpu == me)
+				continue;
+			if (waitqueue_active(&vcpu->wq))
+				continue;
+			rcu_read_lock();
+			pid = rcu_dereference(vcpu->pid);
+			if (pid)
+				task = get_pid_task(vcpu->pid, PIDTYPE_PID);
+			rcu_read_unlock();
+			if (!task)
+				continue;
+			if (task->flags & PF_VCPU) {
+				put_task_struct(task);
+				continue;
+			}
+			if (yield_to(task, 1)) {
+				put_task_struct(task);
+				kvm->last_boosted_vcpu = i;
+				yielded = 1;
+				break;
+			}
+			put_task_struct(task);
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(kvm_vcpu_on_spin);
 
 static int kvm_vcpu_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
@@ -1753,6 +1588,7 @@ static struct file_operations kvm_vcpu_fops = {
 	.unlocked_ioctl = kvm_vcpu_ioctl,
 	.compat_ioctl   = kvm_vcpu_ioctl,
 	.mmap           = kvm_vcpu_mmap,
+	.llseek		= noop_llseek,
 };
 
 /*
@@ -1760,7 +1596,7 @@ static struct file_operations kvm_vcpu_fops = {
  */
 static int create_vcpu_fd(struct kvm_vcpu *vcpu)
 {
-	return anon_inode_getfd("kvm-vcpu", &kvm_vcpu_fops, vcpu, 0);
+	return anon_inode_getfd("kvm-vcpu", &kvm_vcpu_fops, vcpu, O_RDWR);
 }
 
 /*
@@ -1831,88 +1667,6 @@ static int kvm_vcpu_ioctl_set_sigmask(struct kvm_vcpu *vcpu, sigset_t *sigset)
 	return 0;
 }
 
-#ifdef __KVM_HAVE_MSIX
-static int kvm_vm_ioctl_set_msix_nr(struct kvm *kvm,
-				    struct kvm_assigned_msix_nr *entry_nr)
-{
-	int r = 0;
-	struct kvm_assigned_dev_kernel *adev;
-
-	mutex_lock(&kvm->lock);
-
-	adev = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      entry_nr->assigned_dev_id);
-	if (!adev) {
-		r = -EINVAL;
-		goto msix_nr_out;
-	}
-
-	if (adev->entries_nr == 0) {
-		adev->entries_nr = entry_nr->entry_nr;
-		if (adev->entries_nr == 0 ||
-		    adev->entries_nr >= KVM_MAX_MSIX_PER_DEV) {
-			r = -EINVAL;
-			goto msix_nr_out;
-		}
-
-		adev->host_msix_entries = kzalloc(sizeof(struct msix_entry) *
-						entry_nr->entry_nr,
-						GFP_KERNEL);
-		if (!adev->host_msix_entries) {
-			r = -ENOMEM;
-			goto msix_nr_out;
-		}
-		adev->guest_msix_entries = kzalloc(
-				sizeof(struct kvm_guest_msix_entry) *
-				entry_nr->entry_nr, GFP_KERNEL);
-		if (!adev->guest_msix_entries) {
-			kfree(adev->host_msix_entries);
-			r = -ENOMEM;
-			goto msix_nr_out;
-		}
-	} else /* Not allowed set MSI-X number twice */
-		r = -EINVAL;
-msix_nr_out:
-	mutex_unlock(&kvm->lock);
-	return r;
-}
-
-static int kvm_vm_ioctl_set_msix_entry(struct kvm *kvm,
-				       struct kvm_assigned_msix_entry *entry)
-{
-	int r = 0, i;
-	struct kvm_assigned_dev_kernel *adev;
-
-	mutex_lock(&kvm->lock);
-
-	adev = kvm_find_assigned_dev(&kvm->arch.assigned_dev_head,
-				      entry->assigned_dev_id);
-
-	if (!adev) {
-		r = -EINVAL;
-		goto msix_entry_out;
-	}
-
-	for (i = 0; i < adev->entries_nr; i++)
-		if (adev->guest_msix_entries[i].vector == 0 ||
-		    adev->guest_msix_entries[i].entry == entry->entry) {
-			adev->guest_msix_entries[i].entry = entry->entry;
-			adev->guest_msix_entries[i].vector = entry->gsi;
-			adev->host_msix_entries[i].entry = entry->entry;
-			break;
-		}
-	if (i == adev->entries_nr) {
-		r = -ENOSPC;
-		goto msix_entry_out;
-	}
-
-msix_entry_out:
-	mutex_unlock(&kvm->lock);
-
-	return r;
-}
-#endif
-
 static long kvm_vcpu_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
@@ -1924,12 +1678,25 @@ static long kvm_vcpu_ioctl(struct file *filp,
 
 	if (vcpu->kvm->mm != current->mm)
 		return -EIO;
+
+#if defined(CONFIG_S390) || defined(CONFIG_PPC)
+	/*
+	 * Special cases: vcpu ioctls that are asynchronous to vcpu execution,
+	 * so vcpu_load() would break it.
+	 */
+	if (ioctl == KVM_S390_INTERRUPT || ioctl == KVM_INTERRUPT)
+		return kvm_arch_vcpu_ioctl(filp, ioctl, arg);
+#endif
+
+
+	vcpu_load(vcpu);
 	switch (ioctl) {
 	case KVM_RUN:
 		r = -EINVAL;
 		if (arg)
 			goto out;
 		r = kvm_arch_vcpu_ioctl_run(vcpu, vcpu->run);
+		trace_kvm_userspace_exit(vcpu->run->exit_reason, r);
 		break;
 	case KVM_GET_REGS: {
 		struct kvm_regs *kvm_regs;
@@ -2066,7 +1833,7 @@ out_free2:
 				goto out;
 			p = &sigset;
 		}
-		r = kvm_vcpu_ioctl_set_sigmask(vcpu, &sigset);
+		r = kvm_vcpu_ioctl_set_sigmask(vcpu, p);
 		break;
 	}
 	case KVM_GET_FPU: {
@@ -2101,6 +1868,7 @@ out_free2:
 		r = kvm_arch_vcpu_ioctl(filp, ioctl, arg);
 	}
 out:
+	vcpu_put(vcpu);
 	kfree(fpu);
 	kfree(kvm_sregs);
 	return r;
@@ -2151,7 +1919,6 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = -EFAULT;
 		if (copy_from_user(&zone, argp, sizeof zone))
 			goto out;
-		r = -ENXIO;
 		r = kvm_vm_ioctl_register_coalesced_mmio(kvm, &zone);
 		if (r)
 			goto out;
@@ -2163,117 +1930,10 @@ static long kvm_vm_ioctl(struct file *filp,
 		r = -EFAULT;
 		if (copy_from_user(&zone, argp, sizeof zone))
 			goto out;
-		r = -ENXIO;
 		r = kvm_vm_ioctl_unregister_coalesced_mmio(kvm, &zone);
 		if (r)
 			goto out;
 		r = 0;
-		break;
-	}
-#endif
-#ifdef KVM_CAP_DEVICE_ASSIGNMENT
-	case KVM_ASSIGN_PCI_DEVICE: {
-		struct kvm_assigned_pci_dev assigned_dev;
-
-		r = -EFAULT;
-		if (copy_from_user(&assigned_dev, argp, sizeof assigned_dev))
-			goto out;
-		r = kvm_vm_ioctl_assign_device(kvm, &assigned_dev);
-		if (r)
-			goto out;
-		break;
-	}
-	case KVM_ASSIGN_IRQ: {
-		r = -EOPNOTSUPP;
-		break;
-	}
-#ifdef KVM_CAP_ASSIGN_DEV_IRQ
-	case KVM_ASSIGN_DEV_IRQ: {
-		struct kvm_assigned_irq assigned_irq;
-
-		r = -EFAULT;
-		if (copy_from_user(&assigned_irq, argp, sizeof assigned_irq))
-			goto out;
-		r = kvm_vm_ioctl_assign_irq(kvm, &assigned_irq);
-		if (r)
-			goto out;
-		break;
-	}
-	case KVM_DEASSIGN_DEV_IRQ: {
-		struct kvm_assigned_irq assigned_irq;
-
-		r = -EFAULT;
-		if (copy_from_user(&assigned_irq, argp, sizeof assigned_irq))
-			goto out;
-		r = kvm_vm_ioctl_deassign_dev_irq(kvm, &assigned_irq);
-		if (r)
-			goto out;
-		break;
-	}
-#endif
-#endif
-#ifdef KVM_CAP_DEVICE_DEASSIGNMENT
-	case KVM_DEASSIGN_PCI_DEVICE: {
-		struct kvm_assigned_pci_dev assigned_dev;
-
-		r = -EFAULT;
-		if (copy_from_user(&assigned_dev, argp, sizeof assigned_dev))
-			goto out;
-		r = kvm_vm_ioctl_deassign_device(kvm, &assigned_dev);
-		if (r)
-			goto out;
-		break;
-	}
-#endif
-#ifdef KVM_CAP_IRQ_ROUTING
-	case KVM_SET_GSI_ROUTING: {
-		struct kvm_irq_routing routing;
-		struct kvm_irq_routing __user *urouting;
-		struct kvm_irq_routing_entry *entries;
-
-		r = -EFAULT;
-		if (copy_from_user(&routing, argp, sizeof(routing)))
-			goto out;
-		r = -EINVAL;
-		if (routing.nr >= KVM_MAX_IRQ_ROUTES)
-			goto out;
-		if (routing.flags)
-			goto out;
-		r = -ENOMEM;
-		entries = vmalloc(routing.nr * sizeof(*entries));
-		if (!entries)
-			goto out;
-		r = -EFAULT;
-		urouting = argp;
-		if (copy_from_user(entries, urouting->entries,
-				   routing.nr * sizeof(*entries)))
-			goto out_free_irq_routing;
-		r = kvm_set_irq_routing(kvm, entries, routing.nr,
-					routing.flags);
-	out_free_irq_routing:
-		vfree(entries);
-		break;
-	}
-#endif /* KVM_CAP_IRQ_ROUTING */
-#ifdef __KVM_HAVE_MSIX
-	case KVM_ASSIGN_SET_MSIX_NR: {
-		struct kvm_assigned_msix_nr entry_nr;
-		r = -EFAULT;
-		if (copy_from_user(&entry_nr, argp, sizeof entry_nr))
-			goto out;
-		r = kvm_vm_ioctl_set_msix_nr(kvm, &entry_nr);
-		if (r)
-			goto out;
-		break;
-	}
-	case KVM_ASSIGN_SET_MSIX_ENTRY: {
-		struct kvm_assigned_msix_entry entry;
-		r = -EFAULT;
-		if (copy_from_user(&entry, argp, sizeof entry))
-			goto out;
-		r = kvm_vm_ioctl_set_msix_entry(kvm, &entry);
-		if (r)
-			goto out;
 		break;
 	}
 #endif
@@ -2308,10 +1968,58 @@ static long kvm_vm_ioctl(struct file *filp,
 #endif
 	default:
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
+		if (r == -ENOTTY)
+			r = kvm_vm_ioctl_assigned_device(kvm, ioctl, arg);
 	}
 out:
 	return r;
 }
+
+#ifdef CONFIG_COMPAT
+struct compat_kvm_dirty_log {
+	__u32 slot;
+	__u32 padding1;
+	union {
+		compat_uptr_t dirty_bitmap; /* one bit per page */
+		__u64 padding2;
+	};
+};
+
+static long kvm_vm_compat_ioctl(struct file *filp,
+			   unsigned int ioctl, unsigned long arg)
+{
+	struct kvm *kvm = filp->private_data;
+	int r;
+
+	if (kvm->mm != current->mm)
+		return -EIO;
+	switch (ioctl) {
+	case KVM_GET_DIRTY_LOG: {
+		struct compat_kvm_dirty_log compat_log;
+		struct kvm_dirty_log log;
+
+		r = -EFAULT;
+		if (copy_from_user(&compat_log, (void __user *)arg,
+				   sizeof(compat_log)))
+			goto out;
+		log.slot	 = compat_log.slot;
+		log.padding1	 = compat_log.padding1;
+		log.padding2	 = compat_log.padding2;
+		log.dirty_bitmap = compat_ptr(compat_log.dirty_bitmap);
+
+		r = kvm_vm_ioctl_get_dirty_log(kvm, &log);
+		if (r)
+			goto out;
+		break;
+	}
+	default:
+		r = kvm_vm_ioctl(filp, ioctl, arg);
+	}
+
+out:
+	return r;
+}
+#endif
 
 static int kvm_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
@@ -2347,23 +2055,33 @@ static int kvm_vm_mmap(struct file *file, struct vm_area_struct *vma)
 static struct file_operations kvm_vm_fops = {
 	.release        = kvm_vm_release,
 	.unlocked_ioctl = kvm_vm_ioctl,
-	.compat_ioctl   = kvm_vm_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl   = kvm_vm_compat_ioctl,
+#endif
 	.mmap           = kvm_vm_mmap,
+	.llseek		= noop_llseek,
 };
 
 static int kvm_dev_ioctl_create_vm(void)
 {
-	int fd;
+	int r;
 	struct kvm *kvm;
 
 	kvm = kvm_create_vm();
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
-	fd = anon_inode_getfd("kvm-vm", &kvm_vm_fops, kvm, 0);
-	if (fd < 0)
+#ifdef KVM_COALESCED_MMIO_PAGE_OFFSET
+	r = kvm_coalesced_mmio_init(kvm);
+	if (r < 0) {
+		kvm_put_kvm(kvm);
+		return r;
+	}
+#endif
+	r = anon_inode_getfd("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
+	if (r < 0)
 		kvm_put_kvm(kvm);
 
-	return fd;
+	return r;
 }
 
 static long kvm_dev_ioctl_check_extension_generic(long arg)
@@ -2375,6 +2093,7 @@ static long kvm_dev_ioctl_check_extension_generic(long arg)
 #ifdef CONFIG_KVM_APIC_ARCHITECTURE
 	case KVM_CAP_SET_BOOT_CPU_ID:
 #endif
+	case KVM_CAP_INTERNAL_ERROR_DATA:
 		return 1;
 #ifdef CONFIG_HAVE_KVM_IRQCHIP
 	case KVM_CAP_IRQ_ROUTING:
@@ -2434,6 +2153,7 @@ out:
 static struct file_operations kvm_chardev_ops = {
 	.unlocked_ioctl = kvm_dev_ioctl,
 	.compat_ioctl   = kvm_dev_ioctl,
+	.llseek		= noop_llseek,
 };
 
 static struct miscdevice kvm_dev = {
@@ -2442,17 +2162,34 @@ static struct miscdevice kvm_dev = {
 	&kvm_chardev_ops,
 };
 
-static void hardware_enable(void *junk)
+static void hardware_enable_nolock(void *junk)
 {
 	int cpu = raw_smp_processor_id();
+	int r;
 
 	if (cpumask_test_cpu(cpu, cpus_hardware_enabled))
 		return;
+
 	cpumask_set_cpu(cpu, cpus_hardware_enabled);
-	kvm_arch_hardware_enable(NULL);
+
+	r = kvm_arch_hardware_enable(NULL);
+
+	if (r) {
+		cpumask_clear_cpu(cpu, cpus_hardware_enabled);
+		atomic_inc(&hardware_enable_failed);
+		printk(KERN_INFO "kvm: enabling virtualization on "
+				 "CPU%d failed\n", cpu);
+	}
 }
 
-static void hardware_disable(void *junk)
+static void hardware_enable(void *junk)
+{
+	raw_spin_lock(&kvm_lock);
+	hardware_enable_nolock(junk);
+	raw_spin_unlock(&kvm_lock);
+}
+
+static void hardware_disable_nolock(void *junk)
 {
 	int cpu = raw_smp_processor_id();
 
@@ -2462,10 +2199,58 @@ static void hardware_disable(void *junk)
 	kvm_arch_hardware_disable(NULL);
 }
 
+static void hardware_disable(void *junk)
+{
+	raw_spin_lock(&kvm_lock);
+	hardware_disable_nolock(junk);
+	raw_spin_unlock(&kvm_lock);
+}
+
+static void hardware_disable_all_nolock(void)
+{
+	BUG_ON(!kvm_usage_count);
+
+	kvm_usage_count--;
+	if (!kvm_usage_count)
+		on_each_cpu(hardware_disable_nolock, NULL, 1);
+}
+
+static void hardware_disable_all(void)
+{
+	raw_spin_lock(&kvm_lock);
+	hardware_disable_all_nolock();
+	raw_spin_unlock(&kvm_lock);
+}
+
+static int hardware_enable_all(void)
+{
+	int r = 0;
+
+	raw_spin_lock(&kvm_lock);
+
+	kvm_usage_count++;
+	if (kvm_usage_count == 1) {
+		atomic_set(&hardware_enable_failed, 0);
+		on_each_cpu(hardware_enable_nolock, NULL, 1);
+
+		if (atomic_read(&hardware_enable_failed)) {
+			hardware_disable_all_nolock();
+			r = -EBUSY;
+		}
+	}
+
+	raw_spin_unlock(&kvm_lock);
+
+	return r;
+}
+
 static int kvm_cpu_hotplug(struct notifier_block *notifier, unsigned long val,
 			   void *v)
 {
 	int cpu = (long)v;
+
+	if (!kvm_usage_count)
+		return NOTIFY_OK;
 
 	val &= ~CPU_TASKS_FROZEN;
 	switch (val) {
@@ -2474,31 +2259,22 @@ static int kvm_cpu_hotplug(struct notifier_block *notifier, unsigned long val,
 		       cpu);
 		hardware_disable(NULL);
 		break;
-	case CPU_UP_CANCELED:
-		printk(KERN_INFO "kvm: disabling virtualization on CPU%d\n",
-		       cpu);
-		smp_call_function_single(cpu, hardware_disable, NULL, 1);
-		break;
-	case CPU_ONLINE:
+	case CPU_STARTING:
 		printk(KERN_INFO "kvm: enabling virtualization on CPU%d\n",
 		       cpu);
-		smp_call_function_single(cpu, hardware_enable, NULL, 1);
+		hardware_enable(NULL);
 		break;
 	}
 	return NOTIFY_OK;
 }
 
 
-asmlinkage void kvm_handle_fault_on_reboot(void)
+asmlinkage void kvm_spurious_fault(void)
 {
-	if (kvm_rebooting)
-		/* spin while reset goes on */
-		while (true)
-			;
 	/* Fault while not rebooting.  We want the trace. */
 	BUG();
 }
-EXPORT_SYMBOL_GPL(kvm_handle_fault_on_reboot);
+EXPORT_SYMBOL_GPL(kvm_spurious_fault);
 
 static int kvm_reboot(struct notifier_block *notifier, unsigned long val,
 		      void *v)
@@ -2511,7 +2287,7 @@ static int kvm_reboot(struct notifier_block *notifier, unsigned long val,
 	 */
 	printk(KERN_INFO "kvm: exiting hardware virtualization\n");
 	kvm_rebooting = true;
-	on_each_cpu(hardware_disable, NULL, 1);
+	on_each_cpu(hardware_disable_nolock, NULL, 1);
 	return NOTIFY_OK;
 }
 
@@ -2520,12 +2296,7 @@ static struct notifier_block kvm_reboot_notifier = {
 	.priority = 0,
 };
 
-void kvm_io_bus_init(struct kvm_io_bus *bus)
-{
-	memset(bus, 0, sizeof(*bus));
-}
-
-void kvm_io_bus_destroy(struct kvm_io_bus *bus)
+static void kvm_io_bus_destroy(struct kvm_io_bus *bus)
 {
 	int i;
 
@@ -2534,13 +2305,17 @@ void kvm_io_bus_destroy(struct kvm_io_bus *bus)
 
 		kvm_iodevice_destructor(pos);
 	}
+	kfree(bus);
 }
 
 /* kvm_io_bus_write - called under kvm->slots_lock */
-int kvm_io_bus_write(struct kvm_io_bus *bus, gpa_t addr,
+int kvm_io_bus_write(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 		     int len, const void *val)
 {
 	int i;
+	struct kvm_io_bus *bus;
+
+	bus = srcu_dereference(kvm->buses[bus_idx], &kvm->srcu);
 	for (i = 0; i < bus->dev_count; i++)
 		if (!kvm_iodevice_write(bus->devs[i], addr, len, val))
 			return 0;
@@ -2548,64 +2323,76 @@ int kvm_io_bus_write(struct kvm_io_bus *bus, gpa_t addr,
 }
 
 /* kvm_io_bus_read - called under kvm->slots_lock */
-int kvm_io_bus_read(struct kvm_io_bus *bus, gpa_t addr, int len, void *val)
+int kvm_io_bus_read(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
+		    int len, void *val)
 {
 	int i;
+	struct kvm_io_bus *bus;
+
+	bus = srcu_dereference(kvm->buses[bus_idx], &kvm->srcu);
 	for (i = 0; i < bus->dev_count; i++)
 		if (!kvm_iodevice_read(bus->devs[i], addr, len, val))
 			return 0;
 	return -EOPNOTSUPP;
 }
 
-int kvm_io_bus_register_dev(struct kvm *kvm, struct kvm_io_bus *bus,
-			     struct kvm_io_device *dev)
+/* Caller must hold slots_lock. */
+int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx,
+			    struct kvm_io_device *dev)
 {
-	int ret;
+	struct kvm_io_bus *new_bus, *bus;
 
-	down_write(&kvm->slots_lock);
-	ret = __kvm_io_bus_register_dev(bus, dev);
-	up_write(&kvm->slots_lock);
-
-	return ret;
-}
-
-/* An unlocked version. Caller must have write lock on slots_lock. */
-int __kvm_io_bus_register_dev(struct kvm_io_bus *bus,
-			      struct kvm_io_device *dev)
-{
+	bus = kvm->buses[bus_idx];
 	if (bus->dev_count > NR_IOBUS_DEVS-1)
 		return -ENOSPC;
 
-	bus->devs[bus->dev_count++] = dev;
+	new_bus = kzalloc(sizeof(struct kvm_io_bus), GFP_KERNEL);
+	if (!new_bus)
+		return -ENOMEM;
+	memcpy(new_bus, bus, sizeof(struct kvm_io_bus));
+	new_bus->devs[new_bus->dev_count++] = dev;
+	rcu_assign_pointer(kvm->buses[bus_idx], new_bus);
+	synchronize_srcu_expedited(&kvm->srcu);
+	kfree(bus);
 
 	return 0;
 }
 
-void kvm_io_bus_unregister_dev(struct kvm *kvm,
-			       struct kvm_io_bus *bus,
-			       struct kvm_io_device *dev)
+/* Caller must hold slots_lock. */
+int kvm_io_bus_unregister_dev(struct kvm *kvm, enum kvm_bus bus_idx,
+			      struct kvm_io_device *dev)
 {
-	down_write(&kvm->slots_lock);
-	__kvm_io_bus_unregister_dev(bus, dev);
-	up_write(&kvm->slots_lock);
-}
+	int i, r;
+	struct kvm_io_bus *new_bus, *bus;
 
-/* An unlocked version. Caller must have write lock on slots_lock. */
-void __kvm_io_bus_unregister_dev(struct kvm_io_bus *bus,
-				 struct kvm_io_device *dev)
-{
-	int i;
+	new_bus = kzalloc(sizeof(struct kvm_io_bus), GFP_KERNEL);
+	if (!new_bus)
+		return -ENOMEM;
 
-	for (i = 0; i < bus->dev_count; i++)
-		if (bus->devs[i] == dev) {
-			bus->devs[i] = bus->devs[--bus->dev_count];
+	bus = kvm->buses[bus_idx];
+	memcpy(new_bus, bus, sizeof(struct kvm_io_bus));
+
+	r = -ENOENT;
+	for (i = 0; i < new_bus->dev_count; i++)
+		if (new_bus->devs[i] == dev) {
+			r = 0;
+			new_bus->devs[i] = new_bus->devs[--new_bus->dev_count];
 			break;
 		}
+
+	if (r) {
+		kfree(new_bus);
+		return r;
+	}
+
+	rcu_assign_pointer(kvm->buses[bus_idx], new_bus);
+	synchronize_srcu_expedited(&kvm->srcu);
+	kfree(bus);
+	return r;
 }
 
 static struct notifier_block kvm_cpu_notifier = {
 	.notifier_call = kvm_cpu_hotplug,
-	.priority = 20, /* must be > scheduler priority */
 };
 
 static int vm_stat_get(void *_offset, u64 *val)
@@ -2614,10 +2401,10 @@ static int vm_stat_get(void *_offset, u64 *val)
 	struct kvm *kvm;
 
 	*val = 0;
-	spin_lock(&kvm_lock);
+	raw_spin_lock(&kvm_lock);
 	list_for_each_entry(kvm, &vm_list, vm_list)
 		*val += *(u32 *)((void *)kvm + offset);
-	spin_unlock(&kvm_lock);
+	raw_spin_unlock(&kvm_lock);
 	return 0;
 }
 
@@ -2631,12 +2418,12 @@ static int vcpu_stat_get(void *_offset, u64 *val)
 	int i;
 
 	*val = 0;
-	spin_lock(&kvm_lock);
+	raw_spin_lock(&kvm_lock);
 	list_for_each_entry(kvm, &vm_list, vm_list)
 		kvm_for_each_vcpu(i, vcpu, kvm)
 			*val += *(u32 *)((void *)vcpu + offset);
 
-	spin_unlock(&kvm_lock);
+	raw_spin_unlock(&kvm_lock);
 	return 0;
 }
 
@@ -2667,27 +2454,24 @@ static void kvm_exit_debug(void)
 	debugfs_remove(kvm_debugfs_dir);
 }
 
-static int kvm_suspend(struct sys_device *dev, pm_message_t state)
+static int kvm_suspend(void)
 {
-	hardware_disable(NULL);
+	if (kvm_usage_count)
+		hardware_disable_nolock(NULL);
 	return 0;
 }
 
-static int kvm_resume(struct sys_device *dev)
+static void kvm_resume(void)
 {
-	hardware_enable(NULL);
-	return 0;
+	if (kvm_usage_count) {
+		WARN_ON(raw_spin_is_locked(&kvm_lock));
+		hardware_enable_nolock(NULL);
+	}
 }
 
-static struct sysdev_class kvm_sysdev_class = {
-	.name = "kvm",
+static struct syscore_ops kvm_syscore_ops = {
 	.suspend = kvm_suspend,
 	.resume = kvm_resume,
-};
-
-static struct sys_device kvm_sysdev = {
-	.id = 0,
-	.cls = &kvm_sysdev_class,
 };
 
 struct page *bad_page;
@@ -2714,7 +2498,7 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 	kvm_arch_vcpu_put(vcpu);
 }
 
-int kvm_init(void *opaque, unsigned int vcpu_size,
+int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 		  struct module *module)
 {
 	int r;
@@ -2733,6 +2517,24 @@ int kvm_init(void *opaque, unsigned int vcpu_size,
 
 	bad_pfn = page_to_pfn(bad_page);
 
+	hwpoison_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	if (hwpoison_page == NULL) {
+		r = -ENOMEM;
+		goto out_free_0;
+	}
+
+	hwpoison_pfn = page_to_pfn(hwpoison_page);
+
+	fault_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
+
+	if (fault_page == NULL) {
+		r = -ENOMEM;
+		goto out_free_0;
+	}
+
+	fault_pfn = page_to_pfn(fault_page);
+
 	if (!zalloc_cpumask_var(&cpus_hardware_enabled, GFP_KERNEL)) {
 		r = -ENOMEM;
 		goto out_free_0;
@@ -2750,28 +2552,24 @@ int kvm_init(void *opaque, unsigned int vcpu_size,
 			goto out_free_1;
 	}
 
-	on_each_cpu(hardware_enable, NULL, 1);
 	r = register_cpu_notifier(&kvm_cpu_notifier);
 	if (r)
 		goto out_free_2;
 	register_reboot_notifier(&kvm_reboot_notifier);
 
-	r = sysdev_class_register(&kvm_sysdev_class);
-	if (r)
-		goto out_free_3;
-
-	r = sysdev_register(&kvm_sysdev);
-	if (r)
-		goto out_free_4;
-
 	/* A kmem cache lets us meet the alignment requirements of fx_save. */
-	kvm_vcpu_cache = kmem_cache_create("kvm_vcpu", vcpu_size,
-					   __alignof__(struct kvm_vcpu),
+	if (!vcpu_align)
+		vcpu_align = __alignof__(struct kvm_vcpu);
+	kvm_vcpu_cache = kmem_cache_create("kvm_vcpu", vcpu_size, vcpu_align,
 					   0, NULL);
 	if (!kvm_vcpu_cache) {
 		r = -ENOMEM;
-		goto out_free_5;
+		goto out_free_3;
 	}
+
+	r = kvm_async_pf_init();
+	if (r)
+		goto out_free;
 
 	kvm_chardev_ops.owner = module;
 	kvm_vm_fops.owner = module;
@@ -2780,8 +2578,10 @@ int kvm_init(void *opaque, unsigned int vcpu_size,
 	r = misc_register(&kvm_dev);
 	if (r) {
 		printk(KERN_ERR "kvm: misc device register failed\n");
-		goto out_free;
+		goto out_unreg;
 	}
+
+	register_syscore_ops(&kvm_syscore_ops);
 
 	kvm_preempt_ops.sched_in = kvm_sched_in;
 	kvm_preempt_ops.sched_out = kvm_sched_out;
@@ -2790,22 +2590,23 @@ int kvm_init(void *opaque, unsigned int vcpu_size,
 
 	return 0;
 
+out_unreg:
+	kvm_async_pf_deinit();
 out_free:
 	kmem_cache_destroy(kvm_vcpu_cache);
-out_free_5:
-	sysdev_unregister(&kvm_sysdev);
-out_free_4:
-	sysdev_class_unregister(&kvm_sysdev_class);
 out_free_3:
 	unregister_reboot_notifier(&kvm_reboot_notifier);
 	unregister_cpu_notifier(&kvm_cpu_notifier);
 out_free_2:
-	on_each_cpu(hardware_disable, NULL, 1);
 out_free_1:
 	kvm_arch_hardware_unsetup();
 out_free_0a:
 	free_cpumask_var(cpus_hardware_enabled);
 out_free_0:
+	if (fault_page)
+		__free_page(fault_page);
+	if (hwpoison_page)
+		__free_page(hwpoison_page);
 	__free_page(bad_page);
 out:
 	kvm_arch_exit();
@@ -2816,18 +2617,18 @@ EXPORT_SYMBOL_GPL(kvm_init);
 
 void kvm_exit(void)
 {
-	tracepoint_synchronize_unregister();
 	kvm_exit_debug();
 	misc_deregister(&kvm_dev);
 	kmem_cache_destroy(kvm_vcpu_cache);
-	sysdev_unregister(&kvm_sysdev);
-	sysdev_class_unregister(&kvm_sysdev_class);
+	kvm_async_pf_deinit();
+	unregister_syscore_ops(&kvm_syscore_ops);
 	unregister_reboot_notifier(&kvm_reboot_notifier);
 	unregister_cpu_notifier(&kvm_cpu_notifier);
-	on_each_cpu(hardware_disable, NULL, 1);
+	on_each_cpu(hardware_disable_nolock, NULL, 1);
 	kvm_arch_hardware_unsetup();
 	kvm_arch_exit();
 	free_cpumask_var(cpus_hardware_enabled);
+	__free_page(hwpoison_page);
 	__free_page(bad_page);
 }
 EXPORT_SYMBOL_GPL(kvm_exit);

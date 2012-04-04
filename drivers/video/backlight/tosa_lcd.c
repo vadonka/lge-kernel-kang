@@ -15,6 +15,7 @@
 #include <linux/device.h>
 #include <linux/spi/spi.h>
 #include <linux/i2c.h>
+#include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/delay.h>
 #include <linux/lcd.h>
@@ -270,7 +271,7 @@ static int tosa_lcd_resume(struct spi_device *spi)
 }
 #else
 #define tosa_lcd_suspend	NULL
-#define tosa_lcd_reume NULL
+#define tosa_lcd_resume NULL
 #endif
 
 static struct spi_driver tosa_lcd_driver = {

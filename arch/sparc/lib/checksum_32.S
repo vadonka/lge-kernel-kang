@@ -289,10 +289,16 @@ cc_end_cruft:
 
 	/* Also, handle the alignment code out of band. */
 cc_dword_align:
-	cmp	%g1, 6
-	bl,a	ccte
+	cmp	%g1, 16
+	bge	1f
+	 srl	%g1, 1, %o3
+2:	cmp	%o3, 0
+	be,a	ccte
 	 andcc	%g1, 0xf, %o3
-	andcc	%o0, 0x1, %g0
+	andcc	%o3, %o0, %g0	! Check %o0 only (%o1 has the same last 2 bits)
+	be,a	2b
+	 srl	%o3, 1, %o3
+1:	andcc	%o0, 0x1, %g0
 	bne	ccslow
 	 andcc	%o0, 0x2, %g0
 	be	1f
@@ -560,7 +566,7 @@ __csum_partial_copy_end:
 	 mov	%i0, %o1
 	mov	%i1, %o0
 5:
-	call	__memcpy
+	call	memcpy
 	 mov	%i2, %o2
 	tst	%o0
 	bne,a	2f

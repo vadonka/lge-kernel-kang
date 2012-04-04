@@ -21,6 +21,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/slab.h>
 #include <linux/of.h>
 
 #include <asm/pasemi_dma.h>
@@ -378,9 +379,9 @@ void pasemi_dma_free_buf(struct pasemi_dmachan *chan, int size,
 }
 EXPORT_SYMBOL(pasemi_dma_free_buf);
 
-/* pasemi_dma_alloc_flag - Allocate a flag (event) for channel syncronization
+/* pasemi_dma_alloc_flag - Allocate a flag (event) for channel synchronization
  *
- * Allocates a flag for use with channel syncronization (event descriptors).
+ * Allocates a flag for use with channel synchronization (event descriptors).
  * Returns allocated flag (0-63), < 0 on error.
  */
 int pasemi_dma_alloc_flag(void)

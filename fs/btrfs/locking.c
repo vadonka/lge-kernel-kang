@@ -16,7 +16,6 @@
  * Boston, MA 021110-1307, USA.
  */
 #include <linux/sched.h>
-#include <linux/gfp.h>
 #include <linux/pagemap.h>
 #include <linux/spinlock.h>
 #include <linux/page-flags.h>
@@ -183,31 +182,6 @@ sleep:
 
 		finish_wait(&eb->lock_wq, &wait);
 	}
-	return 0;
-}
-
-/*
- * Very quick trylock, this does not spin or schedule.  It returns
- * 1 with the spinlock held if it was able to take the lock, or it
- * returns zero if it was unable to take the lock.
- *
- * After this call, scheduling is not safe without first calling
- * btrfs_set_lock_blocking()
- */
-int btrfs_try_tree_lock(struct extent_buffer *eb)
-{
-	if (spin_trylock(&eb->lock)) {
-		if (test_bit(EXTENT_BUFFER_BLOCKING, &eb->bflags)) {
-			/*
-			 * we've got the spinlock, but the real owner is
-			 * blocking.  Drop the spinlock and return failure
-			 */
-			spin_unlock(&eb->lock);
-			return 0;
-		}
-		return 1;
-	}
-	/* someone else has the spinlock giveup */
 	return 0;
 }
 

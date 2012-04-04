@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/rtc.h>
 #include <linux/bcd.h>
+#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include "nvodm_pmu.h"
 #include <linux/semaphore.h> //ljs
@@ -66,8 +67,8 @@ static int tegra_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 static int tegra_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
-	NvU32 prevTime;		// NvBool NvOdmPmuReadRtc(NvOdmPmuDeviceHandle, NvU32*)
-	unsigned long now;	// int rtc_tm_to_time(struct rtc_time*, unsigned long*)
+	NvU32 prevTime;	
+	unsigned long now;
 	int ret;
 
 	if (hPmu == NULL)
@@ -86,12 +87,12 @@ static int tegra_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	down_interruptible(&drm_mutex);
 	if( now < prevTime )
 	{
-		drm_diffTime = (unsigned long)prevTime - now;
+		drm_diffTime = prevTime - now;
 		drm_sign = 1;
 	}	
 	else
 	{
-		drm_diffTime = now - (unsigned long)prevTime;
+		drm_diffTime = now - prevTime;
 		drm_sign = -1;
 	}
 	

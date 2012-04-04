@@ -32,6 +32,7 @@
 #include <linux/console.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include <linux/i2c.h>
 
 #ifdef CONFIG_TOUCHSCREEN_PANJIT_I2C
@@ -48,6 +49,7 @@
 #endif /* CONFIG_MACH_STAR */
 //20100419  for headset detection [LGE_END]
 
+#include <asm/setup.h>
 #include <mach/iomap.h>
 #include <mach/io.h>
 #include <mach/pinmux.h>
@@ -1410,29 +1412,6 @@ static int __init star_init_android_virtualkeys(void)
 }
 #endif
 
-#ifdef CONFIG_STAR_GYRO_ACCEL
-static struct platform_device tegra_accelerometer_device =
-{
-	.name = "tegra_accelerometer",
-	.id   = -1,
-};
-
-static struct platform_device tegra_gyro_accel_device =
-{
-	.name = "tegra_gyro_accel",
-	.id   = -1,
-};
-#endif
-
-//20100526 , For Compass Driver [start]
-#ifdef CONFIG_STAR_COMPASS
-static struct platform_device star_compass_device =
-{
-	.name = "tegra_compass",
-	.id	  = -1,
-};
-#endif
-
 // 20100917 jay.sim@lge.com, Temp for Sensor Modulazation --
 
 #ifdef CONFIG_TOUCHSCREEN_PANJIT_I2C
@@ -1511,8 +1490,43 @@ static int __init ventana_touch_init_atmel(void)
 }
 #endif
 
-#ifdef CONFIG_INPUT_TEGRA_ODM_ACCEL
-static struct platform_device tegra_accelerometer_device = {
+// 20100927   Synaptics OneTouch support [START]
+#ifdef CONFIG_ONETOUCH_TEGRA_ODM
+static struct platform_device tegra_onetouch_device = {
+	.name = "tegra_onetouch",
+	.id = -1,
+};
+#endif
+// 20100927   Synaptics OneTouch support [END]
+
+
+#ifdef CONFIG_STAR_GYRO_ACCEL
+static struct platform_device tegra_accelerometer_device =
+{
+	.name = "tegra_accelerometer",
+	.id   = -1,
+};
+
+static struct platform_device tegra_gyro_accel_device =
+{
+	.name = "tegra_gyro_accel",
+	.id   = -1,
+};
+#endif
+
+//20100526 , For Compass Driver [start]
+#ifdef CONFIG_STAR_COMPASS
+static struct platform_device star_compass_device =
+{
+	.name = "tegra_compass",
+	.id	  = -1,
+};
+#endif
+
+// 20100917 jay.sim@lge.com, Temp for Sensor Modulazation --
+#ifdef CONFIG_STAR_SENSORS
+static struct platform_device tegra_accelerometer_device =
+{
 	.name = "tegra_accelerometer",
 	.id   = -1,
 };
@@ -1659,7 +1673,7 @@ static struct platform_device star_wm8994_pdevice =
 #define RAM_CONSOLE_RESERVED_SIZE 1
 #endif
 #define CARVEOUT_SIZE 128
-#define STAR_RAM_CONSOLE_BASE 	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
+#define STAR_RAM_CONSOLE_BASE	((512-CONFIG_GPU_MEM_CARVEOUT_SZ-RAM_CONSOLE_RESERVED_SIZE)*SZ_1M)
 #define STAR_RAM_CONSOLE_SIZE	(128*SZ_1K)
 #elif defined (CONFIG_MACH_STAR_REV_F)
 #define STAR_RAM_CONSOLE_BASE 	(383*SZ_1M)
@@ -3066,3 +3080,67 @@ void tegra_board_nvodm_resume(void)
         tegra_pinmux_set_pullupdown(TEGRA_PINGROUP_SDD, TEGRA_PUPD_PULL_UP);
 #endif
 }
+
+void __init tegra_allocate_memory_regions(void)
+{
+#ifdef CONFIG_ANDROID_RAM_CONSOLE
+	struct membank *bank = &meminfo.bank[0];
+
+	pr_info("first bank start=%08llx, size=%5lu kB\n", (long long)bank->start, bank->size >> 10);
+
+	ram_console_resource[0].start = bank->start + bank->size;
+	ram_console_resource[0].end = ram_console_resource[0].start + STAR_RAM_CONSOLE_SIZE - 1;
+
+	pr_info("allocating %05x kB at 0x%08lx for ram_console\n",
+		STAR_RAM_CONSOLE_SIZE >> 10, ram_console_resource[0].start);
+#endif
+}
+
+#if defined(CONFIG_MACH_STAR) && defined(CONFIG_ANDROID_RAM_CONSOLE)
+void *reserved_buffer;
+
+static int __init init_reserved_buffer(void)
+{
+	size_t start;
+
+	start = ram_console_resource[0].end + 1;
+	reserved_buffer = ioremap(start, RAM_RESERVED_SIZE);
+	pr_info("%s: reserved_buffer virtual = 0x%08lx\n", __func__, reserved_buffer);
+	pr_info("%s: reserved_buffer physical= 0x%08lx\n", __func__, start);
+
+	return 0;
+}
+postcore_initcall(init_reserved_buffer);
+
+void write_cmd_reserved_buffer(unsigned char *buf, size_t len)
+{
+	memcpy(reserved_buffer, buf, len);
+}
+
+void read_cmd_reserved_buffer(unsigned char *buf, size_t len)
+{
+	memcpy(buf, reserved_buffer, len);
+}
+
+EXPORT_SYMBOL_GPL(write_cmd_reserved_buffer);
+EXPORT_SYMBOL_GPL(read_cmd_reserved_buffer);
+
+#if defined (CONFIG_STAR_HIDDEN_RESET)
+void write_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
+{
+	printk("write_screen_shot_reserved_buffer address =%x + 32\n", reserved_buffer);
+
+	copy_from_user(reserved_buffer + 32, buf, 800*480*3);
+	//memcpy(reserved_buffer+32, buf, 800*480*3);
+}
+
+void read_screen_shot_reserved_buffer(unsigned char *buf, size_t len)
+{
+        copy_to_user(buf, reserved_buffer + 32, 800*480*3);
+	//memcpy(buf, reserved_buffer+32, 800*480*3);
+}
+
+EXPORT_SYMBOL_GPL(write_screen_shot_reserved_buffer);
+EXPORT_SYMBOL_GPL(read_screen_shot_reserved_buffer);
+#endif
+#endif

@@ -34,38 +34,46 @@
 
 #define IXGB_ALL_RAR_ENTRIES 16
 
+enum {NETDEV_STATS, IXGB_STATS};
+
 struct ixgb_stats {
 	char stat_string[ETH_GSTRING_LEN];
+	int type;
 	int sizeof_stat;
 	int stat_offset;
 };
 
-#define IXGB_STAT(m) FIELD_SIZEOF(struct ixgb_adapter, m), \
-		      offsetof(struct ixgb_adapter, m)
-static struct ixgb_stats ixgb_gstrings_stats[] = {
-	{"rx_packets", IXGB_STAT(net_stats.rx_packets)},
-	{"tx_packets", IXGB_STAT(net_stats.tx_packets)},
-	{"rx_bytes", IXGB_STAT(net_stats.rx_bytes)},
-	{"tx_bytes", IXGB_STAT(net_stats.tx_bytes)},
-	{"rx_errors", IXGB_STAT(net_stats.rx_errors)},
-	{"tx_errors", IXGB_STAT(net_stats.tx_errors)},
-	{"rx_dropped", IXGB_STAT(net_stats.rx_dropped)},
-	{"tx_dropped", IXGB_STAT(net_stats.tx_dropped)},
-	{"multicast", IXGB_STAT(net_stats.multicast)},
-	{"collisions", IXGB_STAT(net_stats.collisions)},
+#define IXGB_STAT(m)		IXGB_STATS, \
+				FIELD_SIZEOF(struct ixgb_adapter, m), \
+				offsetof(struct ixgb_adapter, m)
+#define IXGB_NETDEV_STAT(m)	NETDEV_STATS, \
+				FIELD_SIZEOF(struct net_device, m), \
+				offsetof(struct net_device, m)
 
-/*	{ "rx_length_errors", IXGB_STAT(net_stats.rx_length_errors) },	*/
-	{"rx_over_errors", IXGB_STAT(net_stats.rx_over_errors)},
-	{"rx_crc_errors", IXGB_STAT(net_stats.rx_crc_errors)},
-	{"rx_frame_errors", IXGB_STAT(net_stats.rx_frame_errors)},
+static struct ixgb_stats ixgb_gstrings_stats[] = {
+	{"rx_packets", IXGB_NETDEV_STAT(stats.rx_packets)},
+	{"tx_packets", IXGB_NETDEV_STAT(stats.tx_packets)},
+	{"rx_bytes", IXGB_NETDEV_STAT(stats.rx_bytes)},
+	{"tx_bytes", IXGB_NETDEV_STAT(stats.tx_bytes)},
+	{"rx_errors", IXGB_NETDEV_STAT(stats.rx_errors)},
+	{"tx_errors", IXGB_NETDEV_STAT(stats.tx_errors)},
+	{"rx_dropped", IXGB_NETDEV_STAT(stats.rx_dropped)},
+	{"tx_dropped", IXGB_NETDEV_STAT(stats.tx_dropped)},
+	{"multicast", IXGB_NETDEV_STAT(stats.multicast)},
+	{"collisions", IXGB_NETDEV_STAT(stats.collisions)},
+
+/*	{ "rx_length_errors", IXGB_NETDEV_STAT(stats.rx_length_errors) },	*/
+	{"rx_over_errors", IXGB_NETDEV_STAT(stats.rx_over_errors)},
+	{"rx_crc_errors", IXGB_NETDEV_STAT(stats.rx_crc_errors)},
+	{"rx_frame_errors", IXGB_NETDEV_STAT(stats.rx_frame_errors)},
 	{"rx_no_buffer_count", IXGB_STAT(stats.rnbc)},
-	{"rx_fifo_errors", IXGB_STAT(net_stats.rx_fifo_errors)},
-	{"rx_missed_errors", IXGB_STAT(net_stats.rx_missed_errors)},
-	{"tx_aborted_errors", IXGB_STAT(net_stats.tx_aborted_errors)},
-	{"tx_carrier_errors", IXGB_STAT(net_stats.tx_carrier_errors)},
-	{"tx_fifo_errors", IXGB_STAT(net_stats.tx_fifo_errors)},
-	{"tx_heartbeat_errors", IXGB_STAT(net_stats.tx_heartbeat_errors)},
-	{"tx_window_errors", IXGB_STAT(net_stats.tx_window_errors)},
+	{"rx_fifo_errors", IXGB_NETDEV_STAT(stats.rx_fifo_errors)},
+	{"rx_missed_errors", IXGB_NETDEV_STAT(stats.rx_missed_errors)},
+	{"tx_aborted_errors", IXGB_NETDEV_STAT(stats.tx_aborted_errors)},
+	{"tx_carrier_errors", IXGB_NETDEV_STAT(stats.tx_carrier_errors)},
+	{"tx_fifo_errors", IXGB_NETDEV_STAT(stats.tx_fifo_errors)},
+	{"tx_heartbeat_errors", IXGB_NETDEV_STAT(stats.tx_heartbeat_errors)},
+	{"tx_window_errors", IXGB_NETDEV_STAT(stats.tx_window_errors)},
 	{"tx_deferred_ok", IXGB_STAT(stats.dc)},
 	{"tx_timeout_count", IXGB_STAT(tx_timeout_count) },
 	{"tx_restart_queue", IXGB_STAT(restart_queue) },
@@ -96,10 +104,10 @@ ixgb_get_settings(struct net_device *netdev, struct ethtool_cmd *ecmd)
 	ecmd->transceiver = XCVR_EXTERNAL;
 
 	if (netif_carrier_ok(adapter->netdev)) {
-		ecmd->speed = SPEED_10000;
+		ethtool_cmd_speed_set(ecmd, SPEED_10000);
 		ecmd->duplex = DUPLEX_FULL;
 	} else {
-		ecmd->speed = -1;
+		ethtool_cmd_speed_set(ecmd, -1);
 		ecmd->duplex = -1;
 	}
 
@@ -121,9 +129,10 @@ static int
 ixgb_set_settings(struct net_device *netdev, struct ethtool_cmd *ecmd)
 {
 	struct ixgb_adapter *adapter = netdev_priv(netdev);
+	u32 speed = ethtool_cmd_speed(ecmd);
 
 	if (ecmd->autoneg == AUTONEG_ENABLE ||
-	   ecmd->speed + ecmd->duplex != SPEED_10000 + DUPLEX_FULL)
+	    (speed + ecmd->duplex != SPEED_10000 + DUPLEX_FULL))
 		return -EINVAL;
 
 	if (netif_running(adapter->netdev)) {
@@ -402,7 +411,7 @@ static int
 ixgb_get_eeprom_len(struct net_device *netdev)
 {
 	/* return size in bytes */
-	return (IXGB_EEPROM_SIZE << 1);
+	return IXGB_EEPROM_SIZE << 1;
 }
 
 static int
@@ -602,45 +611,23 @@ err_setup_rx:
 	return err;
 }
 
-/* toggle LED 4 times per second = 2 "blinks" per second */
-#define IXGB_ID_INTERVAL	(HZ/4)
-
-/* bit defines for adapter->led_status */
-#define IXGB_LED_ON		0
-
-static void
-ixgb_led_blink_callback(unsigned long data)
-{
-	struct ixgb_adapter *adapter = (struct ixgb_adapter *)data;
-
-	if (test_and_change_bit(IXGB_LED_ON, &adapter->led_status))
-		ixgb_led_off(&adapter->hw);
-	else
-		ixgb_led_on(&adapter->hw);
-
-	mod_timer(&adapter->blink_timer, jiffies + IXGB_ID_INTERVAL);
-}
-
 static int
-ixgb_phys_id(struct net_device *netdev, u32 data)
+ixgb_set_phys_id(struct net_device *netdev, enum ethtool_phys_id_state state)
 {
 	struct ixgb_adapter *adapter = netdev_priv(netdev);
 
-	if (!data)
-		data = INT_MAX;
+	switch (state) {
+	case ETHTOOL_ID_ACTIVE:
+		return 2;
 
-	if (!adapter->blink_timer.function) {
-		init_timer(&adapter->blink_timer);
-		adapter->blink_timer.function = ixgb_led_blink_callback;
-		adapter->blink_timer.data = (unsigned long)adapter;
+	case ETHTOOL_ID_ON:
+		ixgb_led_on(&adapter->hw);
+		break;
+
+	case ETHTOOL_ID_OFF:
+	case ETHTOOL_ID_INACTIVE:
+		ixgb_led_off(&adapter->hw);
 	}
-
-	mod_timer(&adapter->blink_timer, jiffies);
-
-	msleep_interruptible(data * 1000);
-	del_timer_sync(&adapter->blink_timer);
-	ixgb_led_off(&adapter->hw);
-	clear_bit(IXGB_LED_ON, &adapter->led_status);
 
 	return 0;
 }
@@ -662,10 +649,21 @@ ixgb_get_ethtool_stats(struct net_device *netdev,
 {
 	struct ixgb_adapter *adapter = netdev_priv(netdev);
 	int i;
+	char *p = NULL;
 
 	ixgb_update_stats(adapter);
 	for (i = 0; i < IXGB_STATS_LEN; i++) {
-		char *p = (char *)adapter+ixgb_gstrings_stats[i].stat_offset;
+		switch (ixgb_gstrings_stats[i].type) {
+		case NETDEV_STATS:
+			p = (char *) netdev +
+					ixgb_gstrings_stats[i].stat_offset;
+			break;
+		case IXGB_STATS:
+			p = (char *) adapter +
+					ixgb_gstrings_stats[i].stat_offset;
+			break;
+		}
+
 		data[i] = (ixgb_gstrings_stats[i].sizeof_stat ==
 			sizeof(u64)) ? *(u64 *)p : *(u32 *)p;
 	}
@@ -685,6 +683,43 @@ ixgb_get_strings(struct net_device *netdev, u32 stringset, u8 *data)
 		}
 		break;
 	}
+}
+
+static int ixgb_set_flags(struct net_device *netdev, u32 data)
+{
+	struct ixgb_adapter *adapter = netdev_priv(netdev);
+	bool need_reset;
+	int rc;
+
+	/*
+	 * Tx VLAN insertion does not work per HW design when Rx stripping is
+	 * disabled.  Disable txvlan when rxvlan is turned off, and enable
+	 * rxvlan when txvlan is turned on.
+	 */
+	if (!(data & ETH_FLAG_RXVLAN) &&
+	    (netdev->features & NETIF_F_HW_VLAN_TX))
+		data &= ~ETH_FLAG_TXVLAN;
+	else if (data & ETH_FLAG_TXVLAN)
+		data |= ETH_FLAG_RXVLAN;
+
+	need_reset = (data & ETH_FLAG_RXVLAN) !=
+		     (netdev->features & NETIF_F_HW_VLAN_RX);
+
+	rc = ethtool_op_set_flags(netdev, data, ETH_FLAG_RXVLAN |
+						ETH_FLAG_TXVLAN);
+	if (rc)
+		return rc;
+
+	if (need_reset) {
+		if (netif_running(netdev)) {
+			ixgb_down(adapter, true);
+			ixgb_up(adapter);
+			ixgb_set_speed_duplex(netdev);
+		} else
+			ixgb_reset(adapter);
+	}
+
+	return 0;
 }
 
 static const struct ethtool_ops ixgb_ethtool_ops = {
@@ -710,9 +745,11 @@ static const struct ethtool_ops ixgb_ethtool_ops = {
 	.set_msglevel = ixgb_set_msglevel,
 	.set_tso = ixgb_set_tso,
 	.get_strings = ixgb_get_strings,
-	.phys_id = ixgb_phys_id,
+	.set_phys_id = ixgb_set_phys_id,
 	.get_sset_count = ixgb_get_sset_count,
 	.get_ethtool_stats = ixgb_get_ethtool_stats,
+	.get_flags = ethtool_op_get_flags,
+	.set_flags = ixgb_set_flags,
 };
 
 void ixgb_set_ethtool_ops(struct net_device *netdev)

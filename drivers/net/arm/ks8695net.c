@@ -30,16 +30,19 @@
 #include <linux/platform_device.h>
 #include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/slab.h>
 
 #include <asm/irq.h>
 
 #include <mach/regs-switch.h>
 #include <mach/regs-misc.h>
+#include <asm/mach/irq.h>
+#include <mach/regs-irq.h>
 
 #include "ks8695net.h"
 
 #define MODULENAME	"ks8695_ether"
-#define MODULEVERSION	"1.01"
+#define MODULEVERSION	"1.02"
 
 /*
  * Transmit and device reset timeout, default 5 seconds.
@@ -95,6 +98,9 @@ struct ks8695_skbuff {
 #define MAX_RX_DESC 16
 #define MAX_RX_DESC_MASK 0xf
 
+/*napi_weight have better more than rx DMA buffers*/
+#define NAPI_WEIGHT   64
+
 #define MAX_RXBUF_SIZE 0x700
 
 #define TX_RING_DMA_SIZE (sizeof(struct tx_ring_desc) * MAX_TX_DESC)
@@ -120,6 +126,7 @@ enum ks8695_dtype {
  *	@dev: The platform device object for this interface
  *	@dtype: The type of this device
  *	@io_regs: The ioremapped registers for this interface
+ *      @napi : Add support NAPI for Rx
  *	@rx_irq_name: The textual name of the RX IRQ from the platform data
  *	@tx_irq_name: The textual name of the TX IRQ from the platform data
  *	@link_irq_name: The textual name of the link IRQ from the
@@ -143,6 +150,7 @@ enum ks8695_dtype {
  *	@rx_ring_dma: The DMA mapped equivalent of rx_ring
  *	@rx_buffers: The sk_buff mappings for the RX ring
  *	@next_rx_desc_read: The next RX descriptor to read from on IRQ
+ *      @rx_lock: A lock to protect Rx irq function
  *	@msg_enable: The flags for which messages to emit
  */
 struct ks8695_priv {
@@ -151,6 +159,8 @@ struct ks8695_priv {
 	struct device *dev;
 	enum ks8695_dtype dtype;
 	void __iomem *io_regs;
+
+	struct napi_struct	napi;
 
 	const char *rx_irq_name, *tx_irq_name, *link_irq_name;
 	int rx_irq, tx_irq, link_irq;
@@ -172,6 +182,7 @@ struct ks8695_priv {
 	dma_addr_t rx_ring_dma;
 	struct ks8695_skbuff rx_buffers[MAX_RX_DESC];
 	int next_rx_desc_read;
+	spinlock_t rx_lock;
 
 	int msg_enable;
 };
@@ -317,25 +328,24 @@ ks8695_refill_rxbuffers(struct ks8695_priv *ksp)
  */
 static void
 ks8695_init_partial_multicast(struct ks8695_priv *ksp,
-			      struct dev_mc_list *addr,
-			      int nr_addr)
+			      struct net_device *ndev)
 {
 	u32 low, high;
 	int i;
+	struct netdev_hw_addr *ha;
 
-	for (i = 0; i < nr_addr; i++, addr = addr->next) {
-		/* Ran out of addresses? */
-		if (!addr)
-			break;
+	i = 0;
+	netdev_for_each_mc_addr(ha, ndev) {
 		/* Ran out of space in chip? */
 		BUG_ON(i == KS8695_NR_ADDRESSES);
 
-		low = (addr->dmi_addr[2] << 24) | (addr->dmi_addr[3] << 16) |
-			(addr->dmi_addr[4] << 8) | (addr->dmi_addr[5]);
-		high = (addr->dmi_addr[0] << 8) | (addr->dmi_addr[1]);
+		low = (ha->addr[2] << 24) | (ha->addr[3] << 16) |
+		      (ha->addr[4] << 8) | (ha->addr[5]);
+		high = (ha->addr[0] << 8) | (ha->addr[1]);
 
 		ks8695_writereg(ksp, KS8695_AAL_(i), low);
 		ks8695_writereg(ksp, KS8695_AAH_(i), AAH_E | high);
+		i++;
 	}
 
 	/* Clear the remaining Additional Station Addresses */
@@ -392,31 +402,75 @@ ks8695_tx_irq(int irq, void *dev_id)
 }
 
 /**
+ *	ks8695_get_rx_enable_bit - Get rx interrupt enable/status bit
+ *	@ksp: Private data for the KS8695 Ethernet
+ *
+ *    For KS8695 document:
+ *    Interrupt Enable Register (offset 0xE204)
+ *        Bit29 : WAN MAC Receive Interrupt Enable
+ *        Bit16 : LAN MAC Receive Interrupt Enable
+ *    Interrupt Status Register (Offset 0xF208)
+ *        Bit29: WAN MAC Receive Status
+ *        Bit16: LAN MAC Receive Status
+ *    So, this Rx interrrupt enable/status bit number is equal
+ *    as Rx IRQ number.
+ */
+static inline u32 ks8695_get_rx_enable_bit(struct ks8695_priv *ksp)
+{
+	return ksp->rx_irq;
+}
+
+/**
  *	ks8695_rx_irq - Receive IRQ handler
  *	@irq: The IRQ which went off (ignored)
  *	@dev_id: The net_device for the interrupt
  *
- *	Process the RX ring, passing any received packets up to the
- *	host.  If we received anything other than errors, we then
- *	refill the ring.
+ *	Inform NAPI that packet reception needs to be scheduled
  */
+
 static irqreturn_t
 ks8695_rx_irq(int irq, void *dev_id)
 {
 	struct net_device *ndev = (struct net_device *)dev_id;
 	struct ks8695_priv *ksp = netdev_priv(ndev);
+
+	spin_lock(&ksp->rx_lock);
+
+	if (napi_schedule_prep(&ksp->napi)) {
+		unsigned long status = readl(KS8695_IRQ_VA + KS8695_INTEN);
+		unsigned long mask_bit = 1 << ks8695_get_rx_enable_bit(ksp);
+		/*disable rx interrupt*/
+		status &= ~mask_bit;
+		writel(status , KS8695_IRQ_VA + KS8695_INTEN);
+		__napi_schedule(&ksp->napi);
+	}
+
+	spin_unlock(&ksp->rx_lock);
+	return IRQ_HANDLED;
+}
+
+/**
+ *	ks8695_rx - Receive packets called by NAPI poll method
+ *	@ksp: Private data for the KS8695 Ethernet
+ *	@budget: Number of packets allowed to process
+ */
+static int ks8695_rx(struct ks8695_priv *ksp, int budget)
+{
+	struct net_device *ndev = ksp->ndev;
 	struct sk_buff *skb;
 	int buff_n;
 	u32 flags;
 	int pktlen;
-	int last_rx_processed = -1;
+	int received = 0;
 
 	buff_n = ksp->next_rx_desc_read;
-	do {
-		if (ksp->rx_buffers[buff_n].skb &&
-		    !(ksp->rx_ring[buff_n].status & cpu_to_le32(RDES_OWN))) {
+	while (received < budget
+			&& ksp->rx_buffers[buff_n].skb
+			&& (!(ksp->rx_ring[buff_n].status &
+					cpu_to_le32(RDES_OWN)))) {
 			rmb();
 			flags = le32_to_cpu(ksp->rx_ring[buff_n].status);
+
 			/* Found an SKB which we own, this means we
 			 * received a packet
 			 */
@@ -464,7 +518,7 @@ ks8695_rx_irq(int irq, void *dev_id)
 			/* Relinquish the SKB to the network layer */
 			skb_put(skb, pktlen);
 			skb->protocol = eth_type_trans(skb, ndev);
-			netif_rx(skb);
+			netif_receive_skb(skb);
 
 			/* Record stats */
 			ndev->stats.rx_packets++;
@@ -478,21 +532,12 @@ rx_failure:
 			/* Give the ring entry back to the hardware */
 			ksp->rx_ring[buff_n].status = cpu_to_le32(RDES_OWN);
 rx_finished:
-			/* And note this as processed so we can start
-			 * from here next time
-			 */
-			last_rx_processed = buff_n;
-		} else {
-			/* Ran out of things to process, stop now */
-			break;
-		}
-		buff_n = (buff_n + 1) & MAX_RX_DESC_MASK;
-	} while (buff_n != ksp->next_rx_desc_read);
+			received++;
+			buff_n = (buff_n + 1) & MAX_RX_DESC_MASK;
+	}
 
-	/* And note which RX descriptor we last did anything with */
-	if (likely(last_rx_processed != -1))
-		ksp->next_rx_desc_read =
-			(last_rx_processed + 1) & MAX_RX_DESC_MASK;
+	/* And note which RX descriptor we last did */
+	ksp->next_rx_desc_read = buff_n;
 
 	/* And refill the buffers */
 	ks8695_refill_rxbuffers(ksp);
@@ -500,7 +545,37 @@ rx_finished:
 	/* Kick the RX DMA engine, in case it became suspended */
 	ks8695_writereg(ksp, KS8695_DRSC, 0);
 
-	return IRQ_HANDLED;
+	return received;
+}
+
+
+/**
+ *	ks8695_poll - Receive packet by NAPI poll method
+ *	@ksp: Private data for the KS8695 Ethernet
+ *	@budget: The remaining number packets for network subsystem
+ *
+ *     Invoked by the network core when it requests for new
+ *     packets from the driver
+ */
+static int ks8695_poll(struct napi_struct *napi, int budget)
+{
+	struct ks8695_priv *ksp = container_of(napi, struct ks8695_priv, napi);
+	unsigned long  work_done;
+
+	unsigned long isr = readl(KS8695_IRQ_VA + KS8695_INTEN);
+	unsigned long mask_bit = 1 << ks8695_get_rx_enable_bit(ksp);
+
+	work_done = ks8695_rx(ksp, budget);
+
+	if (work_done < budget) {
+		unsigned long flags;
+		spin_lock_irqsave(&ksp->rx_lock, flags);
+		__napi_complete(napi);
+		/*enable rx interrupt*/
+		writel(isr | mask_bit, KS8695_IRQ_VA + KS8695_INTEN);
+		spin_unlock_irqrestore(&ksp->rx_lock, flags);
+	}
+	return work_done;
 }
 
 /**
@@ -779,12 +854,12 @@ ks8695_set_msglevel(struct net_device *ndev, u32 value)
 }
 
 /**
- *	ks8695_get_settings - Get device-specific settings.
+ *	ks8695_wan_get_settings - Get device-specific settings.
  *	@ndev: The network device to read settings from
  *	@cmd: The ethtool structure to read into
  */
 static int
-ks8695_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
+ks8695_wan_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 {
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 	u32 ctrl;
@@ -795,69 +870,51 @@ ks8695_get_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 			  SUPPORTED_TP | SUPPORTED_MII);
 	cmd->transceiver = XCVR_INTERNAL;
 
-	/* Port specific extras */
-	switch (ksp->dtype) {
-	case KS8695_DTYPE_HPNA:
-		cmd->phy_address = 0;
-		/* not supported for HPNA */
+	cmd->advertising = ADVERTISED_TP | ADVERTISED_MII;
+	cmd->port = PORT_MII;
+	cmd->supported |= (SUPPORTED_Autoneg | SUPPORTED_Pause);
+	cmd->phy_address = 0;
+
+	ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
+	if ((ctrl & WMC_WAND) == 0) {
+		/* auto-negotiation is enabled */
+		cmd->advertising |= ADVERTISED_Autoneg;
+		if (ctrl & WMC_WANA100F)
+			cmd->advertising |= ADVERTISED_100baseT_Full;
+		if (ctrl & WMC_WANA100H)
+			cmd->advertising |= ADVERTISED_100baseT_Half;
+		if (ctrl & WMC_WANA10F)
+			cmd->advertising |= ADVERTISED_10baseT_Full;
+		if (ctrl & WMC_WANA10H)
+			cmd->advertising |= ADVERTISED_10baseT_Half;
+		if (ctrl & WMC_WANAP)
+			cmd->advertising |= ADVERTISED_Pause;
+		cmd->autoneg = AUTONEG_ENABLE;
+
+		ethtool_cmd_speed_set(cmd,
+				      (ctrl & WMC_WSS) ? SPEED_100 : SPEED_10);
+		cmd->duplex = (ctrl & WMC_WDS) ?
+			DUPLEX_FULL : DUPLEX_HALF;
+	} else {
+		/* auto-negotiation is disabled */
 		cmd->autoneg = AUTONEG_DISABLE;
 
-		/* BUG: Erm, dtype hpna implies no phy regs */
-		/*
-		ctrl = readl(KS8695_MISC_VA + KS8695_HMC);
-		cmd->speed = (ctrl & HMC_HSS) ? SPEED_100 : SPEED_10;
-		cmd->duplex = (ctrl & HMC_HDS) ? DUPLEX_FULL : DUPLEX_HALF;
-		*/
-		return -EOPNOTSUPP;
-	case KS8695_DTYPE_WAN:
-		cmd->advertising = ADVERTISED_TP | ADVERTISED_MII;
-		cmd->port = PORT_MII;
-		cmd->supported |= (SUPPORTED_Autoneg | SUPPORTED_Pause);
-		cmd->phy_address = 0;
-
-		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
-		if ((ctrl & WMC_WAND) == 0) {
-			/* auto-negotiation is enabled */
-			cmd->advertising |= ADVERTISED_Autoneg;
-			if (ctrl & WMC_WANA100F)
-				cmd->advertising |= ADVERTISED_100baseT_Full;
-			if (ctrl & WMC_WANA100H)
-				cmd->advertising |= ADVERTISED_100baseT_Half;
-			if (ctrl & WMC_WANA10F)
-				cmd->advertising |= ADVERTISED_10baseT_Full;
-			if (ctrl & WMC_WANA10H)
-				cmd->advertising |= ADVERTISED_10baseT_Half;
-			if (ctrl & WMC_WANAP)
-				cmd->advertising |= ADVERTISED_Pause;
-			cmd->autoneg = AUTONEG_ENABLE;
-
-			cmd->speed = (ctrl & WMC_WSS) ? SPEED_100 : SPEED_10;
-			cmd->duplex = (ctrl & WMC_WDS) ?
-				DUPLEX_FULL : DUPLEX_HALF;
-		} else {
-			/* auto-negotiation is disabled */
-			cmd->autoneg = AUTONEG_DISABLE;
-
-			cmd->speed = (ctrl & WMC_WANF100) ?
-				SPEED_100 : SPEED_10;
-			cmd->duplex = (ctrl & WMC_WANFF) ?
-				DUPLEX_FULL : DUPLEX_HALF;
-		}
-		break;
-	case KS8695_DTYPE_LAN:
-		return -EOPNOTSUPP;
+		ethtool_cmd_speed_set(cmd, ((ctrl & WMC_WANF100) ?
+					    SPEED_100 : SPEED_10));
+		cmd->duplex = (ctrl & WMC_WANFF) ?
+			DUPLEX_FULL : DUPLEX_HALF;
 	}
 
 	return 0;
 }
 
 /**
- *	ks8695_set_settings - Set device-specific settings.
+ *	ks8695_wan_set_settings - Set device-specific settings.
  *	@ndev: The network device to configure
  *	@cmd: The settings to configure
  */
 static int
-ks8695_set_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
+ks8695_wan_set_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 {
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 	u32 ctrl;
@@ -881,171 +938,85 @@ ks8695_set_settings(struct net_device *ndev, struct ethtool_cmd *cmd)
 				ADVERTISED_100baseT_Full)) == 0)
 			return -EINVAL;
 
-		switch (ksp->dtype) {
-		case KS8695_DTYPE_HPNA:
-			/* HPNA does not support auto-negotiation. */
-			return -EINVAL;
-		case KS8695_DTYPE_WAN:
-			ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
+		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
 
-			ctrl &= ~(WMC_WAND | WMC_WANA100F | WMC_WANA100H |
-				  WMC_WANA10F | WMC_WANA10H);
-			if (cmd->advertising & ADVERTISED_100baseT_Full)
-				ctrl |= WMC_WANA100F;
-			if (cmd->advertising & ADVERTISED_100baseT_Half)
-				ctrl |= WMC_WANA100H;
-			if (cmd->advertising & ADVERTISED_10baseT_Full)
-				ctrl |= WMC_WANA10F;
-			if (cmd->advertising & ADVERTISED_10baseT_Half)
-				ctrl |= WMC_WANA10H;
+		ctrl &= ~(WMC_WAND | WMC_WANA100F | WMC_WANA100H |
+			  WMC_WANA10F | WMC_WANA10H);
+		if (cmd->advertising & ADVERTISED_100baseT_Full)
+			ctrl |= WMC_WANA100F;
+		if (cmd->advertising & ADVERTISED_100baseT_Half)
+			ctrl |= WMC_WANA100H;
+		if (cmd->advertising & ADVERTISED_10baseT_Full)
+			ctrl |= WMC_WANA10F;
+		if (cmd->advertising & ADVERTISED_10baseT_Half)
+			ctrl |= WMC_WANA10H;
 
-			/* force a re-negotiation */
-			ctrl |= WMC_WANR;
-			writel(ctrl, ksp->phyiface_regs + KS8695_WMC);
-			break;
-		case KS8695_DTYPE_LAN:
-			return -EOPNOTSUPP;
-		}
-
+		/* force a re-negotiation */
+		ctrl |= WMC_WANR;
+		writel(ctrl, ksp->phyiface_regs + KS8695_WMC);
 	} else {
-		switch (ksp->dtype) {
-		case KS8695_DTYPE_HPNA:
-			/* BUG: dtype_hpna implies no phy registers */
-			/*
-			ctrl = __raw_readl(KS8695_MISC_VA + KS8695_HMC);
+		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
 
-			ctrl &= ~(HMC_HSS | HMC_HDS);
-			if (cmd->speed == SPEED_100)
-				ctrl |= HMC_HSS;
-			if (cmd->duplex == DUPLEX_FULL)
-				ctrl |= HMC_HDS;
+		/* disable auto-negotiation */
+		ctrl |= WMC_WAND;
+		ctrl &= ~(WMC_WANF100 | WMC_WANFF);
 
-			__raw_writel(ctrl, KS8695_MISC_VA + KS8695_HMC);
-			*/
-			return -EOPNOTSUPP;
-		case KS8695_DTYPE_WAN:
-			ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
+		if (cmd->speed == SPEED_100)
+			ctrl |= WMC_WANF100;
+		if (cmd->duplex == DUPLEX_FULL)
+			ctrl |= WMC_WANFF;
 
-			/* disable auto-negotiation */
-			ctrl |= WMC_WAND;
-			ctrl &= ~(WMC_WANF100 | WMC_WANFF);
-
-			if (cmd->speed == SPEED_100)
-				ctrl |= WMC_WANF100;
-			if (cmd->duplex == DUPLEX_FULL)
-				ctrl |= WMC_WANFF;
-
-			writel(ctrl, ksp->phyiface_regs + KS8695_WMC);
-			break;
-		case KS8695_DTYPE_LAN:
-			return -EOPNOTSUPP;
-		}
+		writel(ctrl, ksp->phyiface_regs + KS8695_WMC);
 	}
 
 	return 0;
 }
 
 /**
- *	ks8695_nwayreset - Restart the autonegotiation on the port.
+ *	ks8695_wan_nwayreset - Restart the autonegotiation on the port.
  *	@ndev: The network device to restart autoneotiation on
  */
 static int
-ks8695_nwayreset(struct net_device *ndev)
+ks8695_wan_nwayreset(struct net_device *ndev)
 {
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 	u32 ctrl;
 
-	switch (ksp->dtype) {
-	case KS8695_DTYPE_HPNA:
-		/* No phy means no autonegotiation on hpna */
+	ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
+
+	if ((ctrl & WMC_WAND) == 0)
+		writel(ctrl | WMC_WANR,
+		       ksp->phyiface_regs + KS8695_WMC);
+	else
+		/* auto-negotiation not enabled */
 		return -EINVAL;
-	case KS8695_DTYPE_WAN:
-		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
-
-		if ((ctrl & WMC_WAND) == 0)
-			writel(ctrl | WMC_WANR,
-			       ksp->phyiface_regs + KS8695_WMC);
-		else
-			/* auto-negotiation not enabled */
-			return -EINVAL;
-		break;
-	case KS8695_DTYPE_LAN:
-		return -EOPNOTSUPP;
-	}
 
 	return 0;
 }
 
 /**
- *	ks8695_get_link - Retrieve link status of network interface
- *	@ndev: The network interface to retrive the link status of.
- */
-static u32
-ks8695_get_link(struct net_device *ndev)
-{
-	struct ks8695_priv *ksp = netdev_priv(ndev);
-	u32 ctrl;
-
-	switch (ksp->dtype) {
-	case KS8695_DTYPE_HPNA:
-		/* HPNA always has link */
-		return 1;
-	case KS8695_DTYPE_WAN:
-		/* WAN we can read the PHY for */
-		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
-		return ctrl & WMC_WLS;
-	case KS8695_DTYPE_LAN:
-		return -EOPNOTSUPP;
-	}
-	return 0;
-}
-
-/**
- *	ks8695_get_pause - Retrieve network pause/flow-control advertising
+ *	ks8695_wan_get_pause - Retrieve network pause/flow-control advertising
  *	@ndev: The device to retrieve settings from
  *	@param: The structure to fill out with the information
  */
 static void
-ks8695_get_pause(struct net_device *ndev, struct ethtool_pauseparam *param)
+ks8695_wan_get_pause(struct net_device *ndev, struct ethtool_pauseparam *param)
 {
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 	u32 ctrl;
 
-	switch (ksp->dtype) {
-	case KS8695_DTYPE_HPNA:
-		/* No phy link on hpna to configure */
-		return;
-	case KS8695_DTYPE_WAN:
-		ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
+	ctrl = readl(ksp->phyiface_regs + KS8695_WMC);
 
-		/* advertise Pause */
-		param->autoneg = (ctrl & WMC_WANAP);
+	/* advertise Pause */
+	param->autoneg = (ctrl & WMC_WANAP);
 
-		/* current Rx Flow-control */
-		ctrl = ks8695_readreg(ksp, KS8695_DRXC);
-		param->rx_pause = (ctrl & DRXC_RFCE);
+	/* current Rx Flow-control */
+	ctrl = ks8695_readreg(ksp, KS8695_DRXC);
+	param->rx_pause = (ctrl & DRXC_RFCE);
 
-		/* current Tx Flow-control */
-		ctrl = ks8695_readreg(ksp, KS8695_DTXC);
-		param->tx_pause = (ctrl & DTXC_TFCE);
-		break;
-	case KS8695_DTYPE_LAN:
-		/* The LAN's "phy" is a direct-attached switch */
-		return;
-	}
-}
-
-/**
- *	ks8695_set_pause - Configure pause/flow-control
- *	@ndev: The device to configure
- *	@param: The pause parameters to set
- *
- *	TODO: Implement this
- */
-static int
-ks8695_set_pause(struct net_device *ndev, struct ethtool_pauseparam *param)
-{
-	return -EOPNOTSUPP;
+	/* current Tx Flow-control */
+	ctrl = ks8695_readreg(ksp, KS8695_DTXC);
+	param->tx_pause = (ctrl & DTXC_TFCE);
 }
 
 /**
@@ -1065,12 +1036,17 @@ ks8695_get_drvinfo(struct net_device *ndev, struct ethtool_drvinfo *info)
 static const struct ethtool_ops ks8695_ethtool_ops = {
 	.get_msglevel	= ks8695_get_msglevel,
 	.set_msglevel	= ks8695_set_msglevel,
-	.get_settings	= ks8695_get_settings,
-	.set_settings	= ks8695_set_settings,
-	.nway_reset	= ks8695_nwayreset,
-	.get_link	= ks8695_get_link,
-	.get_pauseparam = ks8695_get_pause,
-	.set_pauseparam = ks8695_set_pause,
+	.get_drvinfo	= ks8695_get_drvinfo,
+};
+
+static const struct ethtool_ops ks8695_wan_ethtool_ops = {
+	.get_msglevel	= ks8695_get_msglevel,
+	.set_msglevel	= ks8695_set_msglevel,
+	.get_settings	= ks8695_wan_get_settings,
+	.set_settings	= ks8695_wan_set_settings,
+	.nway_reset	= ks8695_wan_nwayreset,
+	.get_link	= ethtool_op_get_link,
+	.get_pauseparam = ks8695_wan_get_pause,
 	.get_drvinfo	= ks8695_get_drvinfo,
 };
 
@@ -1126,7 +1102,7 @@ ks8695_set_multicast(struct net_device *ndev)
 	if (ndev->flags & IFF_ALLMULTI) {
 		/* enable all multicast mode */
 		ctrl |= DRXC_RM;
-	} else if (ndev->mc_count > KS8695_NR_ADDRESSES) {
+	} else if (netdev_mc_count(ndev) > KS8695_NR_ADDRESSES) {
 		/* more specific multicast addresses than can be
 		 * handled in hardware
 		 */
@@ -1134,8 +1110,7 @@ ks8695_set_multicast(struct net_device *ndev)
 	} else {
 		/* enable specific multicasts */
 		ctrl &= ~DRXC_RM;
-		ks8695_init_partial_multicast(ksp, ndev->mc_list,
-					      ndev->mc_count);
+		ks8695_init_partial_multicast(ksp, ndev);
 	}
 
 	ks8695_writereg(ksp, KS8695_DRXC, ctrl);
@@ -1228,8 +1203,6 @@ ks8695_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	if (++ksp->tx_ring_used == MAX_TX_DESC)
 		netif_stop_queue(ndev);
 
-	ndev->trans_start = jiffies;
-
 	/* Kick the TX DMA in case it decided to go IDLE */
 	ks8695_writereg(ksp, KS8695_DTSC, 0);
 
@@ -1253,7 +1226,7 @@ ks8695_stop(struct net_device *ndev)
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 
 	netif_stop_queue(ndev);
-	netif_carrier_off(ndev);
+	napi_disable(&ksp->napi);
 
 	ks8695_shutdown(ksp);
 
@@ -1287,6 +1260,7 @@ ks8695_open(struct net_device *ndev)
 		return ret;
 	}
 
+	napi_enable(&ksp->napi);
 	netif_start_queue(ndev);
 
 	return 0;
@@ -1397,7 +1371,6 @@ ks8695_probe(struct platform_device *pdev)
 
 	/* Configure our private structure a little */
 	ksp = netdev_priv(ndev);
-	memset(ksp, 0, sizeof(struct ks8695_priv));
 
 	ksp->dev = &pdev->dev;
 	ksp->ndev = ndev;
@@ -1469,8 +1442,9 @@ ks8695_probe(struct platform_device *pdev)
 
 	/* driver system setup */
 	ndev->netdev_ops = &ks8695_netdev_ops;
-	SET_ETHTOOL_OPS(ndev, &ks8695_ethtool_ops);
 	ndev->watchdog_timeo	 = msecs_to_jiffies(watchdog);
+
+	netif_napi_add(ndev, &ksp->napi, ks8695_poll, NAPI_WEIGHT);
 
 	/* Retrieve the default MAC addr from the chip. */
 	/* The bootloader should have left it in there for us. */
@@ -1505,6 +1479,7 @@ ks8695_probe(struct platform_device *pdev)
 
 	/* And initialise the queue's lock */
 	spin_lock_init(&ksp->txq_lock);
+	spin_lock_init(&ksp->rx_lock);
 
 	/* Specify the RX DMA ring buffer */
 	ksp->rx_ring = ksp->ring_base + TX_RING_DMA_SIZE;
@@ -1533,12 +1508,15 @@ ks8695_probe(struct platform_device *pdev)
 	if (ksp->phyiface_regs && ksp->link_irq == -1) {
 		ks8695_init_switch(ksp);
 		ksp->dtype = KS8695_DTYPE_LAN;
+		SET_ETHTOOL_OPS(ndev, &ks8695_ethtool_ops);
 	} else if (ksp->phyiface_regs && ksp->link_irq != -1) {
 		ks8695_init_wan_phy(ksp);
 		ksp->dtype = KS8695_DTYPE_WAN;
+		SET_ETHTOOL_OPS(ndev, &ks8695_wan_ethtool_ops);
 	} else {
 		/* No initialisation since HPNA does not have a PHY */
 		ksp->dtype = KS8695_DTYPE_HPNA;
+		SET_ETHTOOL_OPS(ndev, &ks8695_ethtool_ops);
 	}
 
 	/* And bring up the net_device with the net core */
@@ -1626,6 +1604,7 @@ ks8695_drv_remove(struct platform_device *pdev)
 	struct ks8695_priv *ksp = netdev_priv(ndev);
 
 	platform_set_drvdata(pdev, NULL);
+	netif_napi_del(&ksp->napi);
 
 	unregister_netdev(ndev);
 	ks8695_release_device(ksp);
@@ -1666,7 +1645,7 @@ ks8695_cleanup(void)
 module_init(ks8695_init);
 module_exit(ks8695_cleanup);
 
-MODULE_AUTHOR("Simtec Electronics")
+MODULE_AUTHOR("Simtec Electronics");
 MODULE_DESCRIPTION("Micrel KS8695 (Centaur) Ethernet driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:" MODULENAME);

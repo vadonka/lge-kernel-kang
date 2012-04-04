@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/spinlock.h>
+#include <linux/gfp.h>
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/div64.h>
@@ -750,7 +751,7 @@ static void hptiop_post_req_mv(struct hptiop_hba *hba,
 		MVIOP_MU_QUEUE_ADDR_HOST_BIT | size_bit, hba);
 }
 
-static int hptiop_queuecommand(struct scsi_cmnd *scp,
+static int hptiop_queuecommand_lck(struct scsi_cmnd *scp,
 				void (*done)(struct scsi_cmnd *))
 {
 	struct Scsi_Host *host = scp->device->host;
@@ -818,6 +819,8 @@ cmd_done:
 	return 0;
 }
 
+static DEF_SCSI_QCMD(hptiop_queuecommand)
+
 static const char *hptiop_info(struct Scsi_Host *host)
 {
 	return driver_name_long;
@@ -861,9 +864,12 @@ static int hptiop_reset(struct scsi_cmnd *scp)
 }
 
 static int hptiop_adjust_disk_queue_depth(struct scsi_device *sdev,
-						int queue_depth)
+					  int queue_depth, int reason)
 {
 	struct hptiop_hba *hba = (struct hptiop_hba *)sdev->host->hostdata;
+
+	if (reason != SCSI_QDEPTH_DEFAULT)
+		return -EOPNOTSUPP;
 
 	if (queue_depth > hba->max_requests)
 		queue_depth = hba->max_requests;
@@ -1153,7 +1159,7 @@ free_pci_regions:
 disable_pci_device:
 	pci_disable_device(pcidev);
 
-	dprintk("scsi%d: hptiop_probe fail\n", host->host_no);
+	dprintk("scsi%d: hptiop_probe fail\n", host ? host->host_no : 0);
 	return -ENODEV;
 }
 

@@ -7,7 +7,7 @@
  * video_detect.c:
  * Provides acpi_is_video_device() for early scanning of ACPI devices in scan.c
  * There a Linux specific (Spec does not provide a HID for video devices) is
- * assinged
+ * assigned
  *
  * After PCI devices are glued with ACPI devices
  * acpi_get_pci_dev() can be called to identify ACPI graphics
@@ -17,15 +17,14 @@
  * capabilities the graphics cards plugged in support. The check for general
  * video capabilities will be triggered by the first caller of
  * acpi_video_get_capabilities(NULL); which will happen when the first
- * backlight (or display output) switching supporting driver calls:
+ * backlight switching supporting driver calls:
  * acpi_video_backlight_support();
  *
  * Depending on whether ACPI graphics extensions (cmp. ACPI spec Appendix B)
  * are available, video.ko should be used to handle the device.
  *
  * Otherwise vendor specific drivers like thinkpad_acpi, asus_acpi,
- * sony_acpi,... can take care about backlight brightness and display output
- * switching.
+ * sony_acpi,... can take care about backlight brightness.
  *
  * If CONFIG_ACPI_VIDEO is neither set as "compiled in" (y) nor as a module (m)
  * this file will not be compiled, acpi_video_get_capabilities() and
@@ -59,8 +58,8 @@ acpi_backlight_cap_match(acpi_handle handle, u32 level, void *context,
 				  "support\n"));
 		*cap |= ACPI_VIDEO_BACKLIGHT;
 		if (ACPI_FAILURE(acpi_get_handle(handle, "_BQC", &h_dummy)))
-			printk(KERN_WARNING FW_BUG PREFIX "ACPI brightness "
-					"control misses _BQC function\n");
+			printk(KERN_WARNING FW_BUG PREFIX "No _BQC method, "
+				"cannot determine initial brightness\n");
 		/* We have backlight support, no need to scan further */
 		return AE_CTRL_TERMINATE;
 	}
@@ -83,16 +82,16 @@ long acpi_is_video_device(struct acpi_device *device)
 	if (!device)
 		return 0;
 
-	/* Does this device able to support video switching ? */
+	/* Is this device able to support video switching ? */
 	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_DOD", &h_dummy)) ||
 	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_DOS", &h_dummy)))
 		video_caps |= ACPI_VIDEO_OUTPUT_SWITCHING;
 
-	/* Does this device able to retrieve a video ROM ? */
+	/* Is this device able to retrieve a video ROM ? */
 	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_ROM", &h_dummy)))
 		video_caps |= ACPI_VIDEO_ROM_AVAILABLE;
 
-	/* Does this device able to configure which video head to be POSTed ? */
+	/* Is this device able to configure which video head to be POSTed ? */
 	if (ACPI_SUCCESS(acpi_get_handle(device->handle, "_VPO", &h_dummy)) &&
 	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_GPD", &h_dummy)) &&
 	    ACPI_SUCCESS(acpi_get_handle(device->handle, "_SPD", &h_dummy)))
@@ -101,7 +100,7 @@ long acpi_is_video_device(struct acpi_device *device)
 	/* Only check for backlight functionality if one of the above hit. */
 	if (video_caps)
 		acpi_walk_namespace(ACPI_TYPE_DEVICE, device->handle,
-				    ACPI_UINT32_MAX, acpi_backlight_cap_match,
+				    ACPI_UINT32_MAX, acpi_backlight_cap_match, NULL,
 				    &video_caps, NULL);
 
 	return video_caps;
@@ -137,7 +136,7 @@ find_video(acpi_handle handle, u32 lvl, void *context, void **rv)
  *
  * if NULL is passed as argument all ACPI devices are enumerated and
  * all graphics capabilities of physically present devices are
- * summerized and returned. This is cached and done only once.
+ * summarized and returned. This is cached and done only once.
  */
 long acpi_video_get_capabilities(acpi_handle graphics_handle)
 {
@@ -151,7 +150,7 @@ long acpi_video_get_capabilities(acpi_handle graphics_handle)
 	if (!graphics_handle) {
 		/* Only do the global walk through all graphics devices once */
 		acpi_walk_namespace(ACPI_TYPE_DEVICE, ACPI_ROOT_OBJECT,
-				    ACPI_UINT32_MAX, find_video,
+				    ACPI_UINT32_MAX, find_video, NULL,
 				    &caps, NULL);
 		/* There might be boot param flags set already... */
 		acpi_video_support |= caps;
@@ -160,8 +159,6 @@ long acpi_video_get_capabilities(acpi_handle graphics_handle)
 		 * to still be able to override logic via boot params, e.g.:
 		 *
 		 *   if (dmi_name_in_vendors("XY")) {
-		 *	acpi_video_support |=
-		 *		ACPI_VIDEO_OUTPUT_SWITCHING_DMI_VENDOR;
 		 *	acpi_video_support |=
 		 *		ACPI_VIDEO_BACKLIGHT_DMI_VENDOR;
 		 *}
@@ -173,7 +170,7 @@ long acpi_video_get_capabilities(acpi_handle graphics_handle)
 			return 0;
 		}
 		acpi_walk_namespace(ACPI_TYPE_DEVICE, graphics_handle,
-				    ACPI_UINT32_MAX, find_video,
+				    ACPI_UINT32_MAX, find_video, NULL,
 				    &caps, NULL);
 	}
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "We have 0x%lX video support %s %s\n",
@@ -212,33 +209,8 @@ int acpi_video_backlight_support(void)
 EXPORT_SYMBOL(acpi_video_backlight_support);
 
 /*
- * Returns true if video.ko can do display output switching.
- * This does not work well/at all with binary graphics drivers
- * which disable system io ranges and do it on their own.
- */
-int acpi_video_display_switch_support(void)
-{
-	if (!acpi_video_caps_checked)
-		acpi_video_get_capabilities(NULL);
-
-	if (acpi_video_support & ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VENDOR)
-		return 0;
-	else if (acpi_video_support & ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VIDEO)
-		return 1;
-
-	if (acpi_video_support & ACPI_VIDEO_OUTPUT_SWITCHING_DMI_VENDOR)
-		return 0;
-	else if (acpi_video_support & ACPI_VIDEO_OUTPUT_SWITCHING_DMI_VIDEO)
-		return 1;
-
-	return acpi_video_support & ACPI_VIDEO_OUTPUT_SWITCHING;
-}
-EXPORT_SYMBOL(acpi_video_display_switch_support);
-
-/*
- * Use acpi_display_output=vendor/video or acpi_backlight=vendor/video
- * To force that backlight or display output switching is processed by vendor
- * specific acpi drivers or video.ko driver.
+ * Use acpi_backlight=vendor/video to force that backlight switching
+ * is processed by vendor specific acpi drivers or video.ko driver.
  */
 static int __init acpi_backlight(char *str)
 {
@@ -255,19 +227,3 @@ static int __init acpi_backlight(char *str)
 	return 1;
 }
 __setup("acpi_backlight=", acpi_backlight);
-
-static int __init acpi_display_output(char *str)
-{
-	if (str == NULL || *str == '\0')
-		return 1;
-	else {
-		if (!strcmp("vendor", str))
-			acpi_video_support |=
-				ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VENDOR;
-		if (!strcmp("video", str))
-			acpi_video_support |=
-				ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VIDEO;
-	}
-	return 1;
-}
-__setup("acpi_display_output=", acpi_display_output);

@@ -40,7 +40,6 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
-#include <linux/slab.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/interrupt.h>
@@ -123,9 +122,7 @@ static void ariadne_reset(struct net_device *dev);
 static irqreturn_t ariadne_interrupt(int irq, void *data);
 static int ariadne_close(struct net_device *dev);
 static struct net_device_stats *ariadne_get_stats(struct net_device *dev);
-#ifdef HAVE_MULTICAST
 static void set_multicast_list(struct net_device *dev);
-#endif
 
 
 static void memcpyw(volatile u_short *dest, u_short *src, int len)
@@ -148,6 +145,7 @@ static struct zorro_device_id ariadne_zorro_tbl[] __devinitdata = {
     { ZORRO_PROD_VILLAGE_TRONIC_ARIADNE },
     { 0 }
 };
+MODULE_DEVICE_TABLE(zorro, ariadne_zorro_tbl);
 
 static struct zorro_driver ariadne_driver = {
     .name	= "ariadne",
@@ -184,14 +182,14 @@ static int __devinit ariadne_init_one(struct zorro_dev *z,
 	return -EBUSY;
     r2 = request_mem_region(mem_start, ARIADNE_RAM_SIZE, "RAM");
     if (!r2) {
-	release_resource(r1);
+	release_mem_region(base_addr, sizeof(struct Am79C960));
 	return -EBUSY;
     }
 
     dev = alloc_etherdev(sizeof(struct ariadne_private));
     if (dev == NULL) {
-	release_resource(r1);
-	release_resource(r2);
+	release_mem_region(base_addr, sizeof(struct Am79C960));
+	release_mem_region(mem_start, ARIADNE_RAM_SIZE);
 	return -ENOMEM;
     }
 
@@ -215,8 +213,8 @@ static int __devinit ariadne_init_one(struct zorro_dev *z,
 
     err = register_netdev(dev);
     if (err) {
-	release_resource(r1);
-	release_resource(r2);
+	release_mem_region(base_addr, sizeof(struct Am79C960));
+	release_mem_region(mem_start, ARIADNE_RAM_SIZE);
 	free_netdev(dev);
 	return err;
     }
@@ -426,11 +424,6 @@ static irqreturn_t ariadne_interrupt(int irq, void *data)
     struct ariadne_private *priv;
     int csr0, boguscnt;
     int handled = 0;
-
-    if (dev == NULL) {
-	printk(KERN_WARNING "ariadne_interrupt(): irq for unknown device.\n");
-	return IRQ_NONE;
-    }
 
     lance->RAP = CSR0;			/* PCnet-ISA Controller Status */
 
@@ -679,8 +672,6 @@ static netdev_tx_t ariadne_start_xmit(struct sk_buff *skb,
     lance->RAP = CSR0;		/* PCnet-ISA Controller Status */
     lance->RDP = INEA|TDMD;
 
-    dev->trans_start = jiffies;
-
     if (lowb(priv->tx_ring[(entry+1) % TX_RING_SIZE]->TMD1) != 0) {
 	netif_stop_queue(dev);
 	priv->tx_full = 1;
@@ -821,7 +812,7 @@ static void set_multicast_list(struct net_device *dev)
 	lance->RDP = PROM;		/* Set promiscuous mode */
     } else {
 	short multicast_table[4];
-	int num_addrs = dev->mc_count;
+	int num_addrs = netdev_mc_count(dev);
 	int i;
 	/* We don't use the multicast table, but rely on upper-layer filtering. */
 	memset(multicast_table, (num_addrs == 0) ? 0 : -1,

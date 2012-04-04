@@ -1,13 +1,14 @@
 /*
  * sgiseeq.c: Seeq8003 ethernet driver for SGI machines.
  *
- * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ * Copyright (C) 1996 David S. Miller (davem@davemloft.net)
  */
 
 #undef DEBUG
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/types.h>
@@ -32,7 +33,7 @@ static char *sgiseeqstr = "SGI Seeq8003";
  * with that in mind, I've decided to make this driver look completely like a
  * stupid Lance from a driver architecture perspective.  Only difference is that
  * here our "ring buffer" looks and acts like a real Lance one does but is
- * layed out like how the HPC DMA and the Seeq want it to.  You'd be surprised
+ * laid out like how the HPC DMA and the Seeq want it to.  You'd be surprised
  * how a stupid idea like this can pay off in performance, not to mention
  * making this driver 2,000 times easier to write. ;-)
  */
@@ -76,7 +77,7 @@ struct sgiseeq_tx_desc {
 };
 
 /*
- * Warning: This structure is layed out in a certain way because HPC dma
+ * Warning: This structure is laid out in a certain way because HPC dma
  *          descriptors must be 8-byte aligned.  So don't touch this without
  *          some care.
  */
@@ -365,11 +366,10 @@ static inline void sgiseeq_rx(struct net_device *dev, struct sgiseeq_private *sp
 					}
 					skb_reserve(newskb, 2);
 				} else {
-					skb = netdev_alloc_skb(dev, len + 2);
-					if (skb) {
-						skb_reserve(skb, 2);
+					skb = netdev_alloc_skb_ip_align(dev, len);
+					if (skb)
 						skb_copy_to_linear_data(skb, rd->skb->data, len);
-					}
+
 					newskb = rd->skb;
 				}
 memory_squeeze:
@@ -531,7 +531,7 @@ static int sgiseeq_open(struct net_device *dev)
 
 	if (request_irq(irq, sgiseeq_interrupt, 0, sgiseeqstr, dev)) {
 		printk(KERN_ERR "Seeq8003: Can't get irq %d\n", dev->irq);
-		err = -EAGAIN;
+		return -EAGAIN;
 	}
 
 	err = init_seeq(dev, sp, sregs);
@@ -574,7 +574,7 @@ static inline int sgiseeq_reset(struct net_device *dev)
 	if (err)
 		return err;
 
-	dev->trans_start = jiffies;
+	dev->trans_start = jiffies; /* prevent tx timeout */
 	netif_wake_queue(dev);
 
 	return 0;
@@ -593,8 +593,10 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Setup... */
 	len = skb->len;
 	if (len < ETH_ZLEN) {
-		if (skb_padto(skb, ETH_ZLEN))
+		if (skb_padto(skb, ETH_ZLEN)) {
+			spin_unlock_irqrestore(&sp->tx_lock, flags);
 			return NETDEV_TX_OK;
+		}
 		len = ETH_ZLEN;
 	}
 
@@ -636,8 +638,6 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!(hregs->tx_ctrl & HPC3_ETXCTRL_ACTIVE))
 		kick_tx(dev, sp, hregs);
 
-	dev->trans_start = jiffies;
-
 	if (!TX_BUFFS_AVAIL(sp))
 		netif_stop_queue(dev);
 	spin_unlock_irqrestore(&sp->tx_lock, flags);
@@ -650,7 +650,7 @@ static void timeout(struct net_device *dev)
 	printk(KERN_NOTICE "%s: transmit timed out, resetting\n", dev->name);
 	sgiseeq_reset(dev);
 
-	dev->trans_start = jiffies;
+	dev->trans_start = jiffies; /* prevent tx timeout */
 	netif_wake_queue(dev);
 }
 
@@ -661,7 +661,7 @@ static void sgiseeq_set_multicast(struct net_device *dev)
 
 	if(dev->flags & IFF_PROMISC)
 		sp->mode = SEEQ_RCMD_RANY;
-	else if ((dev->flags & IFF_ALLMULTI) || dev->mc_count)
+	else if ((dev->flags & IFF_ALLMULTI) || !netdev_mc_empty(dev))
 		sp->mode = SEEQ_RCMD_RBMCAST;
 	else
 		sp->mode = SEEQ_RCMD_RBCAST;
@@ -804,7 +804,7 @@ static int __devinit sgiseeq_probe(struct platform_device *pdev)
 err_out_free_page:
 	free_page((unsigned long) sp->srings);
 err_out_free_dev:
-	kfree(dev);
+	free_netdev(dev);
 
 err_out:
 	return err;

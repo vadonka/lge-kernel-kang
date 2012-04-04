@@ -76,7 +76,8 @@ struct pxafb_mode_info {
 	u_char		bpp;
 	u_int		cmap_greyscale:1,
 			depth:8,
-			unused:23;
+			transparency:1,
+			unused:22;
 
 	/* Parallel Mode Timing */
 	u_char		hsync_len;
@@ -153,8 +154,8 @@ struct pxafb_mach_info {
 	void (*pxafb_lcd_power)(int, struct fb_var_screeninfo *);
 	void (*smart_update)(struct fb_info *);
 };
-void set_pxa_fb_info(struct pxafb_mach_info *hard_pxa_fb_info);
-void set_pxa_fb_parent(struct device *parent_dev);
+
+void pxa_set_fb_info(struct device *, struct pxafb_mach_info *);
 unsigned long pxafb_get_hsync_time(struct device *dev);
 
 extern int pxafb_smart_queue(struct fb_info *info, uint16_t *cmds, int);

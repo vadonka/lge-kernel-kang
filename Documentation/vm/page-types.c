@@ -1,11 +1,22 @@
 /*
  * page-types: Tool for querying page flags
  *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the Free
+ * Software Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should find a copy of v2 of the GNU General Public License somewhere on
+ * your Linux system; if not, write to the Free Software Foundation, Inc., 59
+ * Temple Place, Suite 330, Boston, MA 02111-1307 USA.
+ *
  * Copyright (C) 2009 Intel corporation
  *
  * Authors: Wu Fengguang <fengguang.wu@intel.com>
- *
- * Released under the General Public License (GPL).
  */
 
 #define _LARGEFILE64_SOURCE
@@ -21,7 +32,19 @@
 #include <sys/types.h>
 #include <sys/errno.h>
 #include <sys/fcntl.h>
+#include <sys/mount.h>
+#include <sys/statfs.h>
+#include "../../include/linux/magic.h"
 
+
+#ifndef MAX_PATH
+# define MAX_PATH 256
+#endif
+
+#ifndef STR
+# define _STR(x) #x
+# define STR(x) _STR(x)
+#endif
 
 /*
  * pagemap kernel ABI bits
@@ -100,7 +123,7 @@
 #define BIT(name)		(1ULL << KPF_##name)
 #define BITS_COMPOUND		(BIT(COMPOUND_HEAD) | BIT(COMPOUND_TAIL))
 
-static char *page_flag_names[] = {
+static const char *page_flag_names[] = {
 	[KPF_LOCKED]		= "L:locked",
 	[KPF_ERROR]		= "E:error",
 	[KPF_REFERENCED]	= "R:referenced",
@@ -141,6 +164,12 @@ static char *page_flag_names[] = {
 };
 
 
+static const char *debugfs_known_mountpoints[] = {
+	"/sys/kernel/debug",
+	"/debug",
+	0,
+};
+
 /*
  * data structures
  */
@@ -173,7 +202,7 @@ static int		kpageflags_fd;
 static int		opt_hwpoison;
 static int		opt_unpoison;
 
-static char		*hwpoison_debug_fs = "/debug/hwpoison";
+static char		hwpoison_debug_fs[MAX_PATH+1];
 static int		hwpoison_inject_fd;
 static int		hwpoison_forget_fd;
 
@@ -453,21 +482,100 @@ static uint64_t kpageflags_flags(uint64_t flags)
 	return flags;
 }
 
+/* verify that a mountpoint is actually a debugfs instance */
+static int debugfs_valid_mountpoint(const char *debugfs)
+{
+	struct statfs st_fs;
+
+	if (statfs(debugfs, &st_fs) < 0)
+		return -ENOENT;
+	else if (st_fs.f_type != (long) DEBUGFS_MAGIC)
+		return -ENOENT;
+
+	return 0;
+}
+
+/* find the path to the mounted debugfs */
+static const char *debugfs_find_mountpoint(void)
+{
+	const char **ptr;
+	char type[100];
+	FILE *fp;
+
+	ptr = debugfs_known_mountpoints;
+	while (*ptr) {
+		if (debugfs_valid_mountpoint(*ptr) == 0) {
+			strcpy(hwpoison_debug_fs, *ptr);
+			return hwpoison_debug_fs;
+		}
+		ptr++;
+	}
+
+	/* give up and parse /proc/mounts */
+	fp = fopen("/proc/mounts", "r");
+	if (fp == NULL)
+		perror("Can't open /proc/mounts for read");
+
+	while (fscanf(fp, "%*s %"
+		      STR(MAX_PATH)
+		      "s %99s %*s %*d %*d\n",
+		      hwpoison_debug_fs, type) == 2) {
+		if (strcmp(type, "debugfs") == 0)
+			break;
+	}
+	fclose(fp);
+
+	if (strcmp(type, "debugfs") != 0)
+		return NULL;
+
+	return hwpoison_debug_fs;
+}
+
+/* mount the debugfs somewhere if it's not mounted */
+
+static void debugfs_mount(void)
+{
+	const char **ptr;
+
+	/* see if it's already mounted */
+	if (debugfs_find_mountpoint())
+		return;
+
+	ptr = debugfs_known_mountpoints;
+	while (*ptr) {
+		if (mount(NULL, *ptr, "debugfs", 0, NULL) == 0) {
+			/* save the mountpoint */
+			strcpy(hwpoison_debug_fs, *ptr);
+			break;
+		}
+		ptr++;
+	}
+
+	if (*ptr == NULL) {
+		perror("mount debugfs");
+		exit(EXIT_FAILURE);
+	}
+}
+
 /*
  * page actions
  */
 
 static void prepare_hwpoison_fd(void)
 {
-	char buf[100];
+	char buf[MAX_PATH + 1];
+
+	debugfs_mount();
 
 	if (opt_hwpoison && !hwpoison_inject_fd) {
-		sprintf(buf, "%s/corrupt-pfn", hwpoison_debug_fs);
+		snprintf(buf, MAX_PATH, "%s/hwpoison/corrupt-pfn",
+			hwpoison_debug_fs);
 		hwpoison_inject_fd = checked_open(buf, O_WRONLY);
 	}
 
 	if (opt_unpoison && !hwpoison_forget_fd) {
-		sprintf(buf, "%s/renew-pfn", hwpoison_debug_fs);
+		snprintf(buf, MAX_PATH, "%s/hwpoison/unpoison-pfn",
+			hwpoison_debug_fs);
 		hwpoison_forget_fd = checked_open(buf, O_WRONLY);
 	}
 }
@@ -560,7 +668,7 @@ static void walk_pfn(unsigned long voffset,
 {
 	uint64_t buf[KPAGEFLAGS_BATCH];
 	unsigned long batch;
-	unsigned long pages;
+	long pages;
 	unsigned long i;
 
 	while (count) {
@@ -673,30 +781,35 @@ static void usage(void)
 
 	printf(
 "page-types [options]\n"
-"            -r|--raw                  Raw mode, for kernel developers\n"
-"            -a|--addr    addr-spec    Walk a range of pages\n"
-"            -b|--bits    bits-spec    Walk pages with specified bits\n"
-"            -p|--pid     pid          Walk process address space\n"
+"            -r|--raw                   Raw mode, for kernel developers\n"
+"            -d|--describe flags        Describe flags\n"
+"            -a|--addr    addr-spec     Walk a range of pages\n"
+"            -b|--bits    bits-spec     Walk pages with specified bits\n"
+"            -p|--pid     pid           Walk process address space\n"
 #if 0 /* planned features */
-"            -f|--file    filename     Walk file address space\n"
+"            -f|--file    filename      Walk file address space\n"
 #endif
-"            -l|--list                 Show page details in ranges\n"
-"            -L|--list-each            Show page details one by one\n"
-"            -N|--no-summary           Don't show summay info\n"
-"            -X|--hwpoison             hwpoison pages\n"
-"            -x|--unpoison             unpoison pages\n"
-"            -h|--help                 Show this usage message\n"
+"            -l|--list                  Show page details in ranges\n"
+"            -L|--list-each             Show page details one by one\n"
+"            -N|--no-summary            Don't show summary info\n"
+"            -X|--hwpoison              hwpoison pages\n"
+"            -x|--unpoison              unpoison pages\n"
+"            -h|--help                  Show this usage message\n"
+"flags:\n"
+"            0x10                       bitfield format, e.g.\n"
+"            anon                       bit-name, e.g.\n"
+"            0x10,anon                  comma-separated list, e.g.\n"
 "addr-spec:\n"
-"            N                         one page at offset N (unit: pages)\n"
-"            N+M                       pages range from N to N+M-1\n"
-"            N,M                       pages range from N to M-1\n"
-"            N,                        pages range from N to end\n"
-"            ,M                        pages range from 0 to M-1\n"
+"            N                          one page at offset N (unit: pages)\n"
+"            N+M                        pages range from N to N+M-1\n"
+"            N,M                        pages range from N to M-1\n"
+"            N,                         pages range from N to end\n"
+"            ,M                         pages range from 0 to M-1\n"
 "bits-spec:\n"
-"            bit1,bit2                 (flags & (bit1|bit2)) != 0\n"
-"            bit1,bit2=bit1            (flags & (bit1|bit2)) == bit1\n"
-"            bit1,~bit2                (flags & (bit1|bit2)) == bit1\n"
-"            =bit1,bit2                flags == (bit1|bit2)\n"
+"            bit1,bit2                  (flags & (bit1|bit2)) != 0\n"
+"            bit1,bit2=bit1             (flags & (bit1|bit2)) == bit1\n"
+"            bit1,~bit2                 (flags & (bit1|bit2)) == bit1\n"
+"            =bit1,bit2                 flags == (bit1|bit2)\n"
 "bit-names:\n"
 	);
 
@@ -884,13 +997,23 @@ static void parse_bits_mask(const char *optarg)
 	add_bits_filter(mask, bits);
 }
 
+static void describe_flags(const char *optarg)
+{
+	uint64_t flags = parse_flag_names(optarg, 0);
 
-static struct option opts[] = {
+	printf("0x%016llx\t%s\t%s\n",
+		(unsigned long long)flags,
+		page_flag_name(flags),
+		page_flag_longname(flags));
+}
+
+static const struct option opts[] = {
 	{ "raw"       , 0, NULL, 'r' },
 	{ "pid"       , 1, NULL, 'p' },
 	{ "file"      , 1, NULL, 'f' },
 	{ "addr"      , 1, NULL, 'a' },
 	{ "bits"      , 1, NULL, 'b' },
+	{ "describe"  , 1, NULL, 'd' },
 	{ "list"      , 0, NULL, 'l' },
 	{ "list-each" , 0, NULL, 'L' },
 	{ "no-summary", 0, NULL, 'N' },
@@ -907,7 +1030,7 @@ int main(int argc, char *argv[])
 	page_size = getpagesize();
 
 	while ((c = getopt_long(argc, argv,
-				"rp:f:a:b:lLNXxh", opts, NULL)) != -1) {
+				"rp:f:a:b:d:lLNXxh", opts, NULL)) != -1) {
 		switch (c) {
 		case 'r':
 			opt_raw = 1;
@@ -924,6 +1047,9 @@ int main(int argc, char *argv[])
 		case 'b':
 			parse_bits_mask(optarg);
 			break;
+		case 'd':
+			describe_flags(optarg);
+			exit(0);
 		case 'l':
 			opt_list = 1;
 			break;

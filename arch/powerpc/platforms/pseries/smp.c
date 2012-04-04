@@ -44,17 +44,19 @@
 #include <asm/mpic.h>
 #include <asm/vdso_datapage.h>
 #include <asm/cputhreads.h>
+#include <asm/mpic.h>
+#include <asm/xics.h>
 
 #include "plpar_wrappers.h"
 #include "pseries.h"
-#include "xics.h"
+#include "offline_states.h"
 
 
 /*
  * The Primary thread of each non-boot processor was started from the OF client
  * interface by prom_hold_cpus and is spinning on secondary_hold_spinloop.
  */
-static cpumask_t of_spin_map;
+static cpumask_var_t of_spin_mask;
 
 /* Query where a cpu is now.  Return codes #defined in plpar_wrappers.h */
 int smp_query_cpu_stopped(unsigned int pcpu)
@@ -63,8 +65,8 @@ int smp_query_cpu_stopped(unsigned int pcpu)
 	int qcss_tok = rtas_token("query-cpu-stopped-state");
 
 	if (qcss_tok == RTAS_UNKNOWN_SERVICE) {
-		printk(KERN_INFO "Firmware doesn't support "
-				"query-cpu-stopped-state\n");
+		printk_once(KERN_INFO
+			"Firmware doesn't support query-cpu-stopped-state\n");
 		return QCSS_HARDWARE_ERROR;
 	}
 
@@ -97,7 +99,7 @@ static inline int __devinit smp_startup_cpu(unsigned int lcpu)
 	unsigned int pcpu;
 	int start_cpu;
 
-	if (cpu_isset(lcpu, of_spin_map))
+	if (cpumask_test_cpu(lcpu, of_spin_mask))
 		/* Already started by OF and sitting in spin loop */
 		return 1;
 
@@ -105,13 +107,16 @@ static inline int __devinit smp_startup_cpu(unsigned int lcpu)
 
 	/* Check to see if the CPU out of FW already for kexec */
 	if (smp_query_cpu_stopped(pcpu) == QCSS_NOT_STOPPED){
-		cpu_set(lcpu, of_spin_map);
+		cpumask_set_cpu(lcpu, of_spin_mask);
 		return 1;
 	}
 
 	/* Fixup atomic count: it exited inside IRQ handler. */
 	task_thread_info(paca[lcpu].__current)->preempt_count	= 0;
-
+#ifdef CONFIG_HOTPLUG_CPU
+	if (get_cpu_current_state(lcpu) == CPU_STATE_INACTIVE)
+		goto out;
+#endif
 	/* 
 	 * If the RTAS start-cpu token does not exist then presume the
 	 * cpu is already spinning.
@@ -126,10 +131,12 @@ static inline int __devinit smp_startup_cpu(unsigned int lcpu)
 		return 0;
 	}
 
+#ifdef CONFIG_HOTPLUG_CPU
+out:
+#endif
 	return 1;
 }
 
-#ifdef CONFIG_XICS
 static void __devinit smp_xics_setup_cpu(int cpu)
 {
 	if (cpu != boot_cpuid)
@@ -138,17 +145,19 @@ static void __devinit smp_xics_setup_cpu(int cpu)
 	if (firmware_has_feature(FW_FEATURE_SPLPAR))
 		vpa_init(cpu);
 
-	cpu_clear(cpu, of_spin_map);
-
+	cpumask_clear_cpu(cpu, of_spin_mask);
+#ifdef CONFIG_HOTPLUG_CPU
+	set_cpu_current_state(cpu, CPU_STATE_ONLINE);
+	set_default_offline_state(cpu);
+#endif
 }
-#endif /* CONFIG_XICS */
 
-static void __devinit smp_pSeries_kick_cpu(int nr)
+static int __devinit smp_pSeries_kick_cpu(int nr)
 {
 	BUG_ON(nr < 0 || nr >= NR_CPUS);
 
 	if (!smp_startup_cpu(nr))
-		return;
+		return -ENOENT;
 
 	/*
 	 * The processor is currently spinning, waiting for the
@@ -156,6 +165,22 @@ static void __devinit smp_pSeries_kick_cpu(int nr)
 	 * the processor will continue on to secondary_start
 	 */
 	paca[nr].cpu_start = 1;
+#ifdef CONFIG_HOTPLUG_CPU
+	set_preferred_offline_state(nr, CPU_STATE_ONLINE);
+
+	if (get_cpu_current_state(nr) == CPU_STATE_INACTIVE) {
+		long rc;
+		unsigned long hcpuid;
+
+		hcpuid = get_hard_smp_processor_id(nr);
+		rc = plpar_hcall_norets(H_PROD, hcpuid);
+		if (rc != H_SUCCESS)
+			printk(KERN_ERR "Error: Prod to wake up processor %d "
+						"Ret= %ld\n", nr, rc);
+	}
+#endif
+
+	return 0;
 }
 
 static int smp_pSeries_cpu_bootable(unsigned int nr)
@@ -163,30 +188,32 @@ static int smp_pSeries_cpu_bootable(unsigned int nr)
 	/* Special case - we inhibit secondary thread startup
 	 * during boot if the user requests it.
 	 */
-	if (system_state < SYSTEM_RUNNING &&
-	    cpu_has_feature(CPU_FTR_SMT) &&
-	    !smt_enabled_at_boot && cpu_thread_in_core(nr) != 0)
-		return 0;
+	if (system_state < SYSTEM_RUNNING && cpu_has_feature(CPU_FTR_SMT)) {
+		if (!smt_enabled_at_boot && cpu_thread_in_core(nr) != 0)
+			return 0;
+		if (smt_enabled_at_boot
+		    && cpu_thread_in_core(nr) >= smt_enabled_at_boot)
+			return 0;
+	}
 
 	return 1;
 }
-#ifdef CONFIG_MPIC
+
 static struct smp_ops_t pSeries_mpic_smp_ops = {
 	.message_pass	= smp_mpic_message_pass,
 	.probe		= smp_mpic_probe,
 	.kick_cpu	= smp_pSeries_kick_cpu,
 	.setup_cpu	= smp_mpic_setup_cpu,
 };
-#endif
-#ifdef CONFIG_XICS
+
 static struct smp_ops_t pSeries_xics_smp_ops = {
-	.message_pass	= smp_xics_message_pass,
-	.probe		= smp_xics_probe,
+	.message_pass	= smp_muxed_ipi_message_pass,
+	.cause_ipi	= NULL,	/* Filled at runtime by xics_smp_probe() */
+	.probe		= xics_smp_probe,
 	.kick_cpu	= smp_pSeries_kick_cpu,
 	.setup_cpu	= smp_xics_setup_cpu,
 	.cpu_bootable	= smp_pSeries_cpu_bootable,
 };
-#endif
 
 /* This is called very early */
 static void __init smp_init_pseries(void)
@@ -195,17 +222,19 @@ static void __init smp_init_pseries(void)
 
 	pr_debug(" -> smp_init_pSeries()\n");
 
+	alloc_bootmem_cpumask_var(&of_spin_mask);
+
 	/* Mark threads which are still spinning in hold loops. */
 	if (cpu_has_feature(CPU_FTR_SMT)) {
 		for_each_present_cpu(i) { 
 			if (cpu_thread_in_core(i) == 0)
-				cpu_set(i, of_spin_map);
+				cpumask_set_cpu(i, of_spin_mask);
 		}
 	} else {
-		of_spin_map = cpu_present_map;
+		cpumask_copy(of_spin_mask, cpu_present_mask);
 	}
 
-	cpu_clear(boot_cpuid, of_spin_map);
+	cpumask_clear_cpu(boot_cpuid, of_spin_mask);
 
 	/* Non-lpar has additional take/give timebase */
 	if (rtas_token("freeze-time-base") != RTAS_UNKNOWN_SERVICE) {
@@ -216,14 +245,12 @@ static void __init smp_init_pseries(void)
 	pr_debug(" <- smp_init_pSeries()\n");
 }
 
-#ifdef CONFIG_MPIC
 void __init smp_init_pseries_mpic(void)
 {
 	smp_ops = &pSeries_mpic_smp_ops;
 
 	smp_init_pseries();
 }
-#endif
 
 void __init smp_init_pseries_xics(void)
 {

@@ -3,6 +3,7 @@
  *
  * Copyright 2007 Red Hat, Inc.
  * Copyright 2008 Marvell. <kewei@marvell.com>
+ * Copyright 2009-2011 Marvell. <yuxiangl@marvell.com>
  *
  * This file is licensed under GPLv2.
  *
@@ -25,18 +26,30 @@
 
 #include "mv_sas.h"
 
+static int lldd_max_execute_num = 1;
+module_param_named(collector, lldd_max_execute_num, int, S_IRUGO);
+MODULE_PARM_DESC(collector, "\n"
+	"\tIf greater than one, tells the SAS Layer to run in Task Collector\n"
+	"\tMode.  If 1 or 0, tells the SAS Layer to run in Direct Mode.\n"
+	"\tThe mvsas SAS LLDD supports both modes.\n"
+	"\tDefault: 1 (Direct Mode).\n");
+
 static struct scsi_transport_template *mvs_stt;
+struct kmem_cache *mvs_task_list_cache;
 static const struct mvs_chip_info mvs_chips[] = {
 	[chip_6320] =	{ 1, 2, 0x400, 17, 16,  9, &mvs_64xx_dispatch, },
 	[chip_6440] =	{ 1, 4, 0x400, 17, 16,  9, &mvs_64xx_dispatch, },
 	[chip_6485] =	{ 1, 8, 0x800, 33, 32, 10, &mvs_64xx_dispatch, },
 	[chip_9180] =	{ 2, 4, 0x800, 17, 64,  9, &mvs_94xx_dispatch, },
 	[chip_9480] =	{ 2, 4, 0x800, 17, 64,  9, &mvs_94xx_dispatch, },
+	[chip_9445] =	{ 1, 4, 0x800, 17, 64, 11, &mvs_94xx_dispatch, },
+	[chip_9485] =	{ 2, 4, 0x800, 17, 64, 11, &mvs_94xx_dispatch, },
 	[chip_1300] =	{ 1, 4, 0x400, 17, 16,  9, &mvs_64xx_dispatch, },
 	[chip_1320] =	{ 2, 4, 0x800, 17, 64,  9, &mvs_94xx_dispatch, },
 };
 
 #define SOC_SAS_NUM 2
+#define SG_MX 64
 
 static struct scsi_host_template mvs_sht = {
 	.module			= THIS_MODULE,
@@ -53,10 +66,10 @@ static struct scsi_host_template mvs_sht = {
 	.can_queue		= 1,
 	.cmd_per_lun		= 1,
 	.this_id		= -1,
-	.sg_tablesize		= SG_ALL,
+	.sg_tablesize		= SG_MX,
 	.max_sectors		= SCSI_DEFAULT_MAX_SECTORS,
 	.use_clustering		= ENABLE_CLUSTERING,
-	.eh_device_reset_handler	= sas_eh_device_reset_handler,
+	.eh_device_reset_handler = sas_eh_device_reset_handler,
 	.eh_bus_reset_handler	= sas_eh_bus_reset_handler,
 	.slave_alloc		= mvs_slave_alloc,
 	.target_destroy		= sas_target_destroy,
@@ -65,19 +78,17 @@ static struct scsi_host_template mvs_sht = {
 
 static struct sas_domain_function_template mvs_transport_ops = {
 	.lldd_dev_found 	= mvs_dev_found,
-	.lldd_dev_gone	= mvs_dev_gone,
-
+	.lldd_dev_gone		= mvs_dev_gone,
 	.lldd_execute_task	= mvs_queue_command,
 	.lldd_control_phy	= mvs_phy_control,
 
 	.lldd_abort_task	= mvs_abort_task,
 	.lldd_abort_task_set    = mvs_abort_task_set,
 	.lldd_clear_aca         = mvs_clear_aca,
-       .lldd_clear_task_set    = mvs_clear_task_set,
+	.lldd_clear_task_set    = mvs_clear_task_set,
 	.lldd_I_T_nexus_reset	= mvs_I_T_nexus_reset,
 	.lldd_lu_reset 		= mvs_lu_reset,
 	.lldd_query_task	= mvs_query_task,
-
 	.lldd_port_formed	= mvs_port_formed,
 	.lldd_port_deformed     = mvs_port_deformed,
 
@@ -108,7 +119,6 @@ static void __devinit mvs_phy_init(struct mvs_info *mvi, int phy_id)
 
 static void mvs_free(struct mvs_info *mvi)
 {
-	int i;
 	struct mvs_wq *mwq;
 	int slot_nr;
 
@@ -120,12 +130,8 @@ static void mvs_free(struct mvs_info *mvi)
 	else
 		slot_nr = MVS_SLOTS;
 
-	for (i = 0; i < mvi->tags_num; i++) {
-		struct mvs_slot_info *slot = &mvi->slot_info[i];
-		if (slot->buf)
-			dma_free_coherent(mvi->dev, MVS_SLOT_BUF_SZ,
-					  slot->buf, slot->buf_dma);
-	}
+	if (mvi->dma_pool)
+		pci_pool_destroy(mvi->dma_pool);
 
 	if (mvi->tx)
 		dma_free_coherent(mvi->dev,
@@ -213,7 +219,8 @@ static irqreturn_t mvs_interrupt(int irq, void *opaque)
 
 static int __devinit mvs_alloc(struct mvs_info *mvi, struct Scsi_Host *shost)
 {
-	int i, slot_nr;
+	int i = 0, slot_nr;
+	char pool_name[32];
 
 	if (mvi->flags & MVF_FLAG_SOC)
 		slot_nr = MVS_SOC_SLOTS;
@@ -232,6 +239,7 @@ static int __devinit mvs_alloc(struct mvs_info *mvi, struct Scsi_Host *shost)
 		mvi->devices[i].dev_type = NO_DEVICE;
 		mvi->devices[i].device_id = i;
 		mvi->devices[i].dev_status = MVS_DEV_NORMAL;
+		init_timer(&mvi->devices[i].timer);
 	}
 
 	/*
@@ -272,18 +280,14 @@ static int __devinit mvs_alloc(struct mvs_info *mvi, struct Scsi_Host *shost)
 	if (!mvi->bulk_buffer)
 		goto err_out;
 #endif
-	for (i = 0; i < slot_nr; i++) {
-		struct mvs_slot_info *slot = &mvi->slot_info[i];
-
-		slot->buf = dma_alloc_coherent(mvi->dev, MVS_SLOT_BUF_SZ,
-					       &slot->buf_dma, GFP_KERNEL);
-		if (!slot->buf) {
-			printk(KERN_DEBUG"failed to allocate slot->buf.\n");
+	sprintf(pool_name, "%s%d", "mvs_dma_pool", mvi->id);
+	mvi->dma_pool = pci_pool_create(pool_name, mvi->pdev, MVS_SLOT_BUF_SZ, 16, 0);
+	if (!mvi->dma_pool) {
+			printk(KERN_DEBUG "failed to create dma pool %s.\n", pool_name);
 			goto err_out;
-		}
-		memset(slot->buf, 0, MVS_SLOT_BUF_SZ);
-		++mvi->tags_num;
 	}
+	mvi->tags_num = slot_nr;
+
 	/* Initialize tags */
 	mvs_tag_init(mvi);
 	return 0;
@@ -437,6 +441,7 @@ static int __devinit mvs_prep_sas_ha_init(struct Scsi_Host *shost,
 
 	sha->sas_phy = arr_phy;
 	sha->sas_port = arr_port;
+	sha->core.shost = shost;
 
 	sha->lldd_ha = kzalloc(sizeof(struct mvs_prv_info), GFP_KERNEL);
 	if (!sha->lldd_ha)
@@ -483,7 +488,7 @@ static void  __devinit mvs_post_sas_ha_init(struct Scsi_Host *shost,
 
 	sha->num_phys = nr_core * chip_info->n_phy;
 
-	sha->lldd_max_execute_num = 1;
+	sha->lldd_max_execute_num = lldd_max_execute_num;
 
 	if (mvi->flags & MVF_FLAG_SOC)
 		can_queue = MVS_SOC_CAN_QUEUE;
@@ -574,6 +579,10 @@ static int __devinit mvs_pci_init(struct pci_dev *pdev,
 		}
 		nhost++;
 	} while (nhost < chip->n_host);
+#ifdef MVS_USE_TASKLET
+	tasklet_init(&mv_tasklet, mvs_tasklet,
+		     (unsigned long)SHOST_TO_SAS_HA(shost));
+#endif
 
 	mvs_post_sas_ha_init(shost, chip);
 
@@ -658,6 +667,31 @@ static struct pci_device_id __devinitdata mvs_pci_table[] = {
 	{ PCI_VDEVICE(ARECA, PCI_DEVICE_ID_ARECA_1300), chip_1300 },
 	{ PCI_VDEVICE(ARECA, PCI_DEVICE_ID_ARECA_1320), chip_1320 },
 	{ PCI_VDEVICE(ADAPTEC2, 0x0450), chip_6440 },
+	{ PCI_VDEVICE(TTI, 0x2710), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2720), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2721), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2722), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2740), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2744), chip_9480 },
+	{ PCI_VDEVICE(TTI, 0x2760), chip_9480 },
+	{
+		.vendor		= 0x1b4b,
+		.device		= 0x9445,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= 0x9480,
+		.class		= 0,
+		.class_mask	= 0,
+		.driver_data	= chip_9445,
+	},
+	{
+		.vendor		= 0x1b4b,
+		.device		= 0x9485,
+		.subvendor	= PCI_ANY_ID,
+		.subdevice	= 0x9480,
+		.class		= 0,
+		.class_mask	= 0,
+		.driver_data	= chip_9485,
+	},
 
 	{ }	/* terminate list */
 };
@@ -678,6 +712,14 @@ static int __init mvs_init(void)
 	if (!mvs_stt)
 		return -ENOMEM;
 
+	mvs_task_list_cache = kmem_cache_create("mvs_task_list", sizeof(struct mvs_task_list),
+							 0, SLAB_HWCACHE_ALIGN, NULL);
+	if (!mvs_task_list_cache) {
+		rc = -ENOMEM;
+		mv_printk("%s: mvs_task_list_cache alloc failed! \n", __func__);
+		goto err_out;
+	}
+
 	rc = pci_register_driver(&mvs_pci_driver);
 
 	if (rc)
@@ -694,6 +736,7 @@ static void __exit mvs_exit(void)
 {
 	pci_unregister_driver(&mvs_pci_driver);
 	sas_release_transport(mvs_stt);
+	kmem_cache_destroy(mvs_task_list_cache);
 }
 
 module_init(mvs_init);

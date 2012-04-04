@@ -12,7 +12,7 @@
 static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 {
 	struct dvb_usb_adapter *adap = dvbdmxfeed->demux->priv;
-	int newfeedcount,ret;
+	int newfeedcount, ret;
 
 	if (adap == NULL)
 		return -ENODEV;
@@ -24,9 +24,13 @@ static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 		deb_ts("stop feeding\n");
 		usb_urb_kill(&adap->stream);
 
-		if (adap->props.streaming_ctrl != NULL)
-			if ((ret = adap->props.streaming_ctrl(adap,0)))
+		if (adap->props.streaming_ctrl != NULL) {
+			ret = adap->props.streaming_ctrl(adap, 0);
+			if (ret < 0) {
 				err("error while stopping stream.");
+				return ret;
+			}
+		}
 	}
 
 	adap->feedcount = newfeedcount;
@@ -49,17 +53,24 @@ static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 
 		deb_ts("controlling pid parser\n");
 		if (adap->props.caps & DVB_USB_ADAP_HAS_PID_FILTER &&
-			adap->props.caps & DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF &&
-			adap->props.pid_filter_ctrl != NULL)
-			if (adap->props.pid_filter_ctrl(adap,adap->pid_filtering) < 0)
+			adap->props.caps &
+			DVB_USB_ADAP_PID_FILTER_CAN_BE_TURNED_OFF &&
+			adap->props.pid_filter_ctrl != NULL) {
+			ret = adap->props.pid_filter_ctrl(adap,
+				adap->pid_filtering);
+			if (ret < 0) {
 				err("could not handle pid_parser");
-
-		deb_ts("start feeding\n");
-		if (adap->props.streaming_ctrl != NULL)
-			if (adap->props.streaming_ctrl(adap,1)) {
-				err("error while enabling fifo.");
-				return -ENODEV;
+				return ret;
 			}
+		}
+		deb_ts("start feeding\n");
+		if (adap->props.streaming_ctrl != NULL) {
+			ret = adap->props.streaming_ctrl(adap, 1);
+			if (ret < 0) {
+				err("error while enabling fifo.");
+				return ret;
+			}
+		}
 
 	}
 	return 0;
@@ -88,6 +99,7 @@ int dvb_usb_adapter_dvb_init(struct dvb_usb_adapter *adap, short *adapter_nums)
 		goto err;
 	}
 	adap->dvb_adap.priv = adap;
+	adap->dvb_adap.fe_ioctl_override = adap->props.fe_ioctl_override;
 
 	if (adap->dev->props.read_mac_address) {
 		if (adap->dev->props.read_mac_address(adap->dev,adap->dvb_adap.proposed_mac) == 0)

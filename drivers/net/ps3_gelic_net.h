@@ -117,7 +117,7 @@ enum gelic_descr_rx_error {
 	GELIC_DESCR_RXDATAERR	= 0x00020000, /* IP packet format error */
 	GELIC_DESCR_RXCALERR	= 0x00010000, /* cariier extension length
 					      * error */
-	GELIC_DESCR_RXCREXERR	= 0x00008000, /* carrier extention error */
+	GELIC_DESCR_RXCREXERR	= 0x00008000, /* carrier extension error */
 	GELIC_DESCR_RXMLTCST	= 0x00004000, /* multicast address frame */
 	/* bit 13..0 reserved */
 };
@@ -186,7 +186,7 @@ enum gelic_lv1_net_control_code {
 	GELIC_LV1_GET_CHANNEL           = 6,
 	GELIC_LV1_POST_WLAN_CMD		= 9,
 	GELIC_LV1_GET_WLAN_CMD_RESULT	= 10,
-	GELIC_LV1_GET_WLAN_EVENT	= 11
+	GELIC_LV1_GET_WLAN_EVENT	= 11,
 };
 
 /* for GELIC_LV1_SET_WOL */
@@ -217,24 +217,29 @@ enum gelic_lv1_ether_port_status {
 	GELIC_LV1_ETHER_SPEED_10	= 0x0000000000000010L,
 	GELIC_LV1_ETHER_SPEED_100	= 0x0000000000000020L,
 	GELIC_LV1_ETHER_SPEED_1000	= 0x0000000000000040L,
-	GELIC_LV1_ETHER_SPEED_MASK	= 0x0000000000000070L
+	GELIC_LV1_ETHER_SPEED_MASK	= 0x0000000000000070L,
 };
 
 enum gelic_lv1_vlan_index {
 	/* for outgoing packets */
-	GELIC_LV1_VLAN_TX_ETHERNET	= 0x0000000000000002L,
+	GELIC_LV1_VLAN_TX_ETHERNET_0	= 0x0000000000000002L,
 	GELIC_LV1_VLAN_TX_WIRELESS	= 0x0000000000000003L,
+
 	/* for incoming packets */
-	GELIC_LV1_VLAN_RX_ETHERNET	= 0x0000000000000012L,
-	GELIC_LV1_VLAN_RX_WIRELESS	= 0x0000000000000013L
+	GELIC_LV1_VLAN_RX_ETHERNET_0	= 0x0000000000000012L,
+	GELIC_LV1_VLAN_RX_WIRELESS	= 0x0000000000000013L,
+};
+
+enum gelic_lv1_phy {
+	GELIC_LV1_PHY_ETHERNET_0	= 0x0000000000000002L,
 };
 
 /* size of hardware part of gelic descriptor */
 #define GELIC_DESCR_SIZE	(32)
 
 enum gelic_port_type {
-	GELIC_PORT_ETHERNET = 0,
-	GELIC_PORT_WIRELESS = 1,
+	GELIC_PORT_ETHERNET_0	= 0,
+	GELIC_PORT_WIRELESS	= 1,
 	GELIC_PORT_MAX
 };
 
@@ -285,7 +290,6 @@ struct gelic_card {
 	struct gelic_descr_chain tx_chain;
 	struct gelic_descr_chain rx_chain;
 	int rx_dma_restart_required;
-	int rx_csum;
 	/*
 	 * tx_lock guards tx descriptor list and
 	 * tx_dma_progress.
@@ -302,6 +306,8 @@ struct gelic_card {
 	atomic_t users;
 
 	u64 ether_port_status;
+	int link_mode;
+
 	/* original address returned by kzalloc */
 	void *unalign;
 
@@ -370,8 +376,6 @@ extern int gelic_net_setup_netdev(struct net_device *netdev,
 /* shared ethtool ops */
 extern void gelic_net_get_drvinfo(struct net_device *netdev,
 				  struct ethtool_drvinfo *info);
-extern u32 gelic_net_get_rx_csum(struct net_device *netdev);
-extern int gelic_net_set_rx_csum(struct net_device *netdev, u32 data);
 extern void gelic_net_poll_controller(struct net_device *netdev);
 
 #endif /* _GELIC_NET_H */

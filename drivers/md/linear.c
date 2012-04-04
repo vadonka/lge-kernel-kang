@@ -19,6 +19,7 @@
 #include <linux/blkdev.h>
 #include <linux/raid/md_u.h>
 #include <linux/seq_file.h>
+#include <linux/slab.h>
 #include "md.h"
 #include "linear.h"
 
@@ -86,22 +87,6 @@ static int linear_mergeable_bvec(struct request_queue *q,
 	return maxsectors << 9;
 }
 
-static void linear_unplug(struct request_queue *q)
-{
-	mddev_t *mddev = q->queuedata;
-	linear_conf_t *conf;
-	int i;
-
-	rcu_read_lock();
-	conf = rcu_dereference(mddev->private);
-
-	for (i=0; i < mddev->raid_disks; i++) {
-		struct request_queue *r_queue = bdev_get_queue(conf->disks[i].rdev->bdev);
-		blk_unplug(r_queue);
-	}
-	rcu_read_unlock();
-}
-
 static int linear_congested(void *data, int bits)
 {
 	mddev_t *mddev = data;
@@ -158,7 +143,8 @@ static linear_conf_t *linear_conf(mddev_t *mddev, int raid_disks)
 		sector_t sectors;
 
 		if (j < 0 || j >= raid_disks || disk->rdev) {
-			printk("linear: disk numbering problem. Aborting!\n");
+			printk(KERN_ERR "md/linear:%s: disk numbering problem. Aborting!\n",
+			       mdname(mddev));
 			goto out;
 		}
 
@@ -172,11 +158,11 @@ static linear_conf_t *linear_conf(mddev_t *mddev, int raid_disks)
 		disk_stack_limits(mddev->gendisk, rdev->bdev,
 				  rdev->data_offset << 9);
 		/* as we don't honour merge_bvec_fn, we must never risk
-		 * violating it, so limit max_phys_segments to 1 lying within
+		 * violating it, so limit max_segments to 1 lying within
 		 * a single page.
 		 */
 		if (rdev->bdev->bd_disk->queue->merge_bvec_fn) {
-			blk_queue_max_phys_segments(mddev->queue, 1);
+			blk_queue_max_segments(mddev->queue, 1);
 			blk_queue_segment_boundary(mddev->queue,
 						   PAGE_CACHE_SIZE - 1);
 		}
@@ -186,7 +172,8 @@ static linear_conf_t *linear_conf(mddev_t *mddev, int raid_disks)
 
 	}
 	if (cnt != raid_disks) {
-		printk("linear: not enough drives present. Aborting!\n");
+		printk(KERN_ERR "md/linear:%s: not enough drives present. Aborting!\n",
+		       mdname(mddev));
 		goto out;
 	}
 
@@ -213,7 +200,6 @@ static int linear_run (mddev_t *mddev)
 
 	if (md_check_no_bitmap(mddev))
 		return -EINVAL;
-	mddev->queue->queue_lock = &mddev->queue->__queue_lock;
 	conf = linear_conf(mddev, mddev->raid_disks);
 
 	if (!conf)
@@ -222,11 +208,9 @@ static int linear_run (mddev_t *mddev)
 	md_set_array_sectors(mddev, linear_size(mddev, 0, 0));
 
 	blk_queue_merge_bvec(mddev->queue, linear_mergeable_bvec);
-	mddev->queue->unplug_fn = linear_unplug;
 	mddev->queue->backing_dev_info.congested_fn = linear_congested;
 	mddev->queue->backing_dev_info.congested_data = mddev;
-	md_integrity_register(mddev);
-	return 0;
+	return md_integrity_register(mddev);
 }
 
 static void free_conf(struct rcu_head *head)
@@ -281,28 +265,20 @@ static int linear_stop (mddev_t *mddev)
 	rcu_barrier();
 	blk_sync_queue(mddev->queue); /* the unplug fn references 'conf'*/
 	kfree(conf);
+	mddev->private = NULL;
 
 	return 0;
 }
 
-static int linear_make_request (struct request_queue *q, struct bio *bio)
+static int linear_make_request (mddev_t *mddev, struct bio *bio)
 {
-	const int rw = bio_data_dir(bio);
-	mddev_t *mddev = q->queuedata;
 	dev_info_t *tmp_dev;
 	sector_t start_sector;
-	int cpu;
 
-	if (unlikely(bio_rw_flagged(bio, BIO_RW_BARRIER))) {
-		bio_endio(bio, -EOPNOTSUPP);
+	if (unlikely(bio->bi_rw & REQ_FLUSH)) {
+		md_flush_request(mddev, bio);
 		return 0;
 	}
-
-	cpu = part_stat_lock();
-	part_stat_inc(cpu, &mddev->gendisk->part0, ios[rw]);
-	part_stat_add(cpu, &mddev->gendisk->part0, sectors[rw],
-		      bio_sectors(bio));
-	part_stat_unlock();
 
 	rcu_read_lock();
 	tmp_dev = which_dev(mddev, bio->bi_sector);
@@ -313,12 +289,14 @@ static int linear_make_request (struct request_queue *q, struct bio *bio)
 		     || (bio->bi_sector < start_sector))) {
 		char b[BDEVNAME_SIZE];
 
-		printk("linear_make_request: Sector %llu out of bounds on "
-			"dev %s: %llu sectors, offset %llu\n",
-			(unsigned long long)bio->bi_sector,
-			bdevname(tmp_dev->rdev->bdev, b),
-			(unsigned long long)tmp_dev->rdev->sectors,
-			(unsigned long long)start_sector);
+		printk(KERN_ERR
+		       "md/linear:%s: make_request: Sector %llu out of bounds on "
+		       "dev %s: %llu sectors, offset %llu\n",
+		       mdname(mddev),
+		       (unsigned long long)bio->bi_sector,
+		       bdevname(tmp_dev->rdev->bdev, b),
+		       (unsigned long long)tmp_dev->rdev->sectors,
+		       (unsigned long long)start_sector);
 		rcu_read_unlock();
 		bio_io_error(bio);
 		return 0;
@@ -335,9 +313,9 @@ static int linear_make_request (struct request_queue *q, struct bio *bio)
 
 		bp = bio_split(bio, end_sector - bio->bi_sector);
 
-		if (linear_make_request(q, &bp->bio1))
+		if (linear_make_request(mddev, &bp->bio1))
 			generic_make_request(&bp->bio1);
-		if (linear_make_request(q, &bp->bio2))
+		if (linear_make_request(mddev, &bp->bio2))
 			generic_make_request(&bp->bio2);
 		bio_pair_release(bp);
 		return 0;
@@ -385,6 +363,7 @@ static void linear_exit (void)
 module_init(linear_init);
 module_exit(linear_exit);
 MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Linear device concatenation personality for MD");
 MODULE_ALIAS("md-personality-1"); /* LINEAR - deprecated*/
 MODULE_ALIAS("md-linear");
 MODULE_ALIAS("md-level--1");

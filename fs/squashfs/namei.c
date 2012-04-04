@@ -2,7 +2,7 @@
  * Squashfs - a compressed read only filesystem for Linux
  *
  * Copyright (c) 2002, 2003, 2004, 2005, 2006, 2007, 2008
- * Phillip Lougher <phillip@lougher.demon.co.uk>
+ * Phillip Lougher <phillip@squashfs.org.uk>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -57,12 +57,13 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/dcache.h>
-#include <linux/zlib.h>
+#include <linux/xattr.h>
 
 #include "squashfs_fs.h"
 #include "squashfs_fs_sb.h"
 #include "squashfs_fs_i.h"
 #include "squashfs.h"
+#include "xattr.h"
 
 /*
  * Lookup name in the directory index, returning the location of the metadata
@@ -250,5 +251,7 @@ failed:
 
 
 const struct inode_operations squashfs_dir_inode_ops = {
-	.lookup = squashfs_lookup
+	.lookup = squashfs_lookup,
+	.getxattr = generic_getxattr,
+	.listxattr = squashfs_listxattr
 };

@@ -34,6 +34,7 @@
 #include <linux/skbuff.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/slab.h>
 #include <net/sock.h>
 #include <net/netlink.h>
 #include <net/genetlink.h>
@@ -258,7 +259,7 @@ add_failure:
  *
  * Description:
  * This function is a helper function used by the LISTALL and LISTDEF command
- * handlers.  The caller is responsibile for ensuring that the RCU read lock
+ * handlers.  The caller is responsible for ensuring that the RCU read lock
  * is held.  Returns zero on success, negative values on failure.
  *
  */

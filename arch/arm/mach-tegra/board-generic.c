@@ -23,9 +23,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/pda_power.h>
 #include <linux/io.h>
+#ifdef CONFIG_USB_ANDROID
 #include <linux/usb/android_composite.h>
 #include <linux/usb/f_accessory.h>
-
+#endif
 #include <linux/i2c.h>
 
 #include <asm/mach-types.h>
@@ -93,6 +94,21 @@ static char *tegra_android_functions_accessory_adb[] = {
 };
 #endif
 
+//20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [START]
+#if defined(CONFIG_MACH_STAR)
+static char *tegra_android_functions_lge[] = {
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	"usb_mass_storage",
+#endif
+#ifdef CONFIG_USB_ANDROID_ADB
+	"adb",
+#endif
+};
+#endif
+//20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [END]
 static char *tegra_android_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	"rndis",
@@ -112,11 +128,12 @@ static char *tegra_android_functions_all[] = {
 };
 
 static struct android_usb_product tegra_android_products[] = {
+//20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [START]
 #if defined(CONFIG_MACH_STAR)
 	[0] = {
 		.product_id = 0x618E,
-		.num_functions = ARRAY_SIZE(tegra_android_functions_ums_adb),
-		.functions = tegra_android_functions_ums_adb,
+		.num_functions = ARRAY_SIZE(tegra_android_functions_lge),
+		.functions = tegra_android_functions_lge,
 	},
 	[1] = {
 		.product_id = 0x6000,
@@ -135,6 +152,7 @@ static struct android_usb_product tegra_android_products[] = {
 		.functions = tegra_android_functions_ums_adb,
 	},
 #endif
+//20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [END]
 	[2] = {
 		.product_id = 0x7102,
 		.num_functions = ARRAY_SIZE(tegra_android_functions_rndis),
@@ -174,7 +192,7 @@ static char *generic_dev = "NVIDIA Tegra 2";
 
 static struct android_usb_platform_data tegra_android_platform = {
 //20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [START]
-#ifndef CONFIG_MACH_STAR
+#if 0
 	.vendor_id = 0x955,
 	.product_id = 0x7100,
 	.manufacturer_name = "NVIDIA",
@@ -188,9 +206,10 @@ static struct android_usb_platform_data tegra_android_platform = {
 	.manufacturer_name = "LG Electronics",
 	.num_products = ARRAY_SIZE(tegra_android_products),
 	.products = tegra_android_products,
-	.num_functions = ARRAY_SIZE(tegra_android_functions_all),
-	.functions = tegra_android_functions_all,
+	.num_functions = ARRAY_SIZE(tegra_android_functions_lge),
+	.functions = tegra_android_functions_lge,
 #endif
+//20100709, jm1.lee@lge.com, for LGE Android USB Driver interface [END]
 };
 static struct platform_device tegra_android_device = {
 	.name = "android_usb",
@@ -211,7 +230,7 @@ static struct usb_mass_storage_platform_data tegra_usb_fsg_platform = {
 #endif
 //20100710, change mass storage device information [END]
 	.nluns = 2,
-	.bulk_size = 16384,
+	//.bulk_size = 16384,
 };
 static struct platform_device tegra_usb_fsg_device = {
 	.name = "usb_mass_storage",
@@ -347,11 +366,23 @@ static void __init register_spi_ipc_devices(void)
 
 	tegra_spi_ipc_devices[0].bus_num = instance;
 	tegra_spi_ipc_devices[0].chip_select = cs;
-	/*if (spi_register_board_info(tegra_spi_ipc_devices, ARRAY_SIZE(tegra_spi_ipc_devices)) != 0) {
+	if (spi_register_board_info(tegra_spi_ipc_devices, ARRAY_SIZE(tegra_spi_ipc_devices)) != 0) {
 		pr_err("%s: spi_register_board_info returned error\n", __func__);
-	}*/
+}
 }
 
+
+static void __init tegra_fixup(struct machine_desc *desc, struct tag *tags,
+				 char **cmdline, struct meminfo *mi)
+{
+	char *p;
+
+	p = *cmdline;
+	/* androidboot.serialno HACK to support androidboot.serialno */
+	if (strlen(p))
+		strlcat(p, " ", COMMAND_LINE_SIZE);
+	strlcat(p, "androidboot.serialno=0123456789ABCDEF", COMMAND_LINE_SIZE);
+}
 
 extern unsigned int system_serial_low;
 extern unsigned int system_serial_high;
@@ -360,6 +391,7 @@ static void __init do_system_init(bool standard_i2c, bool standard_spi)
 {
 	unsigned int chip_id[2];
 	char serial[17];
+	char *p;
 
 	tegra_common_init();
 	tegra_setup_nvodm(true, true);
@@ -367,9 +399,19 @@ static void __init do_system_init(bool standard_i2c, bool standard_spi)
 
 	NvRmQueryChipUniqueId(s_hRmGlobal, sizeof(chip_id), (void*)chip_id);
 	snprintf(serial, sizeof(serial), "%08x%08x", chip_id[1], chip_id[0]);
+#if defined(CONFIG_USB_ANDROID) || defined(CONFIG_USB_SUPPORT_LGE_ANDROID_GADGET)
 	tegra_android_platform.serial_number = kstrdup(serial, GFP_KERNEL);
-	system_serial_low = chip_id[1];
-	system_serial_high = chip_id[0];
+#endif
+	system_serial_low = chip_id[0];
+	system_serial_high = chip_id[1];
+
+	/* HACK append androidboot.serialno and update /proc/cmdline */
+	if ((p = strstr(saved_command_line, "=0123456789ABCDEF"))) {
+		p++;
+                strncpy(p, serial, 16);
+                printk(KERN_INFO "fixed cmdline=%s\n", saved_command_line);
+	}
+
 	platform_add_devices(platform_devices, ARRAY_SIZE(platform_devices));
 }
 
@@ -508,11 +550,19 @@ static void __init tegra_generic_init(void)
 	tegra_setup_bluesleep_csr();
 }
 
+extern void __init tegra_allocate_memory_regions(void);
+static void __init tegra_map_io(void)
+{
+	tegra_map_common_io();
+
+	tegra_allocate_memory_regions();
+}
+
 MACHINE_START(VENTANA, "NVIDIA Ventana Development System")
 	.boot_params  = 0x00000100,
-	.phys_io        = IO_APB_PHYS,
-	.io_pg_offst    = ((IO_APB_VIRT) >> 18) & 0xfffc,
+	.fixup          = tegra_fixup,
 	.init_irq       = tegra_init_irq,
+	.init_early     = tegra_init_early,
 	.init_machine   = tegra_ventana_init,
 	.map_io         = tegra_map_common_io,
 	.timer          = &tegra_timer,
@@ -520,9 +570,9 @@ MACHINE_END
 
 MACHINE_START(HARMONY, "NVIDIA Harmony Development System")
 	.boot_params  = 0x00000100,
-	.phys_io        = IO_APB_PHYS,
-	.io_pg_offst    = ((IO_APB_VIRT) >> 18) & 0xfffc,
+	.fixup          = tegra_fixup,
 	.init_irq       = tegra_init_irq,
+	.init_early     = tegra_init_early,
 	.init_machine   = tegra_harmony_init,
 	.map_io         = tegra_map_common_io,
 	.timer          = &tegra_timer,
@@ -531,10 +581,10 @@ MACHINE_END
 
 MACHINE_START(TEGRA_GENERIC, "Tegra 2 Development System")
 	.boot_params  = 0x00000100,
-	.phys_io        = IO_APB_PHYS,
-	.io_pg_offst    = ((IO_APB_VIRT) >> 18) & 0xfffc,
+	.fixup          = tegra_fixup,
 	.init_irq       = tegra_init_irq,
+	.init_early     = tegra_init_early,
 	.init_machine   = tegra_generic_init,
-	.map_io         = tegra_map_common_io,
+	.map_io         = tegra_map_io,
 	.timer          = &tegra_timer,
 MACHINE_END

@@ -58,7 +58,7 @@ static DEVICE_ATTR(bdaddr_if, 0666, bd_address_show, bd_address_store);
     @date   2010.11.11
 */
 
-static int __exit bd_address_remove(struct platform_device *pdev)
+static int __devexit bd_address_remove(struct platform_device *pdev)
 {
 	return 0;
 }
@@ -68,7 +68,7 @@ static int __exit bd_address_remove(struct platform_device *pdev)
     @date   2010.11.11
 */
 
-static int __init bd_address_probe(struct platform_device *pdev)
+static int __devinit bd_address_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -115,13 +115,13 @@ MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:star_bd_address");
 MODULE_AUTHOR("LG Electronics Inc");
 
-static int __init bd_address_init(void)
+static int __devinit bd_address_init(void)
 {
 	return platform_driver_register(&bd_address_driver);
 }
 module_init(bd_address_init);
 
-static void __exit bd_address_exit(void)
+static void __devexit bd_address_exit(void)
 {
 	platform_driver_unregister(&bd_address_driver);
 }

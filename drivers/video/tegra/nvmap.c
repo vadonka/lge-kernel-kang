@@ -37,7 +37,6 @@
 #include <linux/backing-dev.h>
 #include <linux/device.h>
 #include <linux/highmem.h>
-#include <linux/smp_lock.h>
 #include <linux/pagemap.h>
 #include <linux/sched.h>
 #include <linux/io.h>
@@ -1140,32 +1139,6 @@ static struct tegra_iovmm_area *_nvmap_get_vm(struct nvmap_handle *h)
 	spin_unlock(&nvmap_mru_vma_lock);
 	return vm;
 #endif
-}
-
-int nvmap_get_unpinned_iovmm_memory(int *total_unpinned_mem,
-	int *largest_unpinned_mem)
-{
-	unsigned int i;
-	struct list_head *mru;
-	struct list_head *temp;
-	struct nvmap_handle *h;
-	*total_unpinned_mem = 0;
-	*largest_unpinned_mem = 0;
-
-	spin_lock(&nvmap_mru_vma_lock);
-	for (i = 0; i<ARRAY_SIZE(nvmap_mru_vma_lists); i++) {
-		mru = &nvmap_mru_vma_lists[i];
-		list_for_each(temp, mru) {
-			h = list_entry(temp, struct nvmap_handle, pgalloc.mru_list);
-			(*total_unpinned_mem) += h->size;
-			if ( (*largest_unpinned_mem) < h->size )
-				*largest_unpinned_mem = h->size;
-		}
-	}
-	(*total_unpinned_mem) = (*total_unpinned_mem) >> 10;
-	(*largest_unpinned_mem) = (*largest_unpinned_mem) >> 10;
-	spin_unlock(&nvmap_mru_vma_lock);
-	return 0;
 }
 
 static int _nvmap_do_cache_maint(struct nvmap_handle *h,
@@ -3056,10 +3029,6 @@ static int nvmap_mmap(struct file *filp, struct vm_area_struct *vma)
 	return 0;
 }
 
-extern void v7_flush_kern_cache_all(void *);
-extern void v7_clean_kern_cache_all(void *);
-#define FLUSH_CLEAN_BY_SET_WAY_THRESHOLD (3 * PAGE_SIZE)
-
 /* perform cache maintenance on a handle; caller's handle must be pre-
  * validated. */
 static int _nvmap_do_cache_maint(struct nvmap_handle *h,
@@ -3098,16 +3067,6 @@ static int _nvmap_do_cache_maint(struct nvmap_handle *h,
 			outer_maint = outer_inv_range;
 		else
 			outer_maint = NULL;
-	}
-
-	if ((end - start) >= FLUSH_CLEAN_BY_SET_WAY_THRESHOLD) {
-		if (op == NVMEM_CACHE_OP_WB) {
-			on_each_cpu(v7_clean_kern_cache_all, NULL, 1);
-			inner_maint = NULL;
-		} else if (op == NVMEM_CACHE_OP_WB_INV) {
-			on_each_cpu(v7_flush_kern_cache_all, NULL, 1);
-			inner_maint = NULL;
-		}
 	}
 
 	prot = _nvmap_flag_to_pgprot(h->flags, pgprot_kernel);

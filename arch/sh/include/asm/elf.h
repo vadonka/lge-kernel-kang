@@ -50,25 +50,14 @@
 #define	R_SH_GOTPC		167
 
 /* FDPIC relocs */
-#define R_SH_GOT20		70
-#define R_SH_GOTOFF20		71
-#define R_SH_GOTFUNCDESC	72
-#define R_SH_GOTFUNCDESC20	73
-#define R_SH_GOTOFFFUNCDESC	74
-#define R_SH_GOTOFFFUNCDESC20	75
-#define R_SH_FUNCDESC		76
-#define R_SH_FUNCDESC_VALUE	77
-
-#if 0 /* XXX - later .. */
-#define R_SH_GOT20		198
-#define R_SH_GOTOFF20		199
-#define R_SH_GOTFUNCDESC	200
-#define R_SH_GOTFUNCDESC20	201
-#define R_SH_GOTOFFFUNCDESC	202
-#define R_SH_GOTOFFFUNCDESC20	203
-#define R_SH_FUNCDESC		204
-#define R_SH_FUNCDESC_VALUE	205
-#endif
+#define R_SH_GOT20		201
+#define R_SH_GOTOFF20		202
+#define R_SH_GOTFUNCDESC	203
+#define R_SH_GOTFUNCDESC20	204
+#define R_SH_GOTOFFFUNCDESC	205
+#define R_SH_GOTOFFFUNCDESC20	206
+#define R_SH_FUNCDESC		207
+#define R_SH_FUNCDESC_VALUE	208
 
 /* SHmedia relocs */
 #define R_SH_IMM_LOW16		246
@@ -114,7 +103,6 @@ typedef struct user_fpu_struct elf_fpregset_t;
  */
 #define CORE_DUMP_USE_REGSET
 
-#define USE_ELF_CORE_DUMP
 #define ELF_FDPIC_CORE_EFLAGS	EF_SH_FDPIC
 #define ELF_EXEC_PAGESIZE	PAGE_SIZE
 

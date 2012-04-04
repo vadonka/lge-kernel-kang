@@ -31,12 +31,12 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include <linux/smp_lock.h>
 #include <linux/string.h>
 #include <linux/parser.h>
 #include <linux/vfs.h>
 #include <linux/random.h>
 #include <linux/exportfs.h>
+#include <linux/slab.h>
 
 #include "exofs.h"
 
@@ -48,6 +48,7 @@
  * struct to hold what we get from mount options
  */
 struct exofs_mountopt {
+	bool is_osdname;
 	const char *dev_name;
 	uint64_t pid;
 	int timeout;
@@ -56,7 +57,7 @@ struct exofs_mountopt {
 /*
  * exofs-specific mount-time options.
  */
-enum { Opt_pid, Opt_to, Opt_mkfs, Opt_format, Opt_err };
+enum { Opt_name, Opt_pid, Opt_to, Opt_err };
 
 /*
  * Our mount-time options.  These should ideally be 64-bit unsigned, but the
@@ -64,6 +65,7 @@ enum { Opt_pid, Opt_to, Opt_mkfs, Opt_format, Opt_err };
  * sufficient for most applications now.
  */
 static match_table_t tokens = {
+	{Opt_name, "osdname=%s"},
 	{Opt_pid, "pid=%u"},
 	{Opt_to, "to=%u"},
 	{Opt_err, NULL}
@@ -94,6 +96,14 @@ static int parse_options(char *options, struct exofs_mountopt *opts)
 
 		token = match_token(p, tokens, args);
 		switch (token) {
+		case Opt_name:
+			opts->dev_name = match_strdup(&args[0]);
+			if (unlikely(!opts->dev_name)) {
+				EXOFS_ERR("Error allocating dev_name");
+				return -ENOMEM;
+			}
+			opts->is_osdname = true;
+			break;
 		case Opt_pid:
 			if (0 == match_strlcpy(str, &args[0], sizeof(str)))
 				return -EINVAL;
@@ -150,12 +160,19 @@ static struct inode *exofs_alloc_inode(struct super_block *sb)
 	return &oi->vfs_inode;
 }
 
+static void exofs_i_callback(struct rcu_head *head)
+{
+	struct inode *inode = container_of(head, struct inode, i_rcu);
+	INIT_LIST_HEAD(&inode->i_dentry);
+	kmem_cache_free(exofs_inode_cachep, exofs_i(inode));
+}
+
 /*
  * Remove an inode from the cache
  */
 static void exofs_destroy_inode(struct inode *inode)
 {
-	kmem_cache_free(exofs_inode_cachep, exofs_i(inode));
+	call_rcu(&inode->i_rcu, exofs_i_callback);
 }
 
 /*
@@ -196,6 +213,101 @@ static void destroy_inodecache(void)
 static const struct super_operations exofs_sops;
 static const struct export_operations exofs_export_ops;
 
+static const struct osd_attr g_attr_sb_stats = ATTR_DEF(
+	EXOFS_APAGE_SB_DATA,
+	EXOFS_ATTR_SB_STATS,
+	sizeof(struct exofs_sb_stats));
+
+static int __sbi_read_stats(struct exofs_sb_info *sbi)
+{
+	struct osd_attr attrs[] = {
+		[0] = g_attr_sb_stats,
+	};
+	struct exofs_io_state *ios;
+	int ret;
+
+	ret = exofs_get_io_state(&sbi->layout, &ios);
+	if (unlikely(ret)) {
+		EXOFS_ERR("%s: exofs_get_io_state failed.\n", __func__);
+		return ret;
+	}
+
+	ios->cred = sbi->s_cred;
+
+	ios->in_attr = attrs;
+	ios->in_attr_len = ARRAY_SIZE(attrs);
+
+	ret = exofs_sbi_read(ios);
+	if (unlikely(ret)) {
+		EXOFS_ERR("Error reading super_block stats => %d\n", ret);
+		goto out;
+	}
+
+	ret = extract_attr_from_ios(ios, &attrs[0]);
+	if (ret) {
+		EXOFS_ERR("%s: extract_attr of sb_stats failed\n", __func__);
+		goto out;
+	}
+	if (attrs[0].len) {
+		struct exofs_sb_stats *ess;
+
+		if (unlikely(attrs[0].len != sizeof(*ess))) {
+			EXOFS_ERR("%s: Wrong version of exofs_sb_stats "
+				  "size(%d) != expected(%zd)\n",
+				  __func__, attrs[0].len, sizeof(*ess));
+			goto out;
+		}
+
+		ess = attrs[0].val_ptr;
+		sbi->s_nextid = le64_to_cpu(ess->s_nextid);
+		sbi->s_numfiles = le32_to_cpu(ess->s_numfiles);
+	}
+
+out:
+	exofs_put_io_state(ios);
+	return ret;
+}
+
+static void stats_done(struct exofs_io_state *ios, void *p)
+{
+	exofs_put_io_state(ios);
+	/* Good thanks nothing to do anymore */
+}
+
+/* Asynchronously write the stats attribute */
+int exofs_sbi_write_stats(struct exofs_sb_info *sbi)
+{
+	struct osd_attr attrs[] = {
+		[0] = g_attr_sb_stats,
+	};
+	struct exofs_io_state *ios;
+	int ret;
+
+	ret = exofs_get_io_state(&sbi->layout, &ios);
+	if (unlikely(ret)) {
+		EXOFS_ERR("%s: exofs_get_io_state failed.\n", __func__);
+		return ret;
+	}
+
+	sbi->s_ess.s_nextid   = cpu_to_le64(sbi->s_nextid);
+	sbi->s_ess.s_numfiles = cpu_to_le64(sbi->s_numfiles);
+	attrs[0].val_ptr = &sbi->s_ess;
+
+	ios->cred = sbi->s_cred;
+	ios->done = stats_done;
+	ios->private = sbi;
+	ios->out_attr = attrs;
+	ios->out_attr_len = ARRAY_SIZE(attrs);
+
+	ret = exofs_sbi_write(ios);
+	if (unlikely(ret)) {
+		EXOFS_ERR("%s: exofs_sbi_write failed.\n", __func__);
+		exofs_put_io_state(ios);
+	}
+
+	return ret;
+}
+
 /*
  * Write the superblock to the OSD
  */
@@ -203,48 +315,52 @@ int exofs_sync_fs(struct super_block *sb, int wait)
 {
 	struct exofs_sb_info *sbi;
 	struct exofs_fscb *fscb;
-	struct osd_request *or;
-	struct osd_obj_id obj;
+	struct exofs_io_state *ios;
 	int ret = -ENOMEM;
 
-	fscb = kzalloc(sizeof(struct exofs_fscb), GFP_KERNEL);
-	if (!fscb) {
-		EXOFS_ERR("exofs_write_super: memory allocation failed.\n");
+	fscb = kmalloc(sizeof(*fscb), GFP_KERNEL);
+	if (unlikely(!fscb))
 		return -ENOMEM;
-	}
+
+	sbi = sb->s_fs_info;
+
+	/* NOTE: We no longer dirty the super_block anywhere in exofs. The
+	 * reason we write the fscb here on unmount is so we can stay backwards
+	 * compatible with fscb->s_version == 1. (What we are not compatible
+	 * with is if a new version FS crashed and then we try to mount an old
+	 * version). Otherwise the exofs_fscb is read-only from mkfs time. All
+	 * the writeable info is set in exofs_sbi_write_stats() above.
+	 */
+	ret = exofs_get_io_state(&sbi->layout, &ios);
+	if (unlikely(ret))
+		goto out;
 
 	lock_super(sb);
-	sbi = sb->s_fs_info;
+
+	ios->length = offsetof(struct exofs_fscb, s_dev_table_oid);
+	memset(fscb, 0, ios->length);
 	fscb->s_nextid = cpu_to_le64(sbi->s_nextid);
 	fscb->s_numfiles = cpu_to_le32(sbi->s_numfiles);
 	fscb->s_magic = cpu_to_le16(sb->s_magic);
 	fscb->s_newfs = 0;
+	fscb->s_version = EXOFS_FSCB_VER;
 
-	or = osd_start_request(sbi->s_dev, GFP_KERNEL);
-	if (unlikely(!or)) {
-		EXOFS_ERR("exofs_write_super: osd_start_request failed.\n");
-		goto out;
-	}
+	ios->obj.id = EXOFS_SUPER_ID;
+	ios->offset = 0;
+	ios->kern_buff = fscb;
+	ios->cred = sbi->s_cred;
 
-	obj.partition = sbi->s_pid;
-	obj.id = EXOFS_SUPER_ID;
-	ret = osd_req_write_kern(or, &obj, 0, fscb, sizeof(*fscb));
-	if (unlikely(ret)) {
-		EXOFS_ERR("exofs_write_super: osd_req_write_kern failed.\n");
-		goto out;
-	}
+	ret = exofs_sbi_write(ios);
+	if (unlikely(ret))
+		EXOFS_ERR("%s: exofs_sbi_write failed.\n", __func__);
+	else
+		sb->s_dirt = 0;
 
-	ret = exofs_sync_op(or, sbi->s_timeout, sbi->s_cred);
-	if (unlikely(ret)) {
-		EXOFS_ERR("exofs_write_super: exofs_sync_op failed.\n");
-		goto out;
-	}
-	sb->s_dirt = 0;
 
-out:
-	if (or)
-		osd_end_request(or);
 	unlock_super(sb);
+out:
+	EXOFS_DBGMSG("s_nextid=0x%llx ret=%d\n", _LLU(sbi->s_nextid), ret);
+	exofs_put_io_state(ios);
 	kfree(fscb);
 	return ret;
 }
@@ -257,6 +373,29 @@ static void exofs_write_super(struct super_block *sb)
 		sb->s_dirt = 0;
 }
 
+static void _exofs_print_device(const char *msg, const char *dev_path,
+				struct osd_dev *od, u64 pid)
+{
+	const struct osd_dev_info *odi = osduld_device_info(od);
+
+	printk(KERN_NOTICE "exofs: %s %s osd_name-%s pid-0x%llx\n",
+		msg, dev_path ?: "", odi->osdname, _LLU(pid));
+}
+
+void exofs_free_sbi(struct exofs_sb_info *sbi)
+{
+	while (sbi->layout.s_numdevs) {
+		int i = --sbi->layout.s_numdevs;
+		struct osd_dev *od = sbi->layout.s_ods[i];
+
+		if (od) {
+			sbi->layout.s_ods[i] = NULL;
+			osduld_put_device(od);
+		}
+	}
+	kfree(sbi);
+}
+
 /*
  * This function is called when the vfs is freeing the superblock.  We just
  * need to free our own part.
@@ -266,22 +405,265 @@ static void exofs_put_super(struct super_block *sb)
 	int num_pend;
 	struct exofs_sb_info *sbi = sb->s_fs_info;
 
-	if (sb->s_dirt)
-		exofs_write_super(sb);
-
 	/* make sure there are no pending commands */
 	for (num_pend = atomic_read(&sbi->s_curr_pending); num_pend > 0;
 	     num_pend = atomic_read(&sbi->s_curr_pending)) {
 		wait_queue_head_t wq;
+
+		printk(KERN_NOTICE "%s: !!Pending operations in flight. "
+		       "This is a BUG. please report to osd-dev@open-osd.org\n",
+		       __func__);
 		init_waitqueue_head(&wq);
 		wait_event_timeout(wq,
 				  (atomic_read(&sbi->s_curr_pending) == 0),
 				  msecs_to_jiffies(100));
 	}
 
-	osduld_put_device(sbi->s_dev);
-	kfree(sb->s_fs_info);
+	_exofs_print_device("Unmounting", NULL, sbi->layout.s_ods[0],
+			    sbi->layout.s_pid);
+
+	bdi_destroy(&sbi->bdi);
+	exofs_free_sbi(sbi);
 	sb->s_fs_info = NULL;
+}
+
+static int _read_and_match_data_map(struct exofs_sb_info *sbi, unsigned numdevs,
+				    struct exofs_device_table *dt)
+{
+	u64 stripe_length;
+
+	sbi->data_map.odm_num_comps   =
+				le32_to_cpu(dt->dt_data_map.cb_num_comps);
+	sbi->data_map.odm_stripe_unit =
+				le64_to_cpu(dt->dt_data_map.cb_stripe_unit);
+	sbi->data_map.odm_group_width =
+				le32_to_cpu(dt->dt_data_map.cb_group_width);
+	sbi->data_map.odm_group_depth =
+				le32_to_cpu(dt->dt_data_map.cb_group_depth);
+	sbi->data_map.odm_mirror_cnt  =
+				le32_to_cpu(dt->dt_data_map.cb_mirror_cnt);
+	sbi->data_map.odm_raid_algorithm  =
+				le32_to_cpu(dt->dt_data_map.cb_raid_algorithm);
+
+/* FIXME: Only raid0 for now. if not so, do not mount */
+	if (sbi->data_map.odm_num_comps != numdevs) {
+		EXOFS_ERR("odm_num_comps(%u) != numdevs(%u)\n",
+			  sbi->data_map.odm_num_comps, numdevs);
+		return -EINVAL;
+	}
+	if (sbi->data_map.odm_raid_algorithm != PNFS_OSD_RAID_0) {
+		EXOFS_ERR("Only RAID_0 for now\n");
+		return -EINVAL;
+	}
+	if (0 != (numdevs % (sbi->data_map.odm_mirror_cnt + 1))) {
+		EXOFS_ERR("Data Map wrong, numdevs=%d mirrors=%d\n",
+			  numdevs, sbi->data_map.odm_mirror_cnt);
+		return -EINVAL;
+	}
+
+	if (0 != (sbi->data_map.odm_stripe_unit & ~PAGE_MASK)) {
+		EXOFS_ERR("Stripe Unit(0x%llx)"
+			  " must be Multples of PAGE_SIZE(0x%lx)\n",
+			  _LLU(sbi->data_map.odm_stripe_unit), PAGE_SIZE);
+		return -EINVAL;
+	}
+
+	sbi->layout.stripe_unit = sbi->data_map.odm_stripe_unit;
+	sbi->layout.mirrors_p1 = sbi->data_map.odm_mirror_cnt + 1;
+
+	if (sbi->data_map.odm_group_width) {
+		sbi->layout.group_width = sbi->data_map.odm_group_width;
+		sbi->layout.group_depth = sbi->data_map.odm_group_depth;
+		if (!sbi->layout.group_depth) {
+			EXOFS_ERR("group_depth == 0 && group_width != 0\n");
+			return -EINVAL;
+		}
+		sbi->layout.group_count = sbi->data_map.odm_num_comps /
+						sbi->layout.mirrors_p1 /
+						sbi->data_map.odm_group_width;
+	} else {
+		if (sbi->data_map.odm_group_depth) {
+			printk(KERN_NOTICE "Warning: group_depth ignored "
+				"group_width == 0 && group_depth == %d\n",
+				sbi->data_map.odm_group_depth);
+			sbi->data_map.odm_group_depth = 0;
+		}
+		sbi->layout.group_width = sbi->data_map.odm_num_comps /
+							sbi->layout.mirrors_p1;
+		sbi->layout.group_depth = -1;
+		sbi->layout.group_count = 1;
+	}
+
+	stripe_length = (u64)sbi->layout.group_width * sbi->layout.stripe_unit;
+	if (stripe_length >= (1ULL << 32)) {
+		EXOFS_ERR("Total Stripe length(0x%llx)"
+			  " >= 32bit is not supported\n", _LLU(stripe_length));
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static unsigned __ra_pages(struct exofs_layout *layout)
+{
+	const unsigned _MIN_RA = 32; /* min 128K read-ahead */
+	unsigned ra_pages = layout->group_width * layout->stripe_unit /
+				PAGE_SIZE;
+	unsigned max_io_pages = exofs_max_io_pages(layout, ~0);
+
+	ra_pages *= 2; /* two stripes */
+	if (ra_pages < _MIN_RA)
+		ra_pages = roundup(_MIN_RA, ra_pages / 2);
+
+	if (ra_pages > max_io_pages)
+		ra_pages = max_io_pages;
+
+	return ra_pages;
+}
+
+/* @odi is valid only as long as @fscb_dev is valid */
+static int exofs_devs_2_odi(struct exofs_dt_device_info *dt_dev,
+			     struct osd_dev_info *odi)
+{
+	odi->systemid_len = le32_to_cpu(dt_dev->systemid_len);
+	memcpy(odi->systemid, dt_dev->systemid, odi->systemid_len);
+
+	odi->osdname_len = le32_to_cpu(dt_dev->osdname_len);
+	odi->osdname = dt_dev->osdname;
+
+	/* FIXME support long names. Will need a _put function */
+	if (dt_dev->long_name_offset)
+		return -EINVAL;
+
+	/* Make sure osdname is printable!
+	 * mkexofs should give us space for a null-terminator else the
+	 * device-table is invalid.
+	 */
+	if (unlikely(odi->osdname_len >= sizeof(dt_dev->osdname)))
+		odi->osdname_len = sizeof(dt_dev->osdname) - 1;
+	dt_dev->osdname[odi->osdname_len] = 0;
+
+	/* If it's all zeros something is bad we read past end-of-obj */
+	return !(odi->systemid_len || odi->osdname_len);
+}
+
+static int exofs_read_lookup_dev_table(struct exofs_sb_info **psbi,
+				       unsigned table_count)
+{
+	struct exofs_sb_info *sbi = *psbi;
+	struct osd_dev *fscb_od;
+	struct osd_obj_id obj = {.partition = sbi->layout.s_pid,
+				 .id = EXOFS_DEVTABLE_ID};
+	struct exofs_device_table *dt;
+	unsigned table_bytes = table_count * sizeof(dt->dt_dev_table[0]) +
+					     sizeof(*dt);
+	unsigned numdevs, i;
+	int ret;
+
+	dt = kmalloc(table_bytes, GFP_KERNEL);
+	if (unlikely(!dt)) {
+		EXOFS_ERR("ERROR: allocating %x bytes for device table\n",
+			  table_bytes);
+		return -ENOMEM;
+	}
+
+	fscb_od = sbi->layout.s_ods[0];
+	sbi->layout.s_ods[0] = NULL;
+	sbi->layout.s_numdevs = 0;
+	ret = exofs_read_kern(fscb_od, sbi->s_cred, &obj, 0, dt, table_bytes);
+	if (unlikely(ret)) {
+		EXOFS_ERR("ERROR: reading device table\n");
+		goto out;
+	}
+
+	numdevs = le64_to_cpu(dt->dt_num_devices);
+	if (unlikely(!numdevs)) {
+		ret = -EINVAL;
+		goto out;
+	}
+	WARN_ON(table_count != numdevs);
+
+	ret = _read_and_match_data_map(sbi, numdevs, dt);
+	if (unlikely(ret))
+		goto out;
+
+	if (likely(numdevs > 1)) {
+		unsigned size = numdevs * sizeof(sbi->layout.s_ods[0]);
+
+		sbi = krealloc(sbi, sizeof(*sbi) + size, GFP_KERNEL);
+		if (unlikely(!sbi)) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		memset(&sbi->layout.s_ods[1], 0,
+		       size - sizeof(sbi->layout.s_ods[0]));
+		*psbi = sbi;
+	}
+
+	for (i = 0; i < numdevs; i++) {
+		struct exofs_fscb fscb;
+		struct osd_dev_info odi;
+		struct osd_dev *od;
+
+		if (exofs_devs_2_odi(&dt->dt_dev_table[i], &odi)) {
+			EXOFS_ERR("ERROR: Read all-zeros device entry\n");
+			ret = -EINVAL;
+			goto out;
+		}
+
+		printk(KERN_NOTICE "Add device[%d]: osd_name-%s\n",
+		       i, odi.osdname);
+
+		/* On all devices the device table is identical. The user can
+		 * specify any one of the participating devices on the command
+		 * line. We always keep them in device-table order.
+		 */
+		if (fscb_od && osduld_device_same(fscb_od, &odi)) {
+			sbi->layout.s_ods[i] = fscb_od;
+			++sbi->layout.s_numdevs;
+			fscb_od = NULL;
+			continue;
+		}
+
+		od = osduld_info_lookup(&odi);
+		if (IS_ERR(od)) {
+			ret = PTR_ERR(od);
+			EXOFS_ERR("ERROR: device requested is not found "
+				  "osd_name-%s =>%d\n", odi.osdname, ret);
+			goto out;
+		}
+
+		sbi->layout.s_ods[i] = od;
+		++sbi->layout.s_numdevs;
+
+		/* Read the fscb of the other devices to make sure the FS
+		 * partition is there.
+		 */
+		ret = exofs_read_kern(od, sbi->s_cred, &obj, 0, &fscb,
+				      sizeof(fscb));
+		if (unlikely(ret)) {
+			EXOFS_ERR("ERROR: Malformed participating device "
+				  "error reading fscb osd_name-%s\n",
+				  odi.osdname);
+			goto out;
+		}
+
+		/* TODO: verify other information is correct and FS-uuid
+		 *	 matches. Benny what did you say about device table
+		 *	 generation and old devices?
+		 */
+	}
+
+out:
+	kfree(dt);
+	if (unlikely(!ret && fscb_od)) {
+		EXOFS_ERR(
+		      "ERROR: Bad device-table container device not present\n");
+		osduld_put_device(fscb_od);
+		ret = -EINVAL;
+	}
+
+	return ret;
 }
 
 /*
@@ -292,25 +674,44 @@ static int exofs_fill_super(struct super_block *sb, void *data, int silent)
 	struct inode *root;
 	struct exofs_mountopt *opts = data;
 	struct exofs_sb_info *sbi;	/*extended info                  */
+	struct osd_dev *od;		/* Master device                 */
 	struct exofs_fscb fscb;		/*on-disk superblock info        */
-	struct osd_request *or = NULL;
 	struct osd_obj_id obj;
+	unsigned table_count;
 	int ret;
 
 	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
-	sb->s_fs_info = sbi;
+
+	ret = bdi_setup_and_register(&sbi->bdi, "exofs", BDI_CAP_MAP_COPY);
+	if (ret)
+		goto free_bdi;
 
 	/* use mount options to fill superblock */
-	sbi->s_dev = osduld_path_lookup(opts->dev_name);
-	if (IS_ERR(sbi->s_dev)) {
-		ret = PTR_ERR(sbi->s_dev);
-		sbi->s_dev = NULL;
+	if (opts->is_osdname) {
+		struct osd_dev_info odi = {.systemid_len = 0};
+
+		odi.osdname_len = strlen(opts->dev_name);
+		odi.osdname = (u8 *)opts->dev_name;
+		od = osduld_info_lookup(&odi);
+	} else {
+		od = osduld_path_lookup(opts->dev_name);
+	}
+	if (IS_ERR(od)) {
+		ret = -EINVAL;
 		goto free_sbi;
 	}
 
-	sbi->s_pid = opts->pid;
+	/* Default layout in case we do not have a device-table */
+	sbi->layout.stripe_unit = PAGE_SIZE;
+	sbi->layout.mirrors_p1 = 1;
+	sbi->layout.group_width = 1;
+	sbi->layout.group_depth = -1;
+	sbi->layout.group_count = 1;
+	sbi->layout.s_ods[0] = od;
+	sbi->layout.s_numdevs = 1;
+	sbi->layout.s_pid = opts->pid;
 	sbi->s_timeout = opts->timeout;
 
 	/* fill in some other data by hand */
@@ -323,37 +724,16 @@ static int exofs_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_bdev = NULL;
 	sb->s_dev = 0;
 
-	/* read data from on-disk superblock object */
-	obj.partition = sbi->s_pid;
+	obj.partition = sbi->layout.s_pid;
 	obj.id = EXOFS_SUPER_ID;
 	exofs_make_credential(sbi->s_cred, &obj);
 
-	or = osd_start_request(sbi->s_dev, GFP_KERNEL);
-	if (unlikely(!or)) {
-		if (!silent)
-			EXOFS_ERR(
-			       "exofs_fill_super: osd_start_request failed.\n");
-		ret = -ENOMEM;
+	ret = exofs_read_kern(od, sbi->s_cred, &obj, 0, &fscb, sizeof(fscb));
+	if (unlikely(ret))
 		goto free_sbi;
-	}
-	ret = osd_req_read_kern(or, &obj, 0, &fscb, sizeof(fscb));
-	if (unlikely(ret)) {
-		if (!silent)
-			EXOFS_ERR(
-			       "exofs_fill_super: osd_req_read_kern failed.\n");
-		ret = -ENOMEM;
-		goto free_sbi;
-	}
-
-	ret = exofs_sync_op(or, sbi->s_timeout, sbi->s_cred);
-	if (unlikely(ret)) {
-		if (!silent)
-			EXOFS_ERR("exofs_fill_super: exofs_sync_op failed.\n");
-		ret = -EIO;
-		goto free_sbi;
-	}
 
 	sb->s_magic = le16_to_cpu(fscb.s_magic);
+	/* NOTE: we read below to be backward compatible with old versions */
 	sbi->s_nextid = le64_to_cpu(fscb.s_nextid);
 	sbi->s_numfiles = le32_to_cpu(fscb.s_numfiles);
 
@@ -364,12 +744,30 @@ static int exofs_fill_super(struct super_block *sb, void *data, int silent)
 		ret = -EINVAL;
 		goto free_sbi;
 	}
+	if (le32_to_cpu(fscb.s_version) > EXOFS_FSCB_VER) {
+		EXOFS_ERR("ERROR: Bad FSCB version expected-%d got-%d\n",
+			  EXOFS_FSCB_VER, le32_to_cpu(fscb.s_version));
+		ret = -EINVAL;
+		goto free_sbi;
+	}
 
 	/* start generation numbers from a random point */
 	get_random_bytes(&sbi->s_next_generation, sizeof(u32));
 	spin_lock_init(&sbi->s_next_gen_lock);
 
+	table_count = le64_to_cpu(fscb.s_dev_table_count);
+	if (table_count) {
+		ret = exofs_read_lookup_dev_table(&sbi, table_count);
+		if (unlikely(ret))
+			goto free_sbi;
+	}
+
+	__sbi_read_stats(sbi);
+
 	/* set up operation vectors */
+	sbi->bdi.ra_pages = __ra_pages(&sbi->layout);
+	sb->s_bdi = &sbi->bdi;
+	sb->s_fs_info = sbi;
 	sb->s_op = &exofs_sops;
 	sb->s_export_op = &exofs_export_ops;
 	root = exofs_iget(sb, EXOFS_ROOT_ID - EXOFS_OBJ_OFF);
@@ -395,34 +793,40 @@ static int exofs_fill_super(struct super_block *sb, void *data, int silent)
 		goto free_sbi;
 	}
 
-	ret = 0;
-out:
-	if (or)
-		osd_end_request(or);
-	return ret;
+	_exofs_print_device("Mounting", opts->dev_name, sbi->layout.s_ods[0],
+			    sbi->layout.s_pid);
+	if (opts->is_osdname)
+		kfree(opts->dev_name);
+	return 0;
 
 free_sbi:
-	osduld_put_device(sbi->s_dev); /* NULL safe */
-	kfree(sbi);
-	goto out;
+	bdi_destroy(&sbi->bdi);
+free_bdi:
+	EXOFS_ERR("Unable to mount exofs on %s pid=0x%llx err=%d\n",
+		  opts->dev_name, sbi->layout.s_pid, ret);
+	exofs_free_sbi(sbi);
+	if (opts->is_osdname)
+		kfree(opts->dev_name);
+	return ret;
 }
 
 /*
  * Set up the superblock (calls exofs_fill_super eventually)
  */
-static int exofs_get_sb(struct file_system_type *type,
+static struct dentry *exofs_mount(struct file_system_type *type,
 			  int flags, const char *dev_name,
-			  void *data, struct vfsmount *mnt)
+			  void *data)
 {
 	struct exofs_mountopt opts;
 	int ret;
 
 	ret = parse_options(data, &opts);
 	if (ret)
-		return ret;
+		return ERR_PTR(ret);
 
-	opts.dev_name = dev_name;
-	return get_sb_nodev(type, flags, &opts, exofs_fill_super, mnt);
+	if (!opts.dev_name)
+		opts.dev_name = dev_name;
+	return mount_nodev(type, flags, &opts, exofs_fill_super);
 }
 
 /*
@@ -433,7 +837,7 @@ static int exofs_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
 	struct exofs_sb_info *sbi = sb->s_fs_info;
-	struct osd_obj_id obj = {sbi->s_pid, 0};
+	struct exofs_io_state *ios;
 	struct osd_attr attrs[] = {
 		ATTR_DEF(OSD_APAGE_PARTITION_QUOTAS,
 			OSD_ATTR_PQ_CAPACITY_QUOTA, sizeof(__be64)),
@@ -442,32 +846,33 @@ static int exofs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	};
 	uint64_t capacity = ULLONG_MAX;
 	uint64_t used = ULLONG_MAX;
-	struct osd_request *or;
 	uint8_t cred_a[OSD_CAP_LEN];
 	int ret;
 
-	/* get used/capacity attributes */
-	exofs_make_credential(cred_a, &obj);
-
-	or = osd_start_request(sbi->s_dev, GFP_KERNEL);
-	if (unlikely(!or)) {
-		EXOFS_DBGMSG("exofs_statfs: osd_start_request failed.\n");
-		return -ENOMEM;
+	ret = exofs_get_io_state(&sbi->layout, &ios);
+	if (ret) {
+		EXOFS_DBGMSG("exofs_get_io_state failed.\n");
+		return ret;
 	}
 
-	osd_req_get_attributes(or, &obj);
-	osd_req_add_get_attr_list(or, attrs, ARRAY_SIZE(attrs));
-	ret = exofs_sync_op(or, sbi->s_timeout, cred_a);
+	exofs_make_credential(cred_a, &ios->obj);
+	ios->cred = sbi->s_cred;
+	ios->in_attr = attrs;
+	ios->in_attr_len = ARRAY_SIZE(attrs);
+
+	ret = exofs_sbi_read(ios);
 	if (unlikely(ret))
 		goto out;
 
-	ret = extract_attr_from_req(or, &attrs[0]);
-	if (likely(!ret))
+	ret = extract_attr_from_ios(ios, &attrs[0]);
+	if (likely(!ret)) {
 		capacity = get_unaligned_be64(attrs[0].val_ptr);
-	else
+		if (unlikely(!capacity))
+			capacity = ULLONG_MAX;
+	} else
 		EXOFS_DBGMSG("exofs_statfs: get capacity failed.\n");
 
-	ret = extract_attr_from_req(or, &attrs[1]);
+	ret = extract_attr_from_ios(ios, &attrs[1]);
 	if (likely(!ret))
 		used = get_unaligned_be64(attrs[1].val_ptr);
 	else
@@ -476,15 +881,15 @@ static int exofs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	/* fill in the stats buffer */
 	buf->f_type = EXOFS_SUPER_MAGIC;
 	buf->f_bsize = EXOFS_BLKSIZE;
-	buf->f_blocks = (capacity >> EXOFS_BLKSHIFT);
-	buf->f_bfree = ((capacity - used) >> EXOFS_BLKSHIFT);
+	buf->f_blocks = capacity >> 9;
+	buf->f_bfree = (capacity - used) >> 9;
 	buf->f_bavail = buf->f_bfree;
 	buf->f_files = sbi->s_numfiles;
 	buf->f_ffree = EXOFS_MAX_ID - sbi->s_numfiles;
 	buf->f_namelen = EXOFS_NAME_LEN;
 
 out:
-	osd_end_request(or);
+	exofs_put_io_state(ios);
 	return ret;
 }
 
@@ -492,7 +897,7 @@ static const struct super_operations exofs_sops = {
 	.alloc_inode    = exofs_alloc_inode,
 	.destroy_inode  = exofs_destroy_inode,
 	.write_inode    = exofs_write_inode,
-	.delete_inode   = exofs_delete_inode,
+	.evict_inode    = exofs_evict_inode,
 	.put_super      = exofs_put_super,
 	.write_super    = exofs_write_super,
 	.sync_fs	= exofs_sync_fs,
@@ -508,7 +913,7 @@ struct dentry *exofs_get_parent(struct dentry *child)
 	unsigned long ino = exofs_parent_ino(child);
 
 	if (!ino)
-		return NULL;
+		return ERR_PTR(-ESTALE);
 
 	return d_obtain_alias(exofs_iget(child->d_inode->i_sb, ino));
 }
@@ -559,7 +964,7 @@ static const struct export_operations exofs_export_ops = {
 static struct file_system_type exofs_type = {
 	.owner          = THIS_MODULE,
 	.name           = "exofs",
-	.get_sb         = exofs_get_sb,
+	.mount          = exofs_mount,
 	.kill_sb        = generic_shutdown_super,
 };
 

@@ -27,6 +27,7 @@
 #include <linux/idr.h>
 #include <linux/err.h>
 #include <linux/kdev_t.h>
+#include <linux/slab.h>
 
 static ssize_t display_show_name(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -67,7 +68,7 @@ static ssize_t display_store_contrast(struct device *dev,
 	contrast = simple_strtoul(buf, &endp, 0);
 	size = endp - buf;
 
-	if (*endp && isspace(*endp))
+	if (isspace(*endp))
 		size++;
 
 	if (size != count)
@@ -181,7 +182,7 @@ void display_device_unregister(struct display_device *ddev)
 	mutex_lock(&ddev->lock);
 	device_unregister(ddev->dev);
 	mutex_unlock(&ddev->lock);
-	// Mark device index as avaliable
+	// Mark device index as available
 	mutex_lock(&allocated_dsp_lock);
 	idr_remove(&allocated_dsp, ddev->idx);
 	mutex_unlock(&allocated_dsp_lock);

@@ -50,7 +50,6 @@ static const unsigned short normal_i2c[] = { 0x2c, 0x2d, 0x2e, 0x2f,
 						I2C_CLIENT_END };
 
 /* Insmod parameters */
-I2C_CLIENT_INSMOD_1(w83792d);
 
 static unsigned short force_subclients[4];
 module_param_array(force_subclients, short, NULL, 0);
@@ -245,7 +244,7 @@ FAN_TO_REG(long rpm, int div)
 #define TEMP1_TO_REG(val)	(SENSORS_LIMIT(((val) < 0 ? (val)+0x100*1000 \
 					: (val)) / 1000, 0, 0xff))
 #define TEMP1_FROM_REG(val)	(((val) & 0x80 ? (val)-0x100 : (val)) * 1000)
-/* for temp2 and temp3, because they need addtional resolution */
+/* for temp2 and temp3, because they need additional resolution */
 #define TEMP_ADD_FROM_REG(val1, val2) \
 	((((val1) & 0x80 ? (val1)-0x100 \
 		: (val1)) * 1000) + ((val2 & 0x80) ? 500 : 0))
@@ -302,7 +301,7 @@ struct w83792d_data {
 
 static int w83792d_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id);
-static int w83792d_detect(struct i2c_client *client, int kind,
+static int w83792d_detect(struct i2c_client *client,
 			  struct i2c_board_info *info);
 static int w83792d_remove(struct i2c_client *client);
 static struct w83792d_data *w83792d_update_device(struct device *dev);
@@ -314,7 +313,7 @@ static void w83792d_print_debug(struct w83792d_data *data, struct device *dev);
 static void w83792d_init_client(struct i2c_client *client);
 
 static const struct i2c_device_id w83792d_id[] = {
-	{ "w83792d", w83792d },
+	{ "w83792d", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, w83792d_id);
@@ -328,7 +327,7 @@ static struct i2c_driver w83792d_driver = {
 	.remove		= w83792d_remove,
 	.id_table	= w83792d_id,
 	.detect		= w83792d_detect,
-	.address_data	= &addr_data,
+	.address_list	= normal_i2c,
 };
 
 static inline long in_count_from_reg(int nr, struct w83792d_data *data)
@@ -692,11 +691,21 @@ store_pwm_mode(struct device *dev, struct device_attribute *attr,
 }
 
 static ssize_t
-show_regs_chassis(struct device *dev, struct device_attribute *attr,
+show_chassis(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct w83792d_data *data = w83792d_update_device(dev);
 	return sprintf(buf, "%d\n", data->chassis);
+}
+
+static ssize_t
+show_regs_chassis(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	dev_warn(dev,
+		 "Attribute %s is deprecated, use intrusion0_alarm instead\n",
+		 "chassis");
+	return show_chassis(dev, attr, buf);
 }
 
 static ssize_t
@@ -707,13 +716,17 @@ show_chassis_clear(struct device *dev, struct device_attribute *attr, char *buf)
 }
 
 static ssize_t
-store_chassis_clear(struct device *dev, struct device_attribute *attr,
+store_chassis_clear_legacy(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct w83792d_data *data = i2c_get_clientdata(client);
 	u32 val;
 	u8 temp1 = 0, temp2 = 0;
+
+	dev_warn(dev,
+		 "Attribute %s is deprecated, use intrusion0_alarm instead\n",
+		 "chassis_clear");
 
 	val = simple_strtoul(buf, NULL, 10);
 	mutex_lock(&data->update_lock);
@@ -722,6 +735,27 @@ store_chassis_clear(struct device *dev, struct device_attribute *attr,
 	temp2 = w83792d_read_value(client,
 		W83792D_REG_CHASSIS_CLR) & 0x7f;
 	w83792d_write_value(client, W83792D_REG_CHASSIS_CLR, temp1 | temp2);
+	mutex_unlock(&data->update_lock);
+
+	return count;
+}
+
+static ssize_t
+store_chassis_clear(struct device *dev, struct device_attribute *attr,
+			const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct w83792d_data *data = i2c_get_clientdata(client);
+	unsigned long val;
+	u8 reg;
+
+	if (strict_strtoul(buf, 10, &val) || val != 0)
+		return -EINVAL;
+
+	mutex_lock(&data->update_lock);
+	reg = w83792d_read_value(client, W83792D_REG_CHASSIS_CLR);
+	w83792d_write_value(client, W83792D_REG_CHASSIS_CLR, reg | 0x80);
+	data->valid = 0;		/* Force cache refresh */
 	mutex_unlock(&data->update_lock);
 
 	return count;
@@ -1013,7 +1047,9 @@ static SENSOR_DEVICE_ATTR(fan5_alarm, S_IRUGO, show_alarm, NULL, 22);
 static SENSOR_DEVICE_ATTR(fan6_alarm, S_IRUGO, show_alarm, NULL, 23);
 static DEVICE_ATTR(chassis, S_IRUGO, show_regs_chassis, NULL);
 static DEVICE_ATTR(chassis_clear, S_IRUGO | S_IWUSR,
-			show_chassis_clear, store_chassis_clear);
+			show_chassis_clear, store_chassis_clear_legacy);
+static DEVICE_ATTR(intrusion0_alarm, S_IRUGO | S_IWUSR,
+			show_chassis, store_chassis_clear);
 static SENSOR_DEVICE_ATTR(pwm1, S_IWUSR | S_IRUGO, show_pwm, store_pwm, 0);
 static SENSOR_DEVICE_ATTR(pwm2, S_IWUSR | S_IRUGO, show_pwm, store_pwm, 1);
 static SENSOR_DEVICE_ATTR(pwm3, S_IWUSR | S_IRUGO, show_pwm, store_pwm, 2);
@@ -1215,6 +1251,7 @@ static struct attribute *w83792d_attributes[] = {
 	&dev_attr_alarms.attr,
 	&dev_attr_chassis.attr,
 	&dev_attr_chassis_clear.attr,
+	&dev_attr_intrusion0_alarm.attr,
 	&sensor_dev_attr_tolerance1.dev_attr.attr,
 	&sensor_dev_attr_thermal_cruise1.dev_attr.attr,
 	&sensor_dev_attr_tolerance2.dev_attr.attr,
@@ -1263,7 +1300,7 @@ static const struct attribute_group w83792d_group = {
 
 /* Return 0 if detection is successful, -ENODEV otherwise */
 static int
-w83792d_detect(struct i2c_client *client, int kind, struct i2c_board_info *info)
+w83792d_detect(struct i2c_client *client, struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	int val1, val2;
@@ -1273,58 +1310,33 @@ w83792d_detect(struct i2c_client *client, int kind, struct i2c_board_info *info)
 		return -ENODEV;
 	}
 
-	/* The w83792d may be stuck in some other bank than bank 0. This may
-	   make reading other information impossible. Specify a force=... or
-	   force_*=... parameter, and the Winbond will be reset to the right
-	   bank. */
-	if (kind < 0) {
-		if (w83792d_read_value(client, W83792D_REG_CONFIG) & 0x80) {
-			return -ENODEV;
-		}
-		val1 = w83792d_read_value(client, W83792D_REG_BANK);
-		val2 = w83792d_read_value(client, W83792D_REG_CHIPMAN);
-		/* Check for Winbond ID if in bank 0 */
-		if (!(val1 & 0x07)) {  /* is Bank0 */
-			if (((!(val1 & 0x80)) && (val2 != 0xa3)) ||
-			     ((val1 & 0x80) && (val2 != 0x5c))) {
-				return -ENODEV;
-			}
-		}
-		/* If Winbond chip, address of chip and W83792D_REG_I2C_ADDR
-		   should match */
-		if (w83792d_read_value(client,
-					W83792D_REG_I2C_ADDR) != address) {
-			return -ENODEV;
-		}
-	}
+	if (w83792d_read_value(client, W83792D_REG_CONFIG) & 0x80)
+		return -ENODEV;
 
-	/* We have either had a force parameter, or we have already detected the
-	   Winbond. Put it now into bank 0 and Vendor ID High Byte */
+	val1 = w83792d_read_value(client, W83792D_REG_BANK);
+	val2 = w83792d_read_value(client, W83792D_REG_CHIPMAN);
+	/* Check for Winbond ID if in bank 0 */
+	if (!(val1 & 0x07)) {  /* is Bank0 */
+		if ((!(val1 & 0x80) && val2 != 0xa3) ||
+		    ( (val1 & 0x80) && val2 != 0x5c))
+			return -ENODEV;
+	}
+	/* If Winbond chip, address of chip and W83792D_REG_I2C_ADDR
+	   should match */
+	if (w83792d_read_value(client, W83792D_REG_I2C_ADDR) != address)
+		return -ENODEV;
+
+	/*  Put it now into bank 0 and Vendor ID High Byte */
 	w83792d_write_value(client,
 			    W83792D_REG_BANK,
 			    (w83792d_read_value(client,
 				W83792D_REG_BANK) & 0x78) | 0x80);
 
 	/* Determine the chip type. */
-	if (kind <= 0) {
-		/* get vendor ID */
-		val2 = w83792d_read_value(client, W83792D_REG_CHIPMAN);
-		if (val2 != 0x5c) {  /* the vendor is NOT Winbond */
-			return -ENODEV;
-		}
-		val1 = w83792d_read_value(client, W83792D_REG_WCHIPID);
-		if (val1 == 0x7a) {
-			kind = w83792d;
-		} else {
-			if (kind == 0)
-				dev_warn(&adapter->dev,
-					"w83792d: Ignoring 'force' parameter for"
-					" unknown chip at adapter %d, address"
-					" 0x%02x\n", i2c_adapter_id(adapter),
-					address);
-			return -ENODEV;
-		}
-	}
+	val1 = w83792d_read_value(client, W83792D_REG_WCHIPID);
+	val2 = w83792d_read_value(client, W83792D_REG_CHIPMAN);
+	if (val1 != 0x7a || val2 != 0x5c)
+		return -ENODEV;
 
 	strlcpy(info->type, "w83792d", I2C_NAME_SIZE);
 

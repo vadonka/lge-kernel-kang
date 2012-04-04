@@ -7,6 +7,10 @@
  * the Free Software Foundation.
  */
 
+#ifdef CONFIG_X86
+#include <asm/x86_init.h>
+#endif
+
 /*
  * Names.
  */
@@ -329,13 +333,6 @@ static const struct dmi_system_id __initconst i8042_dmi_nomux_table[] = {
 		},
 	},
 	{
-		/* Sony Vaio VPCZ122GX */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Sony Corporation"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "VPCZ122GX"),
-		},
-	},
-	{
 		/* Sony Vaio FS-115b */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Sony Corporation"),
@@ -351,6 +348,17 @@ static const struct dmi_system_id __initconst i8042_dmi_nomux_table[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Sony Corporation"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "VGN-FZ240E"),
+		},
+	},
+	{
+		/*
+		 * Most (all?) VAIOs do not have external PS/2 ports nor
+		 * they implement active multiplexing properly, and
+		 * MUX discovery usually messes up keyboard/touchpad.
+		 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Sony Corporation"),
+			DMI_MATCH(DMI_BOARD_NAME, "VAIO"),
 		},
 	},
 	{
@@ -563,6 +571,13 @@ static const struct dmi_system_id __initconst i8042_dmi_notimeout_table[] = {
  */
 static const struct dmi_system_id __initconst i8042_dmi_dritek_table[] = {
 	{
+		/* Acer Aspire 5100 */
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Aspire 5100"),
+		},
+	},
+	{
 		/* Acer Aspire 5610 */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
@@ -663,6 +678,9 @@ static int i8042_pnp_kbd_probe(struct pnp_dev *dev, const struct pnp_device_id *
 		strlcat(i8042_pnp_kbd_name, pnp_dev_name(dev), sizeof(i8042_pnp_kbd_name));
 	}
 
+	/* Keyboard ports are always supposed to be wakeup-enabled */
+	device_set_wakeup_enable(&dev->dev, true);
+
 	i8042_pnp_kbd_devices++;
 	return 0;
 }
@@ -689,8 +707,21 @@ static int i8042_pnp_aux_probe(struct pnp_dev *dev, const struct pnp_device_id *
 }
 
 static struct pnp_device_id pnp_kbd_devids[] = {
+	{ .id = "PNP0300", .driver_data = 0 },
+	{ .id = "PNP0301", .driver_data = 0 },
+	{ .id = "PNP0302", .driver_data = 0 },
 	{ .id = "PNP0303", .driver_data = 0 },
+	{ .id = "PNP0304", .driver_data = 0 },
+	{ .id = "PNP0305", .driver_data = 0 },
+	{ .id = "PNP0306", .driver_data = 0 },
+	{ .id = "PNP0309", .driver_data = 0 },
+	{ .id = "PNP030a", .driver_data = 0 },
 	{ .id = "PNP030b", .driver_data = 0 },
+	{ .id = "PNP0320", .driver_data = 0 },
+	{ .id = "PNP0343", .driver_data = 0 },
+	{ .id = "PNP0344", .driver_data = 0 },
+	{ .id = "PNP0345", .driver_data = 0 },
+	{ .id = "CPQA0D7", .driver_data = 0 },
 	{ .id = "", },
 };
 
@@ -701,6 +732,7 @@ static struct pnp_driver i8042_pnp_kbd_driver = {
 };
 
 static struct pnp_device_id pnp_aux_devids[] = {
+	{ .id = "AUI0200", .driver_data = 0 },
 	{ .id = "FJC6000", .driver_data = 0 },
 	{ .id = "FJC6001", .driver_data = 0 },
 	{ .id = "PNP0f03", .driver_data = 0 },
@@ -745,7 +777,7 @@ static int __init i8042_pnp_init(void)
 #endif
 
 	if (i8042_nopnp) {
-		printk(KERN_INFO "i8042: PNP detection disabled\n");
+		pr_info("PNP detection disabled\n");
 		return 0;
 	}
 
@@ -762,7 +794,7 @@ static int __init i8042_pnp_init(void)
 #if defined(__ia64__)
 		return -ENODEV;
 #else
-		printk(KERN_INFO "PNP: No PS/2 controller found. Probing ports directly.\n");
+		pr_info("PNP: No PS/2 controller found. Probing ports directly.\n");
 		return 0;
 #endif
 	}
@@ -774,7 +806,7 @@ static int __init i8042_pnp_init(void)
 		snprintf(aux_irq_str, sizeof(aux_irq_str),
 			"%d", i8042_pnp_aux_irq);
 
-	printk(KERN_INFO "PNP: PS/2 Controller [%s%s%s] at %#x,%#x irq %s%s%s\n",
+	pr_info("PNP: PS/2 Controller [%s%s%s] at %#x,%#x irq %s%s%s\n",
 		i8042_pnp_kbd_name, (i8042_pnp_kbd_devices && i8042_pnp_aux_devices) ? "," : "",
 		i8042_pnp_aux_name,
 		i8042_pnp_data_reg, i8042_pnp_command_reg,
@@ -791,9 +823,7 @@ static int __init i8042_pnp_init(void)
 	if (((i8042_pnp_data_reg & ~0xf) == (i8042_data_reg & ~0xf) &&
 	      i8042_pnp_data_reg != i8042_data_reg) ||
 	    !i8042_pnp_data_reg) {
-		printk(KERN_WARNING
-			"PNP: PS/2 controller has invalid data port %#x; "
-			"using default %#x\n",
+		pr_warn("PNP: PS/2 controller has invalid data port %#x; using default %#x\n",
 			i8042_pnp_data_reg, i8042_data_reg);
 		i8042_pnp_data_reg = i8042_data_reg;
 		pnp_data_busted = true;
@@ -802,33 +832,27 @@ static int __init i8042_pnp_init(void)
 	if (((i8042_pnp_command_reg & ~0xf) == (i8042_command_reg & ~0xf) &&
 	      i8042_pnp_command_reg != i8042_command_reg) ||
 	    !i8042_pnp_command_reg) {
-		printk(KERN_WARNING
-			"PNP: PS/2 controller has invalid command port %#x; "
-			"using default %#x\n",
+		pr_warn("PNP: PS/2 controller has invalid command port %#x; using default %#x\n",
 			i8042_pnp_command_reg, i8042_command_reg);
 		i8042_pnp_command_reg = i8042_command_reg;
 		pnp_data_busted = true;
 	}
 
 	if (!i8042_nokbd && !i8042_pnp_kbd_irq) {
-		printk(KERN_WARNING
-			"PNP: PS/2 controller doesn't have KBD irq; "
-			"using default %d\n", i8042_kbd_irq);
+		pr_warn("PNP: PS/2 controller doesn't have KBD irq; using default %d\n",
+			i8042_kbd_irq);
 		i8042_pnp_kbd_irq = i8042_kbd_irq;
 		pnp_data_busted = true;
 	}
 
 	if (!i8042_noaux && !i8042_pnp_aux_irq) {
 		if (!pnp_data_busted && i8042_pnp_kbd_irq) {
-			printk(KERN_WARNING
-				"PNP: PS/2 appears to have AUX port disabled, "
-				"if this is incorrect please boot with "
-				"i8042.nopnp\n");
+			pr_warn("PNP: PS/2 appears to have AUX port disabled, "
+				"if this is incorrect please boot with i8042.nopnp\n");
 			i8042_noaux = true;
 		} else {
-			printk(KERN_WARNING
-				"PNP: PS/2 controller doesn't have AUX irq; "
-				"using default %d\n", i8042_aux_irq);
+			pr_warn("PNP: PS/2 controller doesn't have AUX irq; using default %d\n",
+				i8042_aux_irq);
 			i8042_pnp_aux_irq = i8042_aux_irq;
 		}
 	}
@@ -854,6 +878,12 @@ static inline void i8042_pnp_exit(void) { }
 static int __init i8042_platform_init(void)
 {
 	int retval;
+
+#ifdef CONFIG_X86
+	/* Just return if pre-detection shows no i8042 controller exist */
+	if (!x86_platform.i8042_detect())
+		return -ENODEV;
+#endif
 
 /*
  * On ix86 platforms touching the i8042 data register region can do really

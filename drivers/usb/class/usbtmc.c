@@ -25,6 +25,7 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/kref.h>
+#include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/usb.h>
 #include <linux/usb/tmc.h>
@@ -48,7 +49,7 @@
  */
 #define USBTMC_MAX_READS_TO_CLEAR_BULK_IN	100
 
-static struct usb_device_id usbtmc_devices[] = {
+static const struct usb_device_id usbtmc_devices[] = {
 	{ USB_INTERFACE_INFO(USB_CLASS_APP_SPEC, 3, 0), },
 	{ USB_INTERFACE_INFO(USB_CLASS_APP_SPEC, 3, 1), },
 	{ 0, } /* terminating entry */
@@ -347,13 +348,8 @@ usbtmc_abort_bulk_out_check_status:
 	goto exit;
 
 usbtmc_abort_bulk_out_clear_halt:
-	rv = usb_control_msg(data->usb_dev,
-			     usb_sndctrlpipe(data->usb_dev, 0),
-			     USB_REQ_CLEAR_FEATURE,
-			     USB_DIR_OUT | USB_TYPE_STANDARD |
-			     USB_RECIP_ENDPOINT,
-			     USB_ENDPOINT_HALT, data->bulk_out, buffer,
-			     0, USBTMC_TIMEOUT);
+	rv = usb_clear_halt(data->usb_dev,
+			    usb_sndbulkpipe(data->usb_dev, data->bulk_out));
 
 	if (rv < 0) {
 		dev_err(dev, "usb_control_msg returned %d\n", rv);
@@ -487,7 +483,7 @@ static ssize_t usbtmc_read(struct file *filp, char __user *buf,
 		}
 
 		done += n_characters;
-		/* Terminate if end-of-message bit recieved from device */
+		/* Terminate if end-of-message bit received from device */
 		if ((buffer[8] &  0x01) && (actual >= n_characters + 12))
 			remaining = 0;
 		else
@@ -708,14 +704,8 @@ usbtmc_clear_check_status:
 
 usbtmc_clear_bulk_out_halt:
 
-	rv = usb_control_msg(data->usb_dev,
-			     usb_sndctrlpipe(data->usb_dev, 0),
-			     USB_REQ_CLEAR_FEATURE,
-			     USB_DIR_OUT | USB_TYPE_STANDARD |
-			     USB_RECIP_ENDPOINT,
-			     USB_ENDPOINT_HALT,
-			     data->bulk_out, buffer, 0,
-			     USBTMC_TIMEOUT);
+	rv = usb_clear_halt(data->usb_dev,
+			    usb_sndbulkpipe(data->usb_dev, data->bulk_out));
 	if (rv < 0) {
 		dev_err(dev, "usb_control_msg returned %d\n", rv);
 		goto exit;
@@ -736,13 +726,8 @@ static int usbtmc_ioctl_clear_out_halt(struct usbtmc_device_data *data)
 	if (!buffer)
 		return -ENOMEM;
 
-	rv = usb_control_msg(data->usb_dev,
-			     usb_sndctrlpipe(data->usb_dev, 0),
-			     USB_REQ_CLEAR_FEATURE,
-			     USB_DIR_OUT | USB_TYPE_STANDARD |
-			     USB_RECIP_ENDPOINT,
-			     USB_ENDPOINT_HALT, data->bulk_out,
-			     buffer, 0, USBTMC_TIMEOUT);
+	rv = usb_clear_halt(data->usb_dev,
+			    usb_sndbulkpipe(data->usb_dev, data->bulk_out));
 
 	if (rv < 0) {
 		dev_err(&data->usb_dev->dev, "usb_control_msg returned %d\n",
@@ -765,12 +750,8 @@ static int usbtmc_ioctl_clear_in_halt(struct usbtmc_device_data *data)
 	if (!buffer)
 		return -ENOMEM;
 
-	rv = usb_control_msg(data->usb_dev, usb_sndctrlpipe(data->usb_dev, 0),
-			     USB_REQ_CLEAR_FEATURE,
-			     USB_DIR_OUT | USB_TYPE_STANDARD |
-			     USB_RECIP_ENDPOINT,
-			     USB_ENDPOINT_HALT, data->bulk_in, buffer, 0,
-			     USBTMC_TIMEOUT);
+	rv = usb_clear_halt(data->usb_dev,
+			    usb_rcvbulkpipe(data->usb_dev, data->bulk_in));
 
 	if (rv < 0) {
 		dev_err(&data->usb_dev->dev, "usb_control_msg returned %d\n",
@@ -1006,6 +987,7 @@ static const struct file_operations fops = {
 	.open		= usbtmc_open,
 	.release	= usbtmc_release,
 	.unlocked_ioctl	= usbtmc_ioctl,
+	.llseek		= default_llseek,
 };
 
 static struct usb_class_driver usbtmc_class = {
@@ -1115,13 +1097,13 @@ static void usbtmc_disconnect(struct usb_interface *intf)
 	kref_put(&data->kref, usbtmc_delete);
 }
 
-static int usbtmc_suspend (struct usb_interface *intf, pm_message_t message)
+static int usbtmc_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	/* this driver does not have pending URBs */
 	return 0;
 }
 
-static int usbtmc_resume (struct usb_interface *intf)
+static int usbtmc_resume(struct usb_interface *intf)
 {
 	return 0;
 }

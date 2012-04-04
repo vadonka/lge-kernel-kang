@@ -3,6 +3,7 @@
  *
  * Copyright 2007 Red Hat, Inc.
  * Copyright 2008 Marvell. <kewei@marvell.com>
+ * Copyright 2009-2011 Marvell. <yuxiangl@marvell.com>
  *
  * This file is licensed under GPLv2.
  *
@@ -36,8 +37,10 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <scsi/libsas.h>
+#include <scsi/scsi.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/sas_ata.h>
 #include <linux/version.h>
@@ -48,7 +51,7 @@
 #define _MV_DUMP		0
 #define MVS_ID_NOT_MAPPED	0x7f
 /* #define DISABLE_HOTPLUG_DMA_FIX */
-#define MAX_EXP_RUNNING_REQ	2
+// #define MAX_EXP_RUNNING_REQ	2
 #define WIDE_PORT_MAX_PHY		4
 #define	MV_DISABLE_NCQ	0
 #define mv_printk(fmt, arg ...)	\
@@ -65,6 +68,7 @@ extern struct mvs_tgt_initiator mvs_tgt;
 extern struct mvs_info *tgt_mvi;
 extern const struct mvs_dispatch mvs_64xx_dispatch;
 extern const struct mvs_dispatch mvs_94xx_dispatch;
+extern struct kmem_cache *mvs_task_list_cache;
 
 #define DEV_IS_EXPANDER(type)	\
 	((type == EDGE_DEV) || (type == FANOUT_DEV))
@@ -128,6 +132,7 @@ struct mvs_dispatch {
 
 	void (*get_sas_addr)(void *buf, u32 buflen);
 	void (*command_active)(struct mvs_info *mvi, u32 slot_idx);
+	void (*clear_srs_irq)(struct mvs_info *mvi, u8 reg_set, u8 clear_all);
 	void (*issue_stop)(struct mvs_info *mvi, enum mvs_port_type type,
 				u32 tfs);
 	void (*start_delivery)(struct mvs_info *mvi, u32 tx);
@@ -235,9 +240,10 @@ struct mvs_device {
 	enum sas_dev_type dev_type;
 	struct mvs_info *mvi_info;
 	struct domain_device *sas_device;
+	struct timer_list timer;
 	u32 attached_phy;
 	u32 device_id;
-	u32 runing_req;
+	u32 running_req;
 	u8 taskfileset;
 	u8 dev_status;
 	u16 reserved;
@@ -337,6 +343,7 @@ struct mvs_info {
 	dma_addr_t bulk_buffer_dma;
 #define TRASH_BUCKET_SIZE    	0x20000
 #endif
+	void *dma_pool;
 	struct mvs_slot_info slot_info[0];
 };
 
@@ -361,6 +368,11 @@ struct mvs_task_exec_info {
 	struct mvs_port *port;
 	u32 tag;
 	int n_elem;
+};
+
+struct mvs_task_list {
+	struct sas_task *task;
+	struct list_head list;
 };
 
 
@@ -396,7 +408,9 @@ int mvs_lu_reset(struct domain_device *dev, u8 *lun);
 int mvs_slot_complete(struct mvs_info *mvi, u32 rx_desc, u32 flags);
 int mvs_I_T_nexus_reset(struct domain_device *dev);
 int mvs_query_task(struct sas_task *task);
-void mvs_release_task(struct mvs_info *mvi, int phy_no,
+void mvs_release_task(struct mvs_info *mvi,
+			struct domain_device *dev);
+void mvs_do_release_task(struct mvs_info *mvi, int phy_no,
 			struct domain_device *dev);
 void mvs_int_port(struct mvs_info *mvi, int phy_no, u32 events);
 void mvs_update_phyinfo(struct mvs_info *mvi, int i, int get_st);

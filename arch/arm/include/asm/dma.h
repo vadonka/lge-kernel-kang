@@ -6,8 +6,10 @@
 /*
  * This is the maximum virtual address which can be DMA'd from.
  */
-#ifndef MAX_DMA_ADDRESS
+#ifndef ARM_DMA_ZONE_SIZE
 #define MAX_DMA_ADDRESS	0xffffffff
+#else
+#define MAX_DMA_ADDRESS	(PAGE_OFFSET + ARM_DMA_ZONE_SIZE)
 #endif
 
 #ifdef CONFIG_ISA_DMA_API
@@ -138,12 +140,12 @@ extern int  get_dma_residue(unsigned int chan);
 #define NO_DMA	255
 #endif
 
+#endif /* CONFIG_ISA_DMA_API */
+
 #ifdef CONFIG_PCI
 extern int isa_dma_bridge_buggy;
 #else
 #define isa_dma_bridge_buggy    (0)
 #endif
-
-#endif /* CONFIG_ISA_DMA_API */
 
 #endif /* __ASM_ARM_DMA_H */

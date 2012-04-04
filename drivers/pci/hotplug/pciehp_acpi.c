@@ -26,6 +26,7 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/pci_hotplug.h>
+#include <linux/slab.h>
 #include "pciehp.h"
 
 #define PCIEHP_DETECT_PCIE	(0)
@@ -84,10 +85,9 @@ static int __init dummy_probe(struct pcie_device *dev)
 	acpi_handle handle;
 	struct dummy_slot *slot, *tmp;
 	struct pci_dev *pdev = dev->port;
-	/* Note: pciehp_detect_mode != PCIEHP_DETECT_ACPI here */
-	if (pciehp_get_hp_hw_control_from_firmware(pdev))
-		return -ENODEV;
-	if (!(pos = pci_find_capability(pdev, PCI_CAP_ID_EXP)))
+
+	pos = pci_pcie_cap(pdev);
+	if (!pos)
 		return -ENODEV;
 	pci_read_config_dword(pdev, pos + PCI_EXP_SLTCAP, &slot_cap);
 	slot = kzalloc(sizeof(*slot), GFP_KERNEL);
@@ -115,7 +115,8 @@ static struct pcie_port_service_driver __initdata dummy_driver = {
 static int __init select_detection_mode(void)
 {
 	struct dummy_slot *slot, *tmp;
-	pcie_port_service_register(&dummy_driver);
+	if (pcie_port_service_register(&dummy_driver))
+		return PCIEHP_DETECT_ACPI;
 	pcie_port_service_unregister(&dummy_driver);
 	list_for_each_entry_safe(slot, tmp, &dummy_slots, list) {
 		list_del(&slot->list);

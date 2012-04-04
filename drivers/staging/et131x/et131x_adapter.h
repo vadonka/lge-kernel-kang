@@ -77,60 +77,25 @@
  */
 #define NUM_TRAFFIC_CLASSES          1
 
-/*
- * There are three ways of counting errors - if there are more than X errors
- * in Y packets (represented by the "SAMPLE" macros), if there are more than
- * N errors in a S mSec time period (the "PERIOD" macros), or if there are
- * consecutive packets with errors (CONSEC_ERRORED_THRESH).  This last covers
- * for "Bursty" errors, and the errored packets may well not be contiguous,
- * but several errors where the packet counter has changed by less than a
- * small amount will cause this count to increment.
- */
-#define TX_PACKETS_IN_SAMPLE        10000
-#define TX_MAX_ERRORS_IN_SAMPLE     50
-
 #define TX_ERROR_PERIOD             1000
-#define TX_MAX_ERRORS_IN_PERIOD     10
-
-#define LINK_DETECTION_TIMER        5000
-
-#define TX_CONSEC_RANGE             5
-#define TX_CONSEC_ERRORED_THRESH    10
 
 #define LO_MARK_PERCENT_FOR_PSR     15
 #define LO_MARK_PERCENT_FOR_RX      15
 
-/* Macros specific to the private adapter structure */
-#define MP_TCB_RESOURCES_AVAILABLE(_M) ((_M)->TxRing.nBusySend < NUM_TCB)
-#define MP_TCB_RESOURCES_NOT_AVAILABLE(_M) ((_M)->TxRing.nBusySend >= NUM_TCB)
-
-#define MP_SHOULD_FAIL_SEND(_M)   ((_M)->Flags & fMP_ADAPTER_FAIL_SEND_MASK)
-
-/* Counters for error rate monitoring */
-typedef struct _MP_ERR_COUNTERS {
-	u32 PktCountTxPackets;
-	u32 PktCountTxErrors;
-	u32 TimerBasedTxErrors;
-	u32 PktCountLastError;
-	u32 ErredConsecPackets;
-} MP_ERR_COUNTERS, *PMP_ERR_COUNTERS;
-
 /* RFD (Receive Frame Descriptor) */
-typedef struct _MP_RFD {
+struct rfd {
 	struct list_head list_node;
-	struct sk_buff *Packet;
-	u32 PacketSize;	/* total size of receive frame */
+	struct sk_buff *skb;
+	u32 len;	/* total size of receive frame */
 	u16 bufferindex;
 	u8 ringindex;
-} MP_RFD, *PMP_RFD;
+};
 
-/* Enum for Flow Control */
-typedef enum _eflow_control_t {
-	Both = 0,
-	TxOnly = 1,
-	RxOnly = 2,
-	None = 3
-} eFLOW_CONTROL_t, *PeFLOW_CONTROL_t;
+/* Flow Control */
+#define FLOW_BOTH	0
+#define FLOW_TXONLY	1
+#define FLOW_RXONLY	2
+#define FLOW_NONE	3
 
 /* Struct to define some device statistics */
 typedef struct _ce_stats_t {
@@ -168,7 +133,7 @@ typedef struct _ce_stats_t {
 	u32 tx_deferred;
 
 	/* Rx Statistics. */
-	u32 rx_ov_flow;	/* Rx Over Flow */
+	u32 rx_ov_flow;	/* Rx Overflow */
 
 	u32 length_err;
 	u32 alignment_err;
@@ -179,6 +144,7 @@ typedef struct _ce_stats_t {
 	u32 SynchrounousIterations;
 	u32 InterruptStatus;
 } CE_STATS_t, *PCE_STATS_t;
+
 
 /* The private adapter structure */
 struct et131x_adapter {
@@ -192,20 +158,19 @@ struct et131x_adapter {
 	u32 HwErrCount;
 
 	/* Configuration  */
-	u8 PermanentAddress[ETH_ALEN];
-	u8 CurrentAddress[ETH_ALEN];
+	u8 rom_addr[ETH_ALEN];
+	u8 addr[ETH_ALEN];
 	bool has_eeprom;
-	u8 eepromData[2];
+	u8 eeprom_data[2];
 
 	/* Spinlocks */
 	spinlock_t Lock;
 
 	spinlock_t TCBSendQLock;
 	spinlock_t TCBReadyQLock;
-	spinlock_t SendHWLock;
-	spinlock_t SendWaitLock;
+	spinlock_t send_hw_lock;
 
-	spinlock_t RcvLock;
+	spinlock_t rcv_lock;
 	spinlock_t RcvPendLock;
 	spinlock_t FbrLock;
 
@@ -220,49 +185,54 @@ struct et131x_adapter {
 	u32 MCAddressCount;
 	u8 MCList[NIC_MAX_MCAST_LIST][ETH_ALEN];
 
-	/* MAC test */
-	TXMAC_TXTEST_t TxMacTest;
-
 	/* Pointer to the device's PCI register space */
 	ADDRESS_MAP_t __iomem *regs;
 
 	/* Registry parameters */
 	u8 SpeedDuplex;		/* speed/duplex */
-	eFLOW_CONTROL_t RegistryFlowControl;	/* for 802.3x flow control */
+	u8 wanted_flow;		/* Flow we want for 802.3x flow control */
 	u8 RegistryPhyComa;	/* Phy Coma mode enable/disable */
 
 	u32 RegistryRxMemEnd;	/* Size of internal rx memory */
 	u32 RegistryJumboPacket;	/* Max supported ethernet packet size */
 
-	/* Validation helpers */
-	u8 RegistryNMIDisable;
-	u8 RegistryPhyLoopbk;	/* Enable Phy loopback */
 
 	/* Derived from the registry: */
 	u8 AiForceDpx;		/* duplex setting */
-	u16 AiForceSpeed;		/* 'Speed', user over-ride of line speed */
-	eFLOW_CONTROL_t FlowControl;	/* flow control validated by the far-end */
+	u16 AiForceSpeed;	/* 'Speed', user over-ride of line speed */
+	u8 flowcontrol;		/* flow control validated by the far-end */
 	enum {
 		NETIF_STATUS_INVALID = 0,
 		NETIF_STATUS_MEDIA_CONNECT,
 		NETIF_STATUS_MEDIA_DISCONNECT,
 		NETIF_STATUS_MAX
 	} MediaState;
-	u8 DriverNoPhyAccess;
 
 	/* Minimize init-time */
 	struct timer_list ErrorTimer;
-	MP_POWER_MGMT PoMgmt;
+
+	/* variable putting the phy into coma mode when boot up with no cable
+	 * plugged in after 5 seconds
+	 */
+	u8 boot_coma;
+
+	/* Next two used to save power information at power down. This
+	 * information will be used during power up to set up parts of Power
+	 * Management in JAGCore
+	 */
+	u16 pdown_speed;
+	u8 pdown_duplex;
+
 	u32 CachedMaskValue;
 
 	/* Xcvr status at last poll */
 	MI_BMSR_t Bmsr;
 
 	/* Tx Memory Variables */
-	TX_RING_t TxRing;
+	struct tx_ring tx_ring;
 
 	/* Rx Memory Variables */
-	RX_RING_t RxRing;
+	struct rx_ring rx_ring;
 
 	/* Loopback specifics */
 	u8 ReplicaPhyLoopbk;	/* Replica Enable */

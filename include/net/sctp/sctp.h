@@ -115,7 +115,6 @@
  * sctp/protocol.c
  */
 extern struct sock *sctp_get_ctl_sock(void);
-extern void sctp_local_addr_free(struct rcu_head *head);
 extern int sctp_copy_local_addr_list(struct sctp_bind_addr *,
 				     sctp_scope_t, gfp_t gfp,
 				     int flags);
@@ -128,6 +127,7 @@ extern int sctp_register_pf(struct sctp_pf *, sa_family_t);
 int sctp_backlog_rcv(struct sock *sk, struct sk_buff *skb);
 int sctp_inet_listen(struct socket *sock, int backlog);
 void sctp_write_space(struct sock *sk);
+void sctp_data_ready(struct sock *sk, int len);
 unsigned int sctp_poll(struct file *file, struct socket *sock,
 		poll_table *wait);
 void sctp_sock_rfree(struct sk_buff *skb);
@@ -227,8 +227,7 @@ DECLARE_SNMP_STAT(struct sctp_mib, sctp_statistics);
 #endif /* !TEST_FRAME */
 
 /* sctp mib definitions */
-enum
-{
+enum {
 	SCTP_MIB_NUM = 0,
 	SCTP_MIB_CURRESTAB,			/* CurrEstab */
 	SCTP_MIB_ACTIVEESTABS,			/* ActiveEstabs */
@@ -269,30 +268,41 @@ enum
 #define SCTP_MIB_MAX    __SCTP_MIB_MAX
 struct sctp_mib {
         unsigned long   mibs[SCTP_MIB_MAX];
-} __SNMP_MIB_ALIGN__;
+};
 
 
 /* Print debugging messages.  */
 #if SCTP_DEBUG
 extern int sctp_debug_flag;
-#define SCTP_DEBUG_PRINTK(whatever...) \
-	((void) (sctp_debug_flag && printk(KERN_DEBUG whatever)))
-#define SCTP_DEBUG_PRINTK_IPADDR(lead, trail, leadparm, saddr, otherparms...) \
-	if (sctp_debug_flag) { \
-		if (saddr->sa.sa_family == AF_INET6) { \
-			printk(KERN_DEBUG \
-			       lead "%pI6" trail, \
-			       leadparm, \
-			       &saddr->v6.sin6_addr, \
-			       otherparms); \
-		} else { \
-			printk(KERN_DEBUG \
-			       lead "%pI4" trail, \
-			       leadparm, \
-			       &saddr->v4.sin_addr.s_addr, \
-			       otherparms); \
-		} \
-	}
+#define SCTP_DEBUG_PRINTK(fmt, args...)			\
+do {							\
+	if (sctp_debug_flag)				\
+		printk(KERN_DEBUG pr_fmt(fmt), ##args);	\
+} while (0)
+#define SCTP_DEBUG_PRINTK_CONT(fmt, args...)		\
+do {							\
+	if (sctp_debug_flag)				\
+		pr_cont(fmt, ##args);			\
+} while (0)
+#define SCTP_DEBUG_PRINTK_IPADDR(fmt_lead, fmt_trail,			\
+				 args_lead, saddr, args_trail...)	\
+do {									\
+	if (sctp_debug_flag) {						\
+		if (saddr->sa.sa_family == AF_INET6) {			\
+			printk(KERN_DEBUG				\
+			       pr_fmt(fmt_lead "%pI6" fmt_trail),	\
+			       args_lead,				\
+			       &saddr->v6.sin6_addr,			\
+			       args_trail);				\
+		} else {						\
+			printk(KERN_DEBUG				\
+			       pr_fmt(fmt_lead "%pI4" fmt_trail),	\
+			       args_lead,				\
+			       &saddr->v4.sin_addr.s_addr,		\
+			       args_trail);				\
+		}							\
+	}								\
+} while (0)
 #define SCTP_ENABLE_DEBUG { sctp_debug_flag = 1; }
 #define SCTP_DISABLE_DEBUG { sctp_debug_flag = 0; }
 
@@ -306,6 +316,7 @@ extern int sctp_debug_flag;
 #else	/* SCTP_DEBUG */
 
 #define SCTP_DEBUG_PRINTK(whatever...)
+#define SCTP_DEBUG_PRINTK_CONT(fmt, args...)
 #define SCTP_DEBUG_PRINTK_IPADDR(whatever...)
 #define SCTP_ENABLE_DEBUG
 #define SCTP_DISABLE_DEBUG
@@ -393,7 +404,7 @@ static inline void sctp_v6_del_protocol(void) { return; }
 /* Map an association to an assoc_id. */
 static inline sctp_assoc_t sctp_assoc2id(const struct sctp_association *asoc)
 {
-	return (asoc?asoc->assoc_id:0);
+	return asoc ? asoc->assoc_id : 0;
 }
 
 /* Look up the association by its id.  */
@@ -461,7 +472,7 @@ static inline void sctp_skb_set_owner_r(struct sk_buff *skb, struct sock *sk)
 /* Tests if the list has one and only one entry. */
 static inline int sctp_list_single_entry(struct list_head *head)
 {
-	return ((head->next != head) && (head->next == head->prev));
+	return (head->next != head) && (head->next == head->prev);
 }
 
 /* Generate a random jitter in the range of -50% ~ +50% of input RTO. */
@@ -519,7 +530,6 @@ _sctp_walk_params((pos), (chunk), ntohs((chunk)->chunk_hdr.length), member)
 
 #define _sctp_walk_params(pos, chunk, end, member)\
 for (pos.v = chunk->member;\
-     pos.v <= (void *)chunk + end - sizeof(sctp_paramhdr_t) &&\
      pos.v <= (void *)chunk + end - ntohs(pos.p->length) &&\
      ntohs(pos.p->length) >= sizeof(sctp_paramhdr_t);\
      pos.v += WORD_ROUND(ntohs(pos.p->length)))
@@ -530,7 +540,6 @@ _sctp_walk_errors((err), (chunk_hdr), ntohs((chunk_hdr)->length))
 #define _sctp_walk_errors(err, chunk_hdr, end)\
 for (err = (sctp_errhdr_t *)((void *)chunk_hdr + \
 	    sizeof(sctp_chunkhdr_t));\
-     (void *)err <= (void *)chunk_hdr + end - sizeof(sctp_errhdr_t) &&\
      (void *)err <= (void *)chunk_hdr + end - ntohs(err->length) &&\
      ntohs(err->length) >= sizeof(sctp_errhdr_t); \
      err = (sctp_errhdr_t *)((void *)err + WORD_ROUND(ntohs(err->length))))
@@ -547,7 +556,7 @@ for (pos = chunk->subh.fwdtsn_hdr->skip;\
 #define WORD_ROUND(s) (((s)+3)&~3)
 
 /* Make a new instance of type.  */
-#define t_new(type, flags)	(type *)kmalloc(sizeof(type), flags)
+#define t_new(type, flags)	(type *)kzalloc(sizeof(type), flags)
 
 /* Compare two timevals.  */
 #define tv_lt(s, t) \
@@ -619,13 +628,13 @@ static inline int sctp_sanity_check(void)
 /* This is the hash function for the SCTP port hash table. */
 static inline int sctp_phashfn(__u16 lport)
 {
-	return (lport & (sctp_port_hashsize - 1));
+	return lport & (sctp_port_hashsize - 1);
 }
 
 /* This is the hash function for the endpoint hash table. */
 static inline int sctp_ep_hashfn(__u16 lport)
 {
-	return (lport & (sctp_ep_hashsize - 1));
+	return lport & (sctp_ep_hashsize - 1);
 }
 
 /* This is the hash function for the association hash table. */
@@ -633,7 +642,7 @@ static inline int sctp_assoc_hashfn(__u16 lport, __u16 rport)
 {
 	int h = (lport << 16) + rport;
 	h ^= h>>8;
-	return (h & (sctp_assoc_hashsize - 1));
+	return h & (sctp_assoc_hashsize - 1);
 }
 
 /* This is the hash function for the association hash table.  This is
@@ -644,7 +653,7 @@ static inline int sctp_vtag_hashfn(__u16 lport, __u16 rport, __u32 vtag)
 {
 	int h = (lport << 16) + rport;
 	h ^= vtag;
-	return (h & (sctp_assoc_hashsize-1));
+	return h & (sctp_assoc_hashsize - 1);
 }
 
 #define sctp_for_each_hentry(epb, node, head) \

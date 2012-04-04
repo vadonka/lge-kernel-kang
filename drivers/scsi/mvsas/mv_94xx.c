@@ -3,6 +3,7 @@
  *
  * Copyright 2007 Red Hat, Inc.
  * Copyright 2008 Marvell. <kewei@marvell.com>
+ * Copyright 2009-2011 Marvell. <yuxiangl@marvell.com>
  *
  * This file is licensed under GPLv2.
  *
@@ -616,6 +617,15 @@ void mvs_94xx_fix_dma(dma_addr_t buf_dma, int buf_len, int from, void *prd)
 }
 #endif
 
+/*
+ * FIXME JEJB: temporary nop clear_srs_irq to make 94xx still work
+ * with 64xx fixes
+ */
+static void mvs_94xx_clear_srs_irq(struct mvs_info *mvi, u8 reg_set,
+				   u8 clear_all)
+{
+}
+
 const struct mvs_dispatch mvs_94xx_dispatch = {
 	"mv94xx",
 	mvs_94xx_init,
@@ -640,6 +650,7 @@ const struct mvs_dispatch mvs_94xx_dispatch = {
 	mvs_write_port_irq_mask,
 	mvs_get_sas_addr,
 	mvs_94xx_command_active,
+	mvs_94xx_clear_srs_irq,
 	mvs_94xx_issue_stop,
 	mvs_start_delivery,
 	mvs_rx_update,

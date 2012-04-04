@@ -148,7 +148,7 @@ static void lockspace_kobj_release(struct kobject *k)
 	kfree(ls);
 }
 
-static struct sysfs_ops dlm_attr_ops = {
+static const struct sysfs_ops dlm_attr_ops = {
 	.show  = dlm_attr_show,
 	.store = dlm_attr_store,
 };
@@ -191,6 +191,18 @@ static int do_uevent(struct dlm_ls *ls, int in)
 	return error;
 }
 
+static int dlm_uevent(struct kset *kset, struct kobject *kobj,
+		      struct kobj_uevent_env *env)
+{
+	struct dlm_ls *ls = container_of(kobj, struct dlm_ls, ls_kobj);
+
+	add_uevent_var(env, "LOCKSPACE=%s", ls->ls_name);
+	return 0;
+}
+
+static struct kset_uevent_ops dlm_uevent_ops = {
+	.uevent = dlm_uevent,
+};
 
 int __init dlm_lockspace_init(void)
 {
@@ -199,7 +211,7 @@ int __init dlm_lockspace_init(void)
 	INIT_LIST_HEAD(&lslist);
 	spin_lock_init(&lslist_lock);
 
-	dlm_kset = kset_create_and_add("dlm", NULL, kernel_kobj);
+	dlm_kset = kset_create_and_add("dlm", &dlm_uevent_ops, kernel_kobj);
 	if (!dlm_kset) {
 		printk(KERN_WARNING "%s: can not create kset\n", __func__);
 		return -ENOMEM;
@@ -231,7 +243,6 @@ static struct dlm_ls *find_ls_to_scan(void)
 static int dlm_scand(void *data)
 {
 	struct dlm_ls *ls;
-	int timeout_jiffies = dlm_config.ci_scan_secs * HZ;
 
 	while (!kthread_should_stop()) {
 		ls = find_ls_to_scan();
@@ -240,13 +251,14 @@ static int dlm_scand(void *data)
 				ls->ls_scan_time = jiffies;
 				dlm_scan_rsbs(ls);
 				dlm_scan_timeout(ls);
+				dlm_scan_waiters(ls);
 				dlm_unlock_recovery(ls);
 			} else {
 				ls->ls_scan_time += HZ;
 			}
-		} else {
-			schedule_timeout_interruptible(timeout_jiffies);
+			continue;
 		}
+		schedule_timeout_interruptible(dlm_config.ci_scan_secs * HZ);
 	}
 	return 0;
 }

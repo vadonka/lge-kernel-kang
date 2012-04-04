@@ -10,6 +10,11 @@
  * either version 2 of that License or (at your option) any later version.
  */
 
+/*
+ * sed 's/gser_/gps_/g;s/_gser/_gps/g;s/"gser"/"gps"/' f_serial.c > f_serial_gps.c
+ */
+
+#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
 

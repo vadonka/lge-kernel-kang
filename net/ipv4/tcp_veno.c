@@ -6,7 +6,7 @@
  *    "TCP Veno: TCP Enhancement for Transmission over Wireless Access Networks."
  *    IEEE Journal on Selected Areas in Communication,
  *    Feb. 2003.
- * 	See http://www.ntu.edu.sg/home5/ZHOU0022/papers/CPFu03a.pdf
+ * 	See http://www.ie.cuhk.edu.hk/fileadmin/staff_upload/soung/Journal/J3.pdf
  */
 
 #include <linux/mm.h>
@@ -165,9 +165,8 @@ static void tcp_veno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight)
 				 * every other rtt.
 				 */
 				if (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
-					if (veno->inc
-					    && tp->snd_cwnd <
-					    tp->snd_cwnd_clamp) {
+					if (veno->inc &&
+					    tp->snd_cwnd < tp->snd_cwnd_clamp) {
 						tp->snd_cwnd++;
 						veno->inc = 0;
 					} else
@@ -202,7 +201,7 @@ static u32 tcp_veno_ssthresh(struct sock *sk)
 		return max(tp->snd_cwnd >> 1U, 2U);
 }
 
-static struct tcp_congestion_ops tcp_veno = {
+static struct tcp_congestion_ops tcp_veno __read_mostly = {
 	.flags		= TCP_CONG_RTT_STAMP,
 	.init		= tcp_veno_init,
 	.ssthresh	= tcp_veno_ssthresh,

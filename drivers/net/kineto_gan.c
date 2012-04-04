@@ -46,7 +46,7 @@
 #include <linux/uaccess.h>
 #include <linux/file.h>
 #include <linux/socket.h>
-#include <linux/smp_lock.h>
+#include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
 
@@ -54,6 +54,8 @@
 #include <linux/workqueue.h>
 
 #define MODULE_NAME "gannet"
+
+static DEFINE_MUTEX(kineto_gan_mutex);
 
 #define GAN_VIF_LINK_PORT	13010
 #define GAN_PS_PORT_2		13001
@@ -249,7 +251,7 @@ static void gannet_recvloop(void)
 	unsigned char buf[bufsize + 1];
 
 	/* kernel thread initialization */
-	lock_kernel();
+	mutex_lock(&kineto_gan_mutex);
 
 	current->flags |= PF_NOFREEZE;
 
@@ -257,8 +259,7 @@ static void gannet_recvloop(void)
 	   after daemonize they are disabled) */
 	daemonize(MODULE_NAME);
 	allow_signal(SIGKILL);
-	unlock_kernel();
-
+	mutex_unlock(&kineto_gan_mutex);
 
 	/* main loop */
 	while (!gthreadquit) {
@@ -483,8 +484,6 @@ static void __init gannet_setup(struct net_device *dev)
 	dev->flags |= IFF_NOARP;
 
 	random_ether_addr(dev->dev_addr);
-
-	netif_start_queue(dev);
 }
 
 static int __init gannet_init(void)

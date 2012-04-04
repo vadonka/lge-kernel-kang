@@ -106,7 +106,7 @@ enum {
 /* MXL5005 Tuner Register Struct */
 struct TunerReg {
 	u16 Reg_Num;	/* Tuner Register Address */
-	u16 Reg_Val;	/* Current sw programmed value waiting to be writen */
+	u16 Reg_Val;	/* Current sw programmed value waiting to be written */
 };
 
 enum {
@@ -2789,7 +2789,10 @@ static u16 MXL_TuneRF(struct dvb_frontend *fe, u32 RF_Freq)
 
 	/* add for 2.6.5 Special setting for QAM */
 	if (state->Mod_Type == MXL_QAM) {
-		if (state->RF_IN < 680000000)
+		if (state->config->qam_gain != 0)
+			status += MXL_ControlWrite(fe, RFSYN_CHP_GAIN,
+						   state->config->qam_gain);
+		else if (state->RF_IN < 680000000)
 			status += MXL_ControlWrite(fe, RFSYN_CHP_GAIN, 3);
 		else
 			status += MXL_ControlWrite(fe, RFSYN_CHP_GAIN, 2);
@@ -4021,6 +4024,8 @@ static int mxl5005s_set_params(struct dvb_frontend *fe,
 			case BANDWIDTH_8_MHZ:
 				req_bw  = MXL5005S_BANDWIDTH_8MHZ;
 				break;
+			default:
+				return -EINVAL;
 			}
 		}
 

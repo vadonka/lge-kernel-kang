@@ -74,10 +74,12 @@
 #define			AT91_MCI_TRTYP_BLOCK	(0 << 19)
 #define			AT91_MCI_TRTYP_MULTIPLE	(1 << 19)
 #define			AT91_MCI_TRTYP_STREAM	(2 << 19)
+#define			AT91_MCI_TRTYP_SDIO_BYTE	(4 << 19)
+#define			AT91_MCI_TRTYP_SDIO_BLOCK	(5 << 19)
 
 #define AT91_MCI_BLKR		0x18		/* Block Register */
 #define		AT91_MCI_BLKR_BCNT(n)	((0xffff & (n)) << 0)	/* Block count */
-#define		AT91_MCI_BLKR_BLKLEN(n)	((0xffff & (n)) << 16)	/* Block lenght */
+#define		AT91_MCI_BLKR_BLKLEN(n)	((0xffff & (n)) << 16)	/* Block length */
 
 #define AT91_MCI_RSPR(n)	(0x20 + ((n) * 4))	/* Response Registers 0-3 */
 #define AT91_MCR_RDR		0x30		/* Receive Data Register */
@@ -100,7 +102,7 @@
 #define		AT91_MCI_RDIRE		(1 << 17)	/* Response Direction Error */
 #define		AT91_MCI_RCRCE		(1 << 18)	/* Response CRC Error */
 #define		AT91_MCI_RENDE		(1 << 19)	/* Response End Bit Error */
-#define		AT91_MCI_RTOE		(1 << 20)	/* Reponse Time-out Error */
+#define		AT91_MCI_RTOE		(1 << 20)	/* Response Time-out Error */
 #define		AT91_MCI_DCRCE		(1 << 21)	/* Data CRC Error */
 #define		AT91_MCI_DTOE		(1 << 22)	/* Data Time-out Error */
 #define		AT91_MCI_OVRE		(1 << 30)	/* Overrun */

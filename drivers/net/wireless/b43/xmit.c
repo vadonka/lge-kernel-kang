@@ -32,6 +32,36 @@
 #include "dma.h"
 #include "pio.h"
 
+static const struct b43_tx_legacy_rate_phy_ctl_entry b43_tx_legacy_rate_phy_ctl[] = {
+	{ B43_CCK_RATE_1MB,	0x0,			0x0 },
+	{ B43_CCK_RATE_2MB,	0x0,			0x1 },
+	{ B43_CCK_RATE_5MB,	0x0,			0x2 },
+	{ B43_CCK_RATE_11MB,	0x0,			0x3 },
+	{ B43_OFDM_RATE_6MB,	B43_TXH_PHY1_CRATE_1_2,	B43_TXH_PHY1_MODUL_BPSK },
+	{ B43_OFDM_RATE_9MB,	B43_TXH_PHY1_CRATE_3_4,	B43_TXH_PHY1_MODUL_BPSK },
+	{ B43_OFDM_RATE_12MB,	B43_TXH_PHY1_CRATE_1_2,	B43_TXH_PHY1_MODUL_QPSK },
+	{ B43_OFDM_RATE_18MB,	B43_TXH_PHY1_CRATE_3_4,	B43_TXH_PHY1_MODUL_QPSK },
+	{ B43_OFDM_RATE_24MB,	B43_TXH_PHY1_CRATE_1_2,	B43_TXH_PHY1_MODUL_QAM16 },
+	{ B43_OFDM_RATE_36MB,	B43_TXH_PHY1_CRATE_3_4,	B43_TXH_PHY1_MODUL_QAM16 },
+	{ B43_OFDM_RATE_48MB,	B43_TXH_PHY1_CRATE_2_3,	B43_TXH_PHY1_MODUL_QAM64 },
+	{ B43_OFDM_RATE_54MB,	B43_TXH_PHY1_CRATE_3_4,	B43_TXH_PHY1_MODUL_QAM64 },
+};
+
+static const struct b43_tx_legacy_rate_phy_ctl_entry *
+b43_tx_legacy_rate_phy_ctl_ent(u8 bitrate)
+{
+	const struct b43_tx_legacy_rate_phy_ctl_entry *e;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(b43_tx_legacy_rate_phy_ctl); i++) {
+		e = &(b43_tx_legacy_rate_phy_ctl[i]);
+		if (e->bitrate == bitrate)
+			return e;
+	}
+
+	B43_WARN_ON(1);
+	return NULL;
+}
 
 /* Extract the bitrate index out of a CCK PLCP header. */
 static int b43_plcp_get_bitrate_idx_cck(struct b43_plcp_hdr6 *plcp)
@@ -143,6 +173,34 @@ void b43_generate_plcp_hdr(struct b43_plcp_hdr4 *plcp,
 		plcp->data |= cpu_to_le32(plen << 16);
 		raw[0] = b43_plcp_get_ratecode_cck(bitrate);
 	}
+}
+
+static u16 b43_generate_tx_phy_ctl1(struct b43_wldev *dev, u8 bitrate)
+{
+	const struct b43_phy *phy = &dev->phy;
+	const struct b43_tx_legacy_rate_phy_ctl_entry *e;
+	u16 control = 0;
+	u16 bw;
+
+	if (phy->type == B43_PHYTYPE_LP)
+		bw = B43_TXH_PHY1_BW_20;
+	else /* FIXME */
+		bw = B43_TXH_PHY1_BW_20;
+
+	if (0) { /* FIXME: MIMO */
+	} else if (b43_is_cck_rate(bitrate) && phy->type != B43_PHYTYPE_LP) {
+		control = bw;
+	} else {
+		control = bw;
+		e = b43_tx_legacy_rate_phy_ctl_ent(bitrate);
+		if (e) {
+			control |= e->coding_rate;
+			control |= e->modulation;
+		}
+		control |= B43_TXH_PHY1_MODE_SISO;
+	}
+
+	return control;
 }
 
 static u8 b43_calc_fallback_rate(u8 bitrate)
@@ -437,6 +495,14 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 			extra_ft |= B43_TXH_EFT_RTSFB_OFDM;
 		else
 			extra_ft |= B43_TXH_EFT_RTSFB_CCK;
+
+		if (rates[0].flags & IEEE80211_TX_RC_USE_RTS_CTS &&
+		    phy->type == B43_PHYTYPE_N) {
+			txhdr->phy_ctl1_rts = cpu_to_le16(
+				b43_generate_tx_phy_ctl1(dev, rts_rate));
+			txhdr->phy_ctl1_rts_fb = cpu_to_le16(
+				b43_generate_tx_phy_ctl1(dev, rts_rate_fb));
+		}
 	}
 
 	/* Magic cookie */
@@ -444,6 +510,13 @@ int b43_generate_txhdr(struct b43_wldev *dev,
 		txhdr->old_format.cookie = cpu_to_le16(cookie);
 	else
 		txhdr->new_format.cookie = cpu_to_le16(cookie);
+
+	if (phy->type == B43_PHYTYPE_N) {
+		txhdr->phy_ctl1 =
+			cpu_to_le16(b43_generate_tx_phy_ctl1(dev, rate));
+		txhdr->phy_ctl1_fb =
+			cpu_to_le16(b43_generate_tx_phy_ctl1(dev, rate_fb));
+	}
 
 	/* Apply the bitfields */
 	txhdr->mac_ctl = cpu_to_le32(mac_ctl);
@@ -474,7 +547,7 @@ static s8 b43_rssi_postprocess(struct b43_wldev *dev,
 			else
 				tmp -= 3;
 		} else {
-			if (dev->dev->bus->sprom.
+			if (dev->sdev->bus->sprom.
 			    boardflags_lo & B43_BFL_RSSI) {
 				if (in_rssi > 63)
 					in_rssi = 63;
@@ -610,7 +683,6 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	}
 
 	/* Link quality statistics */
-	status.noise = dev->stats.link_noise;
 	if ((chanstat & B43_RX_CHAN_PHYTYPE) == B43_PHYTYPE_N) {
 //		s8 rssi = max(rxhdr->power0, rxhdr->power1);
 		//TODO: Find out what the rssi value is (dBm or percentage?)
@@ -621,7 +693,6 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 						  (phystat0 & B43_RX_PHYST0_OFDM),
 						  (phystat0 & B43_RX_PHYST0_GAINCTL),
 						  (phystat3 & B43_RX_PHYST3_TRSTATE));
-		status.qual = (rxhdr->jssi * 100) / B43_RX_MAX_SSI;
 	}
 
 	if (phystat0 & B43_RX_PHYST0_OFDM)
@@ -654,7 +725,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 		status.mactime += mactime;
 		if (low_mactime_now <= mactime)
 			status.mactime -= 0x10000;
-		status.flag |= RX_FLAG_TSFT;
+		status.flag |= RX_FLAG_MACTIME_MPDU;
 	}
 
 	chanid = (chanstat & B43_RX_CHAN_ID) >> B43_RX_CHAN_ID_SHIFT;
@@ -690,10 +761,7 @@ void b43_rx(struct b43_wldev *dev, struct sk_buff *skb, const void *_rxhdr)
 	}
 
 	memcpy(IEEE80211_SKB_RXCB(skb), &status, sizeof(status));
-
-	local_bh_disable();
-	ieee80211_rx(dev->wl->hw, skb);
-	local_bh_enable();
+	ieee80211_rx_ni(dev->wl->hw, skb);
 
 #if B43_DEBUG
 	dev->rx_count++;

@@ -95,7 +95,8 @@ static int 		open(	struct inode *inode, 	struct file *file										);
 static int 		release(	struct inode *inode, 	struct file *file										);
 static ssize_t 	read(	struct file *file, 	char *buf, 		size_t count, 		loff_t *ppos		);
 static ssize_t 	write(	struct file *file, 	const char *buf, 	size_t count, 		loff_t *ppos		);
-static int 		ioctl(		struct inode *inode, 	struct file *file, 	unsigned int cmd, 	unsigned long arg	);
+static long 		ioctl(struct file *file, unsigned int cmd, unsigned long arg);
+loff_t tspdrv_lseek(struct file *file, loff_t offset, int origin);
 
 //20101218  vib disable on reboot [START]
 static int 		brr_open(	struct inode *inode, 	struct file *file										);
@@ -107,7 +108,8 @@ static struct 	file_operations fops =
 	.owner	=	THIS_MODULE,
     	.read 	=     	read,
     	.write 	=    	write,
-    	.ioctl 	=    	ioctl,
+	.unlocked_ioctl	= ioctl,
+	.llseek = tspdrv_lseek,
     	.open 	=     	open,
     	.release 	=  	release
 };
@@ -314,6 +316,11 @@ static int release( struct inode *inode, struct file *file )
 
 }
 
+loff_t tspdrv_lseek(struct file *file, loff_t offset, int origin)
+{
+	return 0;
+}
+
 static ssize_t read( struct file *file, char *buf, size_t count, loff_t *ppos )
 {
 
@@ -463,7 +470,7 @@ static ssize_t write( struct file *file, const char *buf, size_t count, loff_t *
 
 }
 
-static int ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg )
+static long ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 
 #ifdef QA_TEST

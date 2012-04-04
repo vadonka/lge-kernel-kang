@@ -23,7 +23,7 @@
 #include <linux/io.h>
 
 #include <mach/hardware.h>
-#include <mach/clock.h>
+#include <plat/clock.h>
 #include <asm/system.h>
 
 #define VERY_HI_RATE	900000000
@@ -40,7 +40,7 @@ static struct clk *mpu_clk;
 
 /* TODO: Add support for SDRAM timing changes */
 
-int omap_verify_speed(struct cpufreq_policy *policy)
+static int omap_verify_speed(struct cpufreq_policy *policy)
 {
 	if (freq_table)
 		return cpufreq_frequency_table_verify(policy, freq_table);
@@ -58,7 +58,7 @@ int omap_verify_speed(struct cpufreq_policy *policy)
 	return 0;
 }
 
-unsigned int omap_getspeed(unsigned int cpu)
+static unsigned int omap_getspeed(unsigned int cpu)
 {
 	unsigned long rate;
 
@@ -101,7 +101,7 @@ static int omap_target(struct cpufreq_policy *policy,
 	return ret;
 }
 
-static int __init omap_cpu_init(struct cpufreq_policy *policy)
+static int __cpuinit omap_cpu_init(struct cpufreq_policy *policy)
 {
 	int result = 0;
 
@@ -134,6 +134,7 @@ static int __init omap_cpu_init(struct cpufreq_policy *policy)
 
 static int omap_cpu_exit(struct cpufreq_policy *policy)
 {
+	clk_exit_cpufreq_table(&freq_table);
 	clk_put(mpu_clk);
 	return 0;
 }

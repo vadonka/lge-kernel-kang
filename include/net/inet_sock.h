@@ -21,6 +21,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/jhash.h>
+#include <linux/netdevice.h>
 
 #include <net/flow.h>
 #include <net/sock.h>
@@ -30,6 +31,7 @@
 /** struct ip_options - IP Options
  *
  * @faddr - Saved first hop address
+ * @nexthop - Saved nexthop address in LSRR and SSRR
  * @is_data - Options in __data, rather than skb
  * @is_strictroute - Strict source route
  * @srr_is_hit - Packet destination addr was our one
@@ -40,6 +42,7 @@
  */
 struct ip_options {
 	__be32		faddr;
+	__be32		nexthop;
 	unsigned char	optlen;
 	unsigned char	srr;
 	unsigned char	rr;
@@ -56,7 +59,15 @@ struct ip_options {
 	unsigned char	__data[0];
 };
 
-#define optlength(opt) (sizeof(struct ip_options) + opt->optlen)
+struct ip_options_rcu {
+	struct rcu_head rcu;
+	struct ip_options opt;
+};
+
+struct ip_options_data {
+	struct ip_options_rcu	opt;
+	char			data[40];
+};
 
 struct inet_request_sock {
 	struct request_sock	req;
@@ -77,13 +88,30 @@ struct inet_request_sock {
 				acked	   : 1,
 				no_srccheck: 1;
 	kmemcheck_bitfield_end(flags);
-	struct ip_options	*opt;
+	struct ip_options_rcu	*opt;
 };
 
 static inline struct inet_request_sock *inet_rsk(const struct request_sock *sk)
 {
 	return (struct inet_request_sock *)sk;
 }
+
+struct inet_cork {
+	unsigned int		flags;
+	__be32			addr;
+	struct ip_options	*opt;
+	unsigned int		fragsize;
+	struct dst_entry	*dst;
+	int			length; /* Total length of all frames */
+	struct page		*page;
+	u32			off;
+	u8			tx_flags;
+};
+
+struct inet_cork_full {
+	struct inet_cork	base;
+	struct flowi		fl;
+};
 
 struct ip_mc_socklist;
 struct ipv6_pinfo;
@@ -93,14 +121,14 @@ struct rtable;
  *
  * @sk - ancestor class
  * @pinet6 - pointer to IPv6 control block
- * @daddr - Foreign IPv4 addr
- * @rcv_saddr - Bound local IPv4 addr
- * @dport - Destination port
- * @num - Local port
- * @saddr - Sending source
+ * @inet_daddr - Foreign IPv4 addr
+ * @inet_rcv_saddr - Bound local IPv4 addr
+ * @inet_dport - Destination port
+ * @inet_num - Local port
+ * @inet_saddr - Sending source
  * @uc_ttl - Unicast TTL
- * @sport - Source port
- * @id - ID counter for DF pkts
+ * @inet_sport - Source port
+ * @inet_id - ID counter for DF pkts
  * @tos - TOS
  * @mc_ttl - Multicasting TTL
  * @is_icsk - is this an inet_connection_sock?
@@ -115,17 +143,20 @@ struct inet_sock {
 	struct ipv6_pinfo	*pinet6;
 #endif
 	/* Socket demultiplex comparisons on incoming packets. */
-	__be32			daddr;
-	__be32			rcv_saddr;
-	__be16			dport;
-	__u16			num;
-	__be32			saddr;
+#define inet_daddr		sk.__sk_common.skc_daddr
+#define inet_rcv_saddr		sk.__sk_common.skc_rcv_saddr
+
+	__be16			inet_dport;
+	__u16			inet_num;
+	__be32			inet_saddr;
 	__s16			uc_ttl;
 	__u16			cmsg_flags;
-	struct ip_options	*opt;
-	__be16			sport;
-	__u16			id;
+	__be16			inet_sport;
+	__u16			inet_id;
+
+	struct ip_options_rcu __rcu	*inet_opt;
 	__u8			tos;
+	__u8			min_ttl;
 	__u8			mc_ttl;
 	__u8			pmtudisc;
 	__u8			recverr:1,
@@ -134,19 +165,12 @@ struct inet_sock {
 				hdrincl:1,
 				mc_loop:1,
 				transparent:1,
-				mc_all:1;
+				mc_all:1,
+				nodefrag:1;
 	int			mc_index;
 	__be32			mc_addr;
-	struct ip_mc_socklist	*mc_list;
-	struct {
-		unsigned int		flags;
-		unsigned int		fragsize;
-		struct ip_options	*opt;
-		struct dst_entry	*dst;
-		int			length; /* Total length of all frames */
-		__be32			addr;
-		struct flowi		fl;
-	} cork;
+	struct ip_mc_socklist __rcu	*mc_list;
+	struct inet_cork_full	cork;
 };
 
 #define IPCORK_OPT	1	/* ip-options has been held in ipcork.opt */
@@ -190,10 +214,10 @@ static inline unsigned int inet_ehashfn(struct net *net,
 static inline int inet_sk_ehashfn(const struct sock *sk)
 {
 	const struct inet_sock *inet = inet_sk(sk);
-	const __be32 laddr = inet->rcv_saddr;
-	const __u16 lport = inet->num;
-	const __be32 faddr = inet->daddr;
-	const __be16 fport = inet->dport;
+	const __be32 laddr = inet->inet_rcv_saddr;
+	const __u16 lport = inet->inet_num;
+	const __be32 faddr = inet->inet_daddr;
+	const __be16 fport = inet->inet_dport;
 	struct net *net = sock_net(sk);
 
 	return inet_ehashfn(net, laddr, lport, faddr, fport);
@@ -214,7 +238,13 @@ static inline struct request_sock *inet_reqsk_alloc(struct request_sock_ops *ops
 
 static inline __u8 inet_sk_flowi_flags(const struct sock *sk)
 {
-	return inet_sk(sk)->transparent ? FLOWI_FLAG_ANYSRC : 0;
+	__u8 flags = 0;
+
+	if (inet_sk(sk)->transparent)
+		flags |= FLOWI_FLAG_ANYSRC;
+	if (sk->sk_protocol == IPPROTO_TCP)
+		flags |= FLOWI_FLAG_PRECOW_METRICS;
+	return flags;
 }
 
 #endif	/* _INET_SOCK_H */

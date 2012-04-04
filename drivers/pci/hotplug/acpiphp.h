@@ -36,7 +36,6 @@
 #define _ACPIPHP_H
 
 #include <linux/acpi.h>
-#include <linux/kobject.h>
 #include <linux/mutex.h>
 #include <linux/pci_hotplug.h>
 
@@ -144,12 +143,6 @@ struct acpiphp_attention_info
 	int (*set_attn)(struct hotplug_slot *slot, u8 status);
 	int (*get_attn)(struct hotplug_slot *slot, u8 *status);
 	struct module *owner;
-};
-
-struct acpiphp_ioapic {
-	struct pci_dev *dev;
-	u32 gsi_base;
-	struct list_head list;
 };
 
 /* PCI bus bridge HID */

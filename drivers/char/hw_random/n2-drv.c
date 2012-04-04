@@ -71,7 +71,7 @@ MODULE_VERSION(DRV_MODULE_VERSION);
  *        x22 + x21 + x17 + x15 + x13 + x12 + x11 + x7 + x5 + x + 1
  *
  * The RNG_CTL_VCO value of each noise cell must be programmed
- * seperately.  This is why 4 control register values must be provided
+ * separately.  This is why 4 control register values must be provided
  * to the hypervisor.  During a write, the hypervisor writes them all,
  * one at a time, to the actual RNG_CTL register.  The first three
  * values are used to setup the desired RNG_CTL_VCO for each entropy
@@ -619,15 +619,20 @@ static void __devinit n2rng_driver_version(void)
 		pr_info("%s", version);
 }
 
-static int __devinit n2rng_probe(struct of_device *op,
-				 const struct of_device_id *match)
+static const struct of_device_id n2rng_match[];
+static int __devinit n2rng_probe(struct platform_device *op)
 {
-	int victoria_falls = (match->data != NULL);
+	const struct of_device_id *match;
+	int victoria_falls;
 	int err = -ENOMEM;
 	struct n2rng *np;
 
-	n2rng_driver_version();
+	match = of_match_device(n2rng_match, &op->dev);
+	if (!match)
+		return -EINVAL;
+	victoria_falls = (match->data != NULL);
 
+	n2rng_driver_version();
 	np = kzalloc(sizeof(*np), GFP_KERNEL);
 	if (!np)
 		goto out;
@@ -660,7 +665,7 @@ static int __devinit n2rng_probe(struct of_device *op,
 				np->hvapi_major);
 			goto out_hvapi_unregister;
 		}
-		np->num_units = of_getintprop_default(op->node,
+		np->num_units = of_getintprop_default(op->dev.of_node,
 						      "rng-#units", 0);
 		if (!np->num_units) {
 			dev_err(&op->dev, "VF RNG lacks rng-#units property\n");
@@ -714,7 +719,7 @@ out:
 	return err;
 }
 
-static int __devexit n2rng_remove(struct of_device *op)
+static int __devexit n2rng_remove(struct platform_device *op)
 {
 	struct n2rng *np = dev_get_drvdata(&op->dev);
 
@@ -750,21 +755,24 @@ static const struct of_device_id n2rng_match[] = {
 };
 MODULE_DEVICE_TABLE(of, n2rng_match);
 
-static struct of_platform_driver n2rng_driver = {
-	.name		= "n2rng",
-	.match_table	= n2rng_match,
+static struct platform_driver n2rng_driver = {
+	.driver = {
+		.name = "n2rng",
+		.owner = THIS_MODULE,
+		.of_match_table = n2rng_match,
+	},
 	.probe		= n2rng_probe,
 	.remove		= __devexit_p(n2rng_remove),
 };
 
 static int __init n2rng_init(void)
 {
-	return of_register_driver(&n2rng_driver, &of_bus_type);
+	return platform_driver_register(&n2rng_driver);
 }
 
 static void __exit n2rng_exit(void)
 {
-	of_unregister_driver(&n2rng_driver);
+	platform_driver_unregister(&n2rng_driver);
 }
 
 module_init(n2rng_init);

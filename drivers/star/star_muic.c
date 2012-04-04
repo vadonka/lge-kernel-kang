@@ -1398,7 +1398,7 @@ static void muic_interrupt_handler(void* arg)
     NvOdmGpioInterruptDone(s_hMuicHandle.hGpioInterrupt);
 }
 
-static int __init muic_probe(struct platform_device *pdev)
+static int __devinit muic_probe(struct platform_device *pdev)
 {
     int i, j, ret;
 #ifdef _MUIC_GPIO_I2C_
@@ -1693,7 +1693,7 @@ static void __exit muic_exit(void)
 
 
 //20100911, , MUIC kernel command line parsing [START]
-static int __init muic_state(char *str)
+static int __devinit muic_state(char *str)
 {
     int muic_value = simple_strtol(str, NULL, 0);
     //20101002, , keep CP USB state after rebooting

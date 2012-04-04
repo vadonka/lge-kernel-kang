@@ -212,6 +212,9 @@ struct tape_device {
 	struct tape_class_device *	nt;
 	struct tape_class_device *	rt;
 
+	/* Device mutex to serialize tape commands. */
+	struct mutex			mutex;
+
 	/* Device discipline information. */
 	struct tape_discipline *	discipline;
 	void *				discdata;
@@ -277,6 +280,14 @@ tape_do_io_free(struct tape_device *device, struct tape_request *request)
 	return rc;
 }
 
+static inline void
+tape_do_io_async_free(struct tape_device *device, struct tape_request *request)
+{
+	request->callback = (void *) tape_free_request;
+	request->callback_data = NULL;
+	tape_do_io_async(device, request);
+}
+
 extern int tape_oper_handler(int irq, int status);
 extern void tape_noper_handler(int irq, int status);
 extern int tape_open(struct tape_device *);
@@ -292,9 +303,9 @@ extern int tape_generic_pm_suspend(struct ccw_device *);
 extern int tape_generic_probe(struct ccw_device *);
 extern void tape_generic_remove(struct ccw_device *);
 
-extern struct tape_device *tape_get_device(int devindex);
-extern struct tape_device *tape_get_device_reference(struct tape_device *);
-extern struct tape_device *tape_put_device(struct tape_device *);
+extern struct tape_device *tape_find_device(int devindex);
+extern struct tape_device *tape_get_device(struct tape_device *);
+extern void tape_put_device(struct tape_device *);
 
 /* Externals from tape_char.c */
 extern int tapechar_init(void);

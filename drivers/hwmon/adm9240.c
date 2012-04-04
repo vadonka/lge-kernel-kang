@@ -20,7 +20,7 @@
  * Alarms	16-bit map of active alarms
  * Analog Out	0..1250 mV output
  *
- * Chassis Intrusion: clear CI latch with 'echo 1 > chassis_clear'
+ * Chassis Intrusion: clear CI latch with 'echo 0 > intrusion0_alarm'
  *
  * Test hardware: Intel SE440BX-2 desktop motherboard --Grant
  *
@@ -55,8 +55,7 @@
 static const unsigned short normal_i2c[] = { 0x2c, 0x2d, 0x2e, 0x2f,
 					I2C_CLIENT_END };
 
-/* Insmod parameters */
-I2C_CLIENT_INSMOD_3(adm9240, ds1780, lm81);
+enum chips { adm9240, ds1780, lm81 };
 
 /* ADM9240 registers */
 #define ADM9240_REG_MAN_ID		0x3e
@@ -132,7 +131,7 @@ static inline unsigned int AOUT_FROM_REG(u8 reg)
 
 static int adm9240_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id);
-static int adm9240_detect(struct i2c_client *client, int kind,
+static int adm9240_detect(struct i2c_client *client,
 			  struct i2c_board_info *info);
 static void adm9240_init_client(struct i2c_client *client);
 static int adm9240_remove(struct i2c_client *client);
@@ -156,7 +155,7 @@ static struct i2c_driver adm9240_driver = {
 	.remove		= adm9240_remove,
 	.id_table	= adm9240_id,
 	.detect		= adm9240_detect,
-	.address_data	= &addr_data,
+	.address_list	= normal_i2c,
 };
 
 /* per client data */
@@ -477,12 +476,15 @@ static ssize_t set_aout(struct device *dev,
 static DEVICE_ATTR(aout_output, S_IRUGO | S_IWUSR, show_aout, set_aout);
 
 /* chassis_clear */
-static ssize_t chassis_clear(struct device *dev,
+static ssize_t chassis_clear_legacy(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	unsigned long val = simple_strtol(buf, NULL, 10);
+
+	dev_warn(dev, "Attribute chassis_clear is deprecated, "
+		 "use intrusion0_alarm instead\n");
 
 	if (val == 1) {
 		i2c_smbus_write_byte_data(client,
@@ -491,7 +493,29 @@ static ssize_t chassis_clear(struct device *dev,
 	}
 	return count;
 }
-static DEVICE_ATTR(chassis_clear, S_IWUSR, NULL, chassis_clear);
+static DEVICE_ATTR(chassis_clear, S_IWUSR, NULL, chassis_clear_legacy);
+
+static ssize_t chassis_clear(struct device *dev,
+		struct device_attribute *attr,
+		const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	struct adm9240_data *data = i2c_get_clientdata(client);
+	unsigned long val;
+
+	if (strict_strtoul(buf, 10, &val) || val != 0)
+		return -EINVAL;
+
+	mutex_lock(&data->update_lock);
+	i2c_smbus_write_byte_data(client, ADM9240_REG_CHASSIS_CLEAR, 0x80);
+	data->valid = 0;		/* Force cache refresh */
+	mutex_unlock(&data->update_lock);
+	dev_dbg(&client->dev, "chassis intrusion latch cleared\n");
+
+	return count;
+}
+static SENSOR_DEVICE_ATTR(intrusion0_alarm, S_IRUGO | S_IWUSR, show_alarm,
+		chassis_clear, 12);
 
 static struct attribute *adm9240_attributes[] = {
 	&sensor_dev_attr_in0_input.dev_attr.attr,
@@ -533,6 +557,7 @@ static struct attribute *adm9240_attributes[] = {
 	&dev_attr_alarms.attr,
 	&dev_attr_aout_output.attr,
 	&dev_attr_chassis_clear.attr,
+	&sensor_dev_attr_intrusion0_alarm.dev_attr.attr,
 	&dev_attr_cpu0_vid.attr,
 	NULL
 };
@@ -545,7 +570,7 @@ static const struct attribute_group adm9240_group = {
 /*** sensor chip detect and driver install ***/
 
 /* Return 0 if detection is successful, -ENODEV otherwise */
-static int adm9240_detect(struct i2c_client *new_client, int kind,
+static int adm9240_detect(struct i2c_client *new_client,
 			  struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = new_client->adapter;
@@ -556,51 +581,34 @@ static int adm9240_detect(struct i2c_client *new_client, int kind,
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -ENODEV;
 
-	if (kind == 0) {
-		kind = adm9240;
+	/* verify chip: reg address should match i2c address */
+	if (i2c_smbus_read_byte_data(new_client, ADM9240_REG_I2C_ADDR)
+			!= address) {
+		dev_err(&adapter->dev, "detect fail: address match, 0x%02x\n",
+			address);
+		return -ENODEV;
 	}
 
-	if (kind < 0) {
-
-		/* verify chip: reg address should match i2c address */
-		if (i2c_smbus_read_byte_data(new_client, ADM9240_REG_I2C_ADDR)
-				!= address) {
-			dev_err(&adapter->dev, "detect fail: address match, "
-					"0x%02x\n", address);
-			return -ENODEV;
-		}
-
-		/* check known chip manufacturer */
-		man_id = i2c_smbus_read_byte_data(new_client,
-				ADM9240_REG_MAN_ID);
-		if (man_id == 0x23) {
-			kind = adm9240;
-		} else if (man_id == 0xda) {
-			kind = ds1780;
-		} else if (man_id == 0x01) {
-			kind = lm81;
-		} else {
-			dev_err(&adapter->dev, "detect fail: unknown manuf, "
-					"0x%02x\n", man_id);
-			return -ENODEV;
-		}
-
-		/* successful detect, print chip info */
-		die_rev = i2c_smbus_read_byte_data(new_client,
-				ADM9240_REG_DIE_REV);
-		dev_info(&adapter->dev, "found %s revision %u\n",
-				man_id == 0x23 ? "ADM9240" :
-				man_id == 0xda ? "DS1780" : "LM81", die_rev);
-	}
-
-	/* either forced or detected chip kind */
-	if (kind == adm9240) {
+	/* check known chip manufacturer */
+	man_id = i2c_smbus_read_byte_data(new_client, ADM9240_REG_MAN_ID);
+	if (man_id == 0x23) {
 		name = "adm9240";
-	} else if (kind == ds1780) {
+	} else if (man_id == 0xda) {
 		name = "ds1780";
-	} else if (kind == lm81) {
+	} else if (man_id == 0x01) {
 		name = "lm81";
+	} else {
+		dev_err(&adapter->dev, "detect fail: unknown manuf, 0x%02x\n",
+			man_id);
+		return -ENODEV;
 	}
+
+	/* successful detect, print chip info */
+	die_rev = i2c_smbus_read_byte_data(new_client, ADM9240_REG_DIE_REV);
+	dev_info(&adapter->dev, "found %s revision %u\n",
+		 man_id == 0x23 ? "ADM9240" :
+		 man_id == 0xda ? "DS1780" : "LM81", die_rev);
+
 	strlcpy(info->type, name, I2C_NAME_SIZE);
 
 	return 0;

@@ -25,6 +25,7 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/mc33880.h>
 #include <linux/gpio.h>
+#include <linux/slab.h>
 
 #define DRIVER_NAME "mc33880"
 
@@ -44,7 +45,7 @@
  * To save time we cache them here in memory
  */
 struct mc33880 {
-	struct mutex	lock;	/* protect from simultanous accesses */
+	struct mutex	lock;	/* protect from simultaneous accesses */
 	u8		port_config;
 	struct gpio_chip chip;
 	struct spi_device *spi;
@@ -145,7 +146,7 @@ exit_destroy:
 	return ret;
 }
 
-static int mc33880_remove(struct spi_device *spi)
+static int __devexit mc33880_remove(struct spi_device *spi)
 {
 	struct mc33880 *mc;
 	int ret;

@@ -54,7 +54,7 @@ struct iic {
 	struct device_node *node;
 };
 
-static DEFINE_PER_CPU(struct iic, iic);
+static DEFINE_PER_CPU(struct iic, cpu_iic);
 #define IIC_NODE_COUNT	2
 static struct irq_host *iic_host;
 
@@ -72,36 +72,38 @@ static irq_hw_number_t iic_pending_to_hwnum(struct cbe_iic_pending_bits bits)
 		return (node << IIC_IRQ_NODE_SHIFT) | (class << 4) | unit;
 }
 
-static void iic_mask(unsigned int irq)
+static void iic_mask(struct irq_data *d)
 {
 }
 
-static void iic_unmask(unsigned int irq)
+static void iic_unmask(struct irq_data *d)
 {
 }
 
-static void iic_eoi(unsigned int irq)
+static void iic_eoi(struct irq_data *d)
 {
-	struct iic *iic = &__get_cpu_var(iic);
+	struct iic *iic = &__get_cpu_var(cpu_iic);
 	out_be64(&iic->regs->prio, iic->eoi_stack[--iic->eoi_ptr]);
 	BUG_ON(iic->eoi_ptr < 0);
 }
 
 static struct irq_chip iic_chip = {
-	.typename = " CELL-IIC ",
-	.mask = iic_mask,
-	.unmask = iic_unmask,
-	.eoi = iic_eoi,
+	.name = "CELL-IIC",
+	.irq_mask = iic_mask,
+	.irq_unmask = iic_unmask,
+	.irq_eoi = iic_eoi,
 };
 
 
-static void iic_ioexc_eoi(unsigned int irq)
+static void iic_ioexc_eoi(struct irq_data *d)
 {
 }
 
 static void iic_ioexc_cascade(unsigned int irq, struct irq_desc *desc)
 {
-	struct cbe_iic_regs __iomem *node_iic = (void __iomem *)desc->handler_data;
+	struct irq_chip *chip = irq_desc_get_chip(desc);
+	struct cbe_iic_regs __iomem *node_iic =
+		(void __iomem *)irq_desc_get_handler_data(desc);
 	unsigned int base = (irq & 0xffffff00) | IIC_IRQ_TYPE_IOEXC;
 	unsigned long bits, ack;
 	int cascade;
@@ -128,15 +130,15 @@ static void iic_ioexc_cascade(unsigned int irq, struct irq_desc *desc)
 		if (ack)
 			out_be64(&node_iic->iic_is, ack);
 	}
-	desc->chip->eoi(irq);
+	chip->irq_eoi(&desc->irq_data);
 }
 
 
 static struct irq_chip iic_ioexc_chip = {
-	.typename = " CELL-IOEX",
-	.mask = iic_mask,
-	.unmask = iic_unmask,
-	.eoi = iic_ioexc_eoi,
+	.name = "CELL-IOEX",
+	.irq_mask = iic_mask,
+	.irq_unmask = iic_unmask,
+	.irq_eoi = iic_ioexc_eoi,
 };
 
 /* Get an IRQ number from the pending state register of the IIC */
@@ -146,7 +148,7 @@ static unsigned int iic_get_irq(void)
 	struct iic *iic;
 	unsigned int virq;
 
-	iic = &__get_cpu_var(iic);
+	iic = &__get_cpu_var(cpu_iic);
 	*(unsigned long *) &pending =
 		in_be64((u64 __iomem *) &iic->regs->pending_destr);
 	if (!(pending.flags & CBE_IIC_IRQ_VALID))
@@ -161,12 +163,12 @@ static unsigned int iic_get_irq(void)
 
 void iic_setup_cpu(void)
 {
-	out_be64(&__get_cpu_var(iic).regs->prio, 0xff);
+	out_be64(&__get_cpu_var(cpu_iic).regs->prio, 0xff);
 }
 
 u8 iic_get_target_id(int cpu)
 {
-	return per_cpu(iic, cpu).target_id;
+	return per_cpu(cpu_iic, cpu).target_id;
 }
 
 EXPORT_SYMBOL_GPL(iic_get_target_id);
@@ -174,14 +176,14 @@ EXPORT_SYMBOL_GPL(iic_get_target_id);
 #ifdef CONFIG_SMP
 
 /* Use the highest interrupt priorities for IPI */
-static inline int iic_ipi_to_irq(int ipi)
+static inline int iic_msg_to_irq(int msg)
 {
-	return IIC_IRQ_TYPE_IPI + 0xf - ipi;
+	return IIC_IRQ_TYPE_IPI + 0xf - msg;
 }
 
-void iic_cause_IPI(int cpu, int mesg)
+void iic_message_pass(int cpu, int msg)
 {
-	out_be64(&per_cpu(iic, cpu).regs->generate, (0xf - mesg) << 4);
+	out_be64(&per_cpu(cpu_iic, cpu).regs->generate, (0xf - msg) << 4);
 }
 
 struct irq_host *iic_get_irq_host(int node)
@@ -190,38 +192,31 @@ struct irq_host *iic_get_irq_host(int node)
 }
 EXPORT_SYMBOL_GPL(iic_get_irq_host);
 
-static irqreturn_t iic_ipi_action(int irq, void *dev_id)
-{
-	int ipi = (int)(long)dev_id;
-
-	smp_message_recv(ipi);
-
-	return IRQ_HANDLED;
-}
-static void iic_request_ipi(int ipi, const char *name)
+static void iic_request_ipi(int msg)
 {
 	int virq;
 
-	virq = irq_create_mapping(iic_host, iic_ipi_to_irq(ipi));
+	virq = irq_create_mapping(iic_host, iic_msg_to_irq(msg));
 	if (virq == NO_IRQ) {
 		printk(KERN_ERR
-		       "iic: failed to map IPI %s\n", name);
+		       "iic: failed to map IPI %s\n", smp_ipi_name[msg]);
 		return;
 	}
-	if (request_irq(virq, iic_ipi_action, IRQF_DISABLED, name,
-			(void *)(long)ipi))
-		printk(KERN_ERR
-		       "iic: failed to request IPI %s\n", name);
+
+	/*
+	 * If smp_request_message_ipi encounters an error it will notify
+	 * the error.  If a message is not needed it will return non-zero.
+	 */
+	if (smp_request_message_ipi(virq, msg))
+		irq_dispose_mapping(virq);
 }
 
 void iic_request_IPIs(void)
 {
-	iic_request_ipi(PPC_MSG_CALL_FUNCTION, "IPI-call");
-	iic_request_ipi(PPC_MSG_RESCHEDULE, "IPI-resched");
-	iic_request_ipi(PPC_MSG_CALL_FUNC_SINGLE, "IPI-call-single");
-#ifdef CONFIG_DEBUGGER
-	iic_request_ipi(PPC_MSG_DEBUGGER_BREAK, "IPI-debug");
-#endif /* CONFIG_DEBUGGER */
+	iic_request_ipi(PPC_MSG_CALL_FUNCTION);
+	iic_request_ipi(PPC_MSG_RESCHEDULE);
+	iic_request_ipi(PPC_MSG_CALL_FUNC_SINGLE);
+	iic_request_ipi(PPC_MSG_DEBUGGER_BREAK);
 }
 
 #endif /* CONFIG_SMP */
@@ -233,71 +228,25 @@ static int iic_host_match(struct irq_host *h, struct device_node *node)
 				    "IBM,CBEA-Internal-Interrupt-Controller");
 }
 
-extern int noirqdebug;
-
-static void handle_iic_irq(unsigned int irq, struct irq_desc *desc)
-{
-	spin_lock(&desc->lock);
-
-	desc->status &= ~(IRQ_REPLAY | IRQ_WAITING);
-
-	/*
-	 * If we're currently running this IRQ, or its disabled,
-	 * we shouldn't process the IRQ. Mark it pending, handle
-	 * the necessary masking and go out
-	 */
-	if (unlikely((desc->status & (IRQ_INPROGRESS | IRQ_DISABLED)) ||
-		    !desc->action)) {
-		desc->status |= IRQ_PENDING;
-		goto out_eoi;
-	}
-
-	kstat_incr_irqs_this_cpu(irq, desc);
-
-	/* Mark the IRQ currently in progress.*/
-	desc->status |= IRQ_INPROGRESS;
-
-	do {
-		struct irqaction *action = desc->action;
-		irqreturn_t action_ret;
-
-		if (unlikely(!action))
-			goto out_eoi;
-
-		desc->status &= ~IRQ_PENDING;
-		spin_unlock(&desc->lock);
-		action_ret = handle_IRQ_event(irq, action);
-		if (!noirqdebug)
-			note_interrupt(irq, desc, action_ret);
-		spin_lock(&desc->lock);
-
-	} while ((desc->status & (IRQ_PENDING | IRQ_DISABLED)) == IRQ_PENDING);
-
-	desc->status &= ~IRQ_INPROGRESS;
-out_eoi:
-	desc->chip->eoi(irq);
-	spin_unlock(&desc->lock);
-}
-
 static int iic_host_map(struct irq_host *h, unsigned int virq,
 			irq_hw_number_t hw)
 {
 	switch (hw & IIC_IRQ_TYPE_MASK) {
 	case IIC_IRQ_TYPE_IPI:
-		set_irq_chip_and_handler(virq, &iic_chip, handle_percpu_irq);
+		irq_set_chip_and_handler(virq, &iic_chip, handle_percpu_irq);
 		break;
 	case IIC_IRQ_TYPE_IOEXC:
-		set_irq_chip_and_handler(virq, &iic_ioexc_chip,
-					 handle_iic_irq);
+		irq_set_chip_and_handler(virq, &iic_ioexc_chip,
+					 handle_edge_eoi_irq);
 		break;
 	default:
-		set_irq_chip_and_handler(virq, &iic_chip, handle_iic_irq);
+		irq_set_chip_and_handler(virq, &iic_chip, handle_edge_eoi_irq);
 	}
 	return 0;
 }
 
 static int iic_host_xlate(struct irq_host *h, struct device_node *ct,
-			   u32 *intspec, unsigned int intsize,
+			   const u32 *intspec, unsigned int intsize,
 			   irq_hw_number_t *out_hwirq, unsigned int *out_flags)
 
 {
@@ -348,7 +297,7 @@ static void __init init_one_iic(unsigned int hw_cpu, unsigned long addr,
 	/* XXX FIXME: should locate the linux CPU number from the HW cpu
 	 * number properly. We are lucky for now
 	 */
-	struct iic *iic = &per_cpu(iic, hw_cpu);
+	struct iic *iic = &per_cpu(cpu_iic, hw_cpu);
 
 	iic->regs = ioremap(addr, sizeof(struct cbe_iic_thread_regs));
 	BUG_ON(iic->regs == NULL);
@@ -408,8 +357,8 @@ static int __init setup_iic(void)
 		 * irq_data is a generic pointer that gets passed back
 		 * to us later, so the forced cast is fine.
 		 */
-		set_irq_data(cascade, (void __force *)node_iic);
-		set_irq_chained_handler(cascade , iic_ioexc_cascade);
+		irq_set_handler_data(cascade, (void __force *)node_iic);
+		irq_set_chained_handler(cascade, iic_ioexc_cascade);
 		out_be64(&node_iic->iic_ir,
 			 (1 << 12)		/* priority */ |
 			 (node << 4)		/* dest node */ |

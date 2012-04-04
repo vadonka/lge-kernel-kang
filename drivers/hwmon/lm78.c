@@ -19,6 +19,8 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/slab.h>
@@ -41,8 +43,7 @@ static const unsigned short normal_i2c[] = { 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
 						0x2e, 0x2f, I2C_CLIENT_END };
 static unsigned short isa_address = 0x290;
 
-/* Insmod parameters */
-I2C_CLIENT_INSMOD_2(lm78, lm79);
+enum chips { lm78, lm79 };
 
 /* Many LM78 constants specified below */
 
@@ -142,7 +143,7 @@ struct lm78_data {
 };
 
 
-static int lm78_i2c_detect(struct i2c_client *client, int kind,
+static int lm78_i2c_detect(struct i2c_client *client,
 			   struct i2c_board_info *info);
 static int lm78_i2c_probe(struct i2c_client *client,
 			  const struct i2c_device_id *id);
@@ -173,7 +174,7 @@ static struct i2c_driver lm78_driver = {
 	.remove		= lm78_i2c_remove,
 	.id_table	= lm78_i2c_id,
 	.detect		= lm78_i2c_detect,
-	.address_data	= &addr_data,
+	.address_list	= normal_i2c,
 };
 
 static struct platform_driver lm78_isa_driver = {
@@ -558,7 +559,7 @@ static int lm78_alias_detect(struct i2c_client *client, u8 chipid)
 	return 1;
 }
 
-static int lm78_i2c_detect(struct i2c_client *client, int kind,
+static int lm78_i2c_detect(struct i2c_client *client,
 			   struct i2c_board_info *info)
 {
 	int i;
@@ -576,52 +577,34 @@ static int lm78_i2c_detect(struct i2c_client *client, int kind,
 	if (isa)
 		mutex_lock(&isa->update_lock);
 
-	if (kind < 0) {
-		if ((i2c_smbus_read_byte_data(client, LM78_REG_CONFIG) & 0x80)
-		 || i2c_smbus_read_byte_data(client, LM78_REG_I2C_ADDR)
-		    != address)
-			goto err_nodev;
+	if ((i2c_smbus_read_byte_data(client, LM78_REG_CONFIG) & 0x80)
+	 || i2c_smbus_read_byte_data(client, LM78_REG_I2C_ADDR) != address)
+		goto err_nodev;
 
-		/* Explicitly prevent the misdetection of Winbond chips */
-		i = i2c_smbus_read_byte_data(client, 0x4f);
-		if (i == 0xa3 || i == 0x5c)
-			goto err_nodev;
-	}
+	/* Explicitly prevent the misdetection of Winbond chips */
+	i = i2c_smbus_read_byte_data(client, 0x4f);
+	if (i == 0xa3 || i == 0x5c)
+		goto err_nodev;
 
 	/* Determine the chip type. */
-	if (kind <= 0) {
-		i = i2c_smbus_read_byte_data(client, LM78_REG_CHIPID);
-		if (i == 0x00 || i == 0x20	/* LM78 */
-		 || i == 0x40)			/* LM78-J */
-			kind = lm78;
-		else if ((i & 0xfe) == 0xc0)
-			kind = lm79;
-		else {
-			if (kind == 0)
-				dev_warn(&adapter->dev, "Ignoring 'force' "
-					"parameter for unknown chip at "
-					"adapter %d, address 0x%02x\n",
-					i2c_adapter_id(adapter), address);
-			goto err_nodev;
-		}
+	i = i2c_smbus_read_byte_data(client, LM78_REG_CHIPID);
+	if (i == 0x00 || i == 0x20	/* LM78 */
+	 || i == 0x40)			/* LM78-J */
+		client_name = "lm78";
+	else if ((i & 0xfe) == 0xc0)
+		client_name = "lm79";
+	else
+		goto err_nodev;
 
-		if (lm78_alias_detect(client, i)) {
-			dev_dbg(&adapter->dev, "Device at 0x%02x appears to "
-				"be the same as ISA device\n", address);
-			goto err_nodev;
-		}
+	if (lm78_alias_detect(client, i)) {
+		dev_dbg(&adapter->dev, "Device at 0x%02x appears to "
+			"be the same as ISA device\n", address);
+		goto err_nodev;
 	}
 
 	if (isa)
 		mutex_unlock(&isa->update_lock);
 
-	switch (kind) {
-	case lm79:
-		client_name = "lm79";
-		break;
-	default:
-		client_name = "lm78";
-	}
 	strlcpy(info->type, client_name, I2C_NAME_SIZE);
 
 	return 0;
@@ -877,7 +860,7 @@ static int __init lm78_isa_found(unsigned short address)
 	 * individually for the probing phase. */
 	for (port = address; port < address + LM78_EXTENT; port++) {
 		if (!request_region(port, 1, "lm78")) {
-			pr_debug("lm78: Failed to request port 0x%x\n", port);
+			pr_debug("Failed to request port 0x%x\n", port);
 			goto release;
 		}
 	}
@@ -939,7 +922,7 @@ static int __init lm78_isa_found(unsigned short address)
 		found = 1;
 
 	if (found)
-		pr_info("lm78: Found an %s chip at %#x\n",
+		pr_info("Found an %s chip at %#x\n",
 			val & 0x80 ? "LM79" : "LM78", (int)address);
 
  release:
@@ -961,21 +944,19 @@ static int __init lm78_isa_device_add(unsigned short address)
 	pdev = platform_device_alloc("lm78", address);
 	if (!pdev) {
 		err = -ENOMEM;
-		printk(KERN_ERR "lm78: Device allocation failed\n");
+		pr_err("Device allocation failed\n");
 		goto exit;
 	}
 
 	err = platform_device_add_resources(pdev, &res, 1);
 	if (err) {
-		printk(KERN_ERR "lm78: Device resource addition failed "
-		       "(%d)\n", err);
+		pr_err("Device resource addition failed (%d)\n", err);
 		goto exit_device_put;
 	}
 
 	err = platform_device_add(pdev);
 	if (err) {
-		printk(KERN_ERR "lm78: Device addition failed (%d)\n",
-		       err);
+		pr_err("Device addition failed (%d)\n", err);
 		goto exit_device_put;
 	}
 

@@ -119,7 +119,7 @@ static int ixp2000_flash_remove(struct platform_device *dev)
 		return 0;
 
 	if (info->mtd) {
-		del_mtd_partitions(info->mtd);
+		mtd_device_unregister(info->mtd);
 		map_destroy(info->mtd);
 	}
 	if (info->map.map_priv_1)
@@ -165,12 +165,11 @@ static int ixp2000_flash_probe(struct platform_device *dev)
 		return -EIO;
 	}
 
-	info = kmalloc(sizeof(struct ixp2000_flash_info), GFP_KERNEL);
+	info = kzalloc(sizeof(struct ixp2000_flash_info), GFP_KERNEL);
 	if(!info) {
 		err = -ENOMEM;
 		goto Error;
 	}
-	memset(info, 0, sizeof(struct ixp2000_flash_info));
 
 	platform_set_drvdata(dev, info);
 
@@ -231,7 +230,7 @@ static int ixp2000_flash_probe(struct platform_device *dev)
 
 	err = parse_mtd_partitions(info->mtd, probes, &info->partitions, 0);
 	if (err > 0) {
-		err = add_mtd_partitions(info->mtd, info->partitions, err);
+		err = mtd_device_register(info->mtd, info->partitions, err);
 		if(err)
 			dev_err(&dev->dev, "Could not parse partitions\n");
 	}

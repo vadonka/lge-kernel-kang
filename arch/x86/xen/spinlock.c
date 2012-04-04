@@ -6,6 +6,7 @@
 #include <linux/spinlock.h>
 #include <linux/debugfs.h>
 #include <linux/log2.h>
+#include <linux/gfp.h>
 
 #include <asm/paravirt.h>
 
@@ -120,14 +121,14 @@ struct xen_spinlock {
 	unsigned short spinners;	/* count of waiting cpus */
 };
 
-static int xen_spin_is_locked(struct raw_spinlock *lock)
+static int xen_spin_is_locked(struct arch_spinlock *lock)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 
 	return xl->lock != 0;
 }
 
-static int xen_spin_is_contended(struct raw_spinlock *lock)
+static int xen_spin_is_contended(struct arch_spinlock *lock)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 
@@ -136,7 +137,7 @@ static int xen_spin_is_contended(struct raw_spinlock *lock)
 	return xl->spinners != 0;
 }
 
-static int xen_spin_trylock(struct raw_spinlock *lock)
+static int xen_spin_trylock(struct arch_spinlock *lock)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 	u8 old = 1;
@@ -158,8 +159,8 @@ static inline struct xen_spinlock *spinning_lock(struct xen_spinlock *xl)
 {
 	struct xen_spinlock *prev;
 
-	prev = __get_cpu_var(lock_spinners);
-	__get_cpu_var(lock_spinners) = xl;
+	prev = __this_cpu_read(lock_spinners);
+	__this_cpu_write(lock_spinners, xl);
 
 	wmb();			/* set lock of interest before count */
 
@@ -178,14 +179,14 @@ static inline void unspinning_lock(struct xen_spinlock *xl, struct xen_spinlock 
 	asm(LOCK_PREFIX " decw %0"
 	    : "+m" (xl->spinners) : : "memory");
 	wmb();			/* decrement count before restoring lock */
-	__get_cpu_var(lock_spinners) = prev;
+	__this_cpu_write(lock_spinners, prev);
 }
 
-static noinline int xen_spin_lock_slow(struct raw_spinlock *lock, bool irq_enable)
+static noinline int xen_spin_lock_slow(struct arch_spinlock *lock, bool irq_enable)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 	struct xen_spinlock *prev;
-	int irq = __get_cpu_var(lock_kicker_irq);
+	int irq = __this_cpu_read(lock_kicker_irq);
 	int ret;
 	u64 start;
 
@@ -223,7 +224,7 @@ static noinline int xen_spin_lock_slow(struct raw_spinlock *lock, bool irq_enabl
 			goto out;
 		}
 
-		flags = __raw_local_save_flags();
+		flags = arch_local_save_flags();
 		if (irq_enable) {
 			ADD_STATS(taken_slow_irqenable, 1);
 			raw_local_irq_enable();
@@ -254,7 +255,7 @@ out:
 	return ret;
 }
 
-static inline void __xen_spin_lock(struct raw_spinlock *lock, bool irq_enable)
+static inline void __xen_spin_lock(struct arch_spinlock *lock, bool irq_enable)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 	unsigned timeout;
@@ -291,12 +292,12 @@ static inline void __xen_spin_lock(struct raw_spinlock *lock, bool irq_enable)
 	spin_time_accum_total(start_spin);
 }
 
-static void xen_spin_lock(struct raw_spinlock *lock)
+static void xen_spin_lock(struct arch_spinlock *lock)
 {
 	__xen_spin_lock(lock, false);
 }
 
-static void xen_spin_lock_flags(struct raw_spinlock *lock, unsigned long flags)
+static void xen_spin_lock_flags(struct arch_spinlock *lock, unsigned long flags)
 {
 	__xen_spin_lock(lock, !raw_irqs_disabled_flags(flags));
 }
@@ -317,7 +318,7 @@ static noinline void xen_spin_unlock_slow(struct xen_spinlock *xl)
 	}
 }
 
-static void xen_spin_unlock(struct raw_spinlock *lock)
+static void xen_spin_unlock(struct arch_spinlock *lock)
 {
 	struct xen_spinlock *xl = (struct xen_spinlock *)lock;
 

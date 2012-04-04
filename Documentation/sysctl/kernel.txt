@@ -19,6 +19,8 @@ Currently, these files might (depending on your configuration)
 show up in /proc/sys/kernel:
 - acpi_video_flags
 - acct
+- bootloader_type	     [ X86 only ]
+- bootloader_version	     [ X86 only ]
 - callhome		     [ S390 only ]
 - auto_msgmni
 - core_pattern
@@ -26,11 +28,13 @@ show up in /proc/sys/kernel:
 - core_uses_pid
 - ctrl-alt-del
 - dentry-state
+- dmesg_restrict
 - domainname
 - hostname
 - hotplug
 - java-appletviewer           [ binfmt_java, obsolete ]
 - java-interpreter            [ binfmt_java, obsolete ]
+- kptr_restrict
 - kstack_depth_to_print       [ X86 only ]
 - l2cr                        [ PPC only ]
 - modprobe                    ==> Documentation/debugging-modules.txt
@@ -93,6 +97,35 @@ valid for 30 seconds.
 
 ==============================================================
 
+bootloader_type:
+
+x86 bootloader identification
+
+This gives the bootloader type number as indicated by the bootloader,
+shifted left by 4, and OR'd with the low four bits of the bootloader
+version.  The reason for this encoding is that this used to match the
+type_of_loader field in the kernel header; the encoding is kept for
+backwards compatibility.  That is, if the full bootloader type number
+is 0x15 and the full version number is 0x234, this file will contain
+the value 340 = 0x154.
+
+See the type_of_loader and ext_loader_type fields in
+Documentation/x86/boot.txt for additional information.
+
+==============================================================
+
+bootloader_version:
+
+x86 bootloader version
+
+The complete bootloader version number.  In the example above, this
+file will contain the value 564 = 0x234.
+
+See the type_of_loader and ext_loader_ver fields in
+Documentation/x86/boot.txt for additional information.
+
+==============================================================
+
 callhome:
 
 Controls the kernel's callhome behavior in case of a kernel panic.
@@ -128,7 +161,8 @@ core_pattern is used to specify a core dumpfile pattern name.
 	%s	signal number
 	%t	UNIX time of dump
 	%h	hostname
-	%e	executable filename
+	%e	executable filename (may be shortened)
+	%E	executable path
 	%<OTHER> both are dropped
 . If the first character of the pattern is a '|', the kernel will treat
   the rest of the pattern as a command to run.  The core dump will be
@@ -139,9 +173,9 @@ core_pattern is used to specify a core dumpfile pattern name.
 core_pipe_limit:
 
 This sysctl is only applicable when core_pattern is configured to pipe core
-files to user space helper a (when the first character of core_pattern is a '|',
+files to a user space helper (when the first character of core_pattern is a '|',
 see above).  When collecting cores via a pipe to an application, it is
-occasionally usefull for the collecting application to gather data about the
+occasionally useful for the collecting application to gather data about the
 crashing process from its /proc/pid directory.  In order to do this safely, the
 kernel must wait for the collecting process to exit, so as not to remove the
 crashing processes proc files prematurely.  This in turn creates the possibility
@@ -152,7 +186,7 @@ applications in parallel.  If this value is exceeded, then those crashing
 processes above that value are noted via the kernel log and their cores are
 skipped.  0 is a special value, indicating that unlimited processes may be
 captured in parallel, but that no waiting will take place (i.e. the collecting
-process is not guaranteed access to /proc/<crahing pid>/).  This value defaults
+process is not guaranteed access to /proc/<crashing pid>/).  This value defaults
 to 0.
 
 ==============================================================
@@ -179,6 +213,19 @@ Note: when a program (like dosemu) has the keyboard in 'raw'
 mode, the ctrl-alt-del is intercepted by the program before it
 ever reaches the kernel tty layer, and it's up to the program
 to decide what to do with it.
+
+==============================================================
+
+dmesg_restrict:
+
+This toggle indicates whether unprivileged users are prevented from using
+dmesg(8) to view messages from the kernel's log buffer.  When
+dmesg_restrict is set to (0) there are no restrictions.  When
+dmesg_restrict is set set to (1), users must have CAP_SYSLOG to use
+dmesg(8).
+
+The kernel config option CONFIG_SECURITY_DMESG_RESTRICT sets the default
+value of dmesg_restrict.
 
 ==============================================================
 
@@ -213,6 +260,19 @@ l2cr: (PPC only)
 
 This flag controls the L2 cache of G3 processor boards. If
 0, the cache is disabled. Enabled if nonzero.
+
+==============================================================
+
+kptr_restrict:
+
+This toggle indicates whether restrictions are placed on
+exposing kernel addresses via /proc and other interfaces.  When
+kptr_restrict is set to (0), there are no restrictions.  When
+kptr_restrict is set to (1), the default, kernel pointers
+printed using the %pK format specifier will be replaced with 0's
+unless the user has CAP_SYSLOG.  When kptr_restrict is set to
+(2), kernel pointers printed using %pK will be replaced with 0's
+regardless of privileges.
 
 ==============================================================
 
@@ -308,7 +368,7 @@ the different loglevels.
 
 - console_loglevel: messages with a higher priority than
   this will be printed to the console
-- default_message_level: messages without an explicit priority
+- default_message_loglevel: messages without an explicit priority
   will be printed with this priority
 - minimum_console_loglevel: minimum (highest) value to which
   console_loglevel can be set

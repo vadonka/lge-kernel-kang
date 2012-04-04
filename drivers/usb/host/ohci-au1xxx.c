@@ -33,7 +33,7 @@
 
 #ifdef __LITTLE_ENDIAN
 #define USBH_ENABLE_INIT (USBH_ENABLE_CE | USBH_ENABLE_E | USBH_ENABLE_C)
-#elif __BIG_ENDIAN
+#elif defined(__BIG_ENDIAN)
 #define USBH_ENABLE_INIT (USBH_ENABLE_CE | USBH_ENABLE_E | USBH_ENABLE_C | \
 			  USBH_ENABLE_BE)
 #else
@@ -294,7 +294,7 @@ static int ohci_hcd_au1xxx_drv_resume(struct device *dev)
 	return 0;
 }
 
-static struct dev_pm_ops au1xxx_ohci_pmops = {
+static const struct dev_pm_ops au1xxx_ohci_pmops = {
 	.suspend	= ohci_hcd_au1xxx_drv_suspend,
 	.resume		= ohci_hcd_au1xxx_drv_resume,
 };

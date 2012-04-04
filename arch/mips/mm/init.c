@@ -28,6 +28,7 @@
 #include <linux/proc_fs.h>
 #include <linux/pfn.h>
 #include <linux/hardirq.h>
+#include <linux/gfp.h>
 
 #include <asm/asm-offsets.h>
 #include <asm/bootinfo.h>
@@ -62,8 +63,6 @@
 #define EXIT_CRITICAL(flags) local_irq_restore(flags)
 
 #endif /* CONFIG_MIPS_MT_SMTC */
-
-DEFINE_PER_CPU(struct mmu_gather, mmu_gathers);
 
 /*
  * We have up to 8 empty zeroed pages so we can map one of the right colour
@@ -143,7 +142,7 @@ void *kmap_coherent(struct page *page, unsigned long addr)
 #if defined(CONFIG_64BIT_PHYS_ADDR) && defined(CONFIG_CPU_MIPS32)
 	entrylo = pte.pte_high;
 #else
-	entrylo = pte_val(pte) >> 6;
+	entrylo = pte_to_entrylo(pte_val(pte));
 #endif
 
 	ENTER_CRITICAL(flags);
@@ -298,7 +297,7 @@ void __init fixrange_init(unsigned long start, unsigned long end,
 }
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
-static int __init page_is_ram(unsigned long pagenr)
+int page_is_ram(unsigned long pagenr)
 {
 	int i;
 
@@ -323,7 +322,7 @@ static int __init page_is_ram(unsigned long pagenr)
 void __init paging_init(void)
 {
 	unsigned long max_zone_pfns[MAX_NR_ZONES];
-	unsigned long lastpfn;
+	unsigned long lastpfn __maybe_unused;
 
 	pagetable_init();
 
@@ -462,7 +461,9 @@ void __init_refok free_initmem(void)
 			__pa_symbol(&__init_end));
 }
 
+#ifndef CONFIG_MIPS_PGD_C0_CONTEXT
 unsigned long pgd_current[NR_CPUS];
+#endif
 /*
  * On 64-bit we've got three-level pagetables with a slightly
  * different layout ...
@@ -475,7 +476,7 @@ unsigned long pgd_current[NR_CPUS];
  * will officially be retired.
  */
 pgd_t swapper_pg_dir[_PTRS_PER_PGD] __page_aligned(_PGD_ORDER);
-#ifdef CONFIG_64BIT
+#ifndef __PAGETABLE_PMD_FOLDED
 pmd_t invalid_pmd_table[PTRS_PER_PMD] __page_aligned(PMD_ORDER);
 #endif
 pte_t invalid_pte_table[PTRS_PER_PTE] __page_aligned(PTE_ORDER);

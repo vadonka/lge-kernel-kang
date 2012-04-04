@@ -10,20 +10,13 @@
  * either version 2 of that License or (at your option) any later version.
  */
 
+#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
 
 #include "u_serial.h"
 #include "gadget_chips.h"
 
-//20100822, , for USB mode switching [START]
-#if defined(CONFIG_MACH_STAR) && 1==2
-#undef __init
-#define __init
-#undef __initdata
-#define __initdata
-#endif
-//20100822, , for USB mode switching [END]
 
 /*
  * This function packages a simple "generic serial" port with no real

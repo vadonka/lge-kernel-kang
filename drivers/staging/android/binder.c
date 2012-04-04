@@ -3118,17 +3118,17 @@ binder_defer_work(struct binder_proc *proc, enum binder_deferred_state defer)
 }
 
 static char *print_binder_transaction(char *buf, char *end, const char *prefix,
-				      struct binder_transaction *t)
+				     struct binder_transaction *t)
 {
 	buf += snprintf(buf, end - buf,
 			"%s %d: %p from %d:%d to %d:%d code %x "
 			"flags %x pri %ld r%d",
-			prefix, t->debug_id, t,
-			t->from ? t->from->proc->pid : 0,
-			t->from ? t->from->pid : 0,
-			t->to_proc ? t->to_proc->pid : 0,
-			t->to_thread ? t->to_thread->pid : 0,
-			t->code, t->flags, t->priority, t->need_reply);
+		   prefix, t->debug_id, t,
+		   t->from ? t->from->proc->pid : 0,
+		   t->from ? t->from->pid : 0,
+		   t->to_proc ? t->to_proc->pid : 0,
+		   t->to_thread ? t->to_thread->pid : 0,
+		   t->code, t->flags, t->priority, t->need_reply);
 	if (buf >= end)
 		return buf;
 	if (t->buffer == NULL) {
@@ -3137,29 +3137,29 @@ static char *print_binder_transaction(char *buf, char *end, const char *prefix,
 	}
 	if (t->buffer->target_node) {
 		buf += snprintf(buf, end - buf, " node %d",
-				t->buffer->target_node->debug_id);
+			   t->buffer->target_node->debug_id);
 		if (buf >= end)
 			return buf;
 	}
 	buf += snprintf(buf, end - buf, " size %zd:%zd data %p\n",
-			t->buffer->data_size, t->buffer->offsets_size,
-			t->buffer->data);
+		   t->buffer->data_size, t->buffer->offsets_size,
+		   t->buffer->data);
 	return buf;
 }
 
 static char *print_binder_buffer(char *buf, char *end, const char *prefix,
-				 struct binder_buffer *buffer)
+				struct binder_buffer *buffer)
 {
 	buf += snprintf(buf, end - buf, "%s %d: %p size %zd:%zd %s\n",
-			prefix, buffer->debug_id, buffer->data,
-			buffer->data_size, buffer->offsets_size,
-			buffer->transaction ? "active" : "delivered");
+		   prefix, buffer->debug_id, buffer->data,
+		   buffer->data_size, buffer->offsets_size,
+		   buffer->transaction ? "active" : "delivered");
 	return buf;
 }
 
 static char *print_binder_work(char *buf, char *end, const char *prefix,
-			       const char *transaction_prefix,
-			       struct binder_work *w)
+			      const char *transaction_prefix,
+			      struct binder_work *w)
 {
 	struct binder_node *node;
 	struct binder_transaction *t;
@@ -3199,8 +3199,8 @@ static char *print_binder_work(char *buf, char *end, const char *prefix,
 }
 
 static char *print_binder_thread(char *buf, char *end,
-				 struct binder_thread *thread,
-				 int print_always)
+				struct binder_thread *thread,
+				int print_always)
 {
 	struct binder_transaction *t;
 	struct binder_work *w;
@@ -3216,11 +3216,11 @@ static char *print_binder_thread(char *buf, char *end,
 			break;
 		if (t->from == thread) {
 			buf = print_binder_transaction(buf, end,
-						"    outgoing transaction", t);
+						 "    outgoing transaction", t);
 			t = t->from_parent;
 		} else if (t->to_thread == thread) {
 			buf = print_binder_transaction(buf, end,
-						"    incoming transaction", t);
+						 "    incoming transaction", t);
 			t = t->to_parent;
 		} else {
 			buf = print_binder_transaction(buf, end,
@@ -3253,10 +3253,10 @@ static char *print_binder_node(char *buf, char *end, struct binder_node *node)
 	buf += snprintf(buf, end - buf,
 			"  node %d: u%p c%p hs %d hw %d ls %d lw %d "
 			"is %d iw %d",
-			node->debug_id, node->ptr, node->cookie,
-			node->has_strong_ref, node->has_weak_ref,
-			node->local_strong_refs, node->local_weak_refs,
-			node->internal_strong_refs, count);
+		   node->debug_id, node->ptr, node->cookie,
+		   node->has_strong_ref, node->has_weak_ref,
+		   node->local_strong_refs, node->local_weak_refs,
+		   node->internal_strong_refs, count);
 	if (buf >= end)
 		return buf;
 	if (count) {
@@ -3267,15 +3267,15 @@ static char *print_binder_node(char *buf, char *end, struct binder_node *node)
 			buf += snprintf(buf, end - buf, " %d", ref->proc->pid);
 			if (buf >= end)
 				return buf;
-		}
+	}
 	}
 	buf += snprintf(buf, end - buf, "\n");
 	list_for_each_entry(w, &node->async_todo, entry) {
 		if (buf >= end)
 			break;
 		buf = print_binder_work(buf, end, "    ",
-					"    pending async transaction", w);
-	}
+				  "    pending async transaction", w);
+}
 	return buf;
 }
 
@@ -3290,7 +3290,7 @@ static char *print_binder_ref(char *buf, char *end, struct binder_ref *ref)
 }
 
 static char *print_binder_proc(char *buf, char *end,
-			       struct binder_proc *proc, int print_all)
+			      struct binder_proc *proc, int print_all)
 {
 	struct binder_work *w;
 	struct rb_node *n;
@@ -3305,7 +3305,7 @@ static char *print_binder_proc(char *buf, char *end,
 	     n = rb_next(n))
 		buf = print_binder_thread(buf, end,
 					  rb_entry(n, struct binder_thread,
-						   rb_node), print_all);
+						rb_node), print_all);
 	for (n = rb_first(&proc->nodes);
 	     n != NULL && buf < end;
 	     n = rb_next(n)) {
@@ -3320,7 +3320,7 @@ static char *print_binder_proc(char *buf, char *end,
 		     n = rb_next(n))
 			buf = print_binder_ref(buf, end,
 					       rb_entry(n, struct binder_ref,
-							rb_node_desc));
+						     rb_node_desc));
 	}
 	for (n = rb_first(&proc->allocated_buffers);
 	     n != NULL && buf < end;
@@ -3398,12 +3398,12 @@ static const char *binder_objstat_strings[] = {
 };
 
 static char *print_binder_stats(char *buf, char *end, const char *prefix,
-				struct binder_stats *stats)
+			       struct binder_stats *stats)
 {
 	int i;
 
 	BUILD_BUG_ON(ARRAY_SIZE(stats->bc) !=
-			ARRAY_SIZE(binder_command_strings));
+		     ARRAY_SIZE(binder_command_strings));
 	for (i = 0; i < ARRAY_SIZE(stats->bc); i++) {
 		if (stats->bc[i])
 			buf += snprintf(buf, end - buf, "%s%s: %d\n", prefix,
@@ -3414,27 +3414,27 @@ static char *print_binder_stats(char *buf, char *end, const char *prefix,
 	}
 
 	BUILD_BUG_ON(ARRAY_SIZE(stats->br) !=
-			ARRAY_SIZE(binder_return_strings));
+		     ARRAY_SIZE(binder_return_strings));
 	for (i = 0; i < ARRAY_SIZE(stats->br); i++) {
 		if (stats->br[i])
 			buf += snprintf(buf, end - buf, "%s%s: %d\n", prefix,
-					binder_return_strings[i], stats->br[i]);
+				   binder_return_strings[i], stats->br[i]);
 		if (buf >= end)
 			return buf;
 	}
 
 	BUILD_BUG_ON(ARRAY_SIZE(stats->obj_created) !=
-			ARRAY_SIZE(binder_objstat_strings));
+		     ARRAY_SIZE(binder_objstat_strings));
 	BUILD_BUG_ON(ARRAY_SIZE(stats->obj_created) !=
-			ARRAY_SIZE(stats->obj_deleted));
+		     ARRAY_SIZE(stats->obj_deleted));
 	for (i = 0; i < ARRAY_SIZE(stats->obj_created); i++) {
 		if (stats->obj_created[i] || stats->obj_deleted[i])
 			buf += snprintf(buf, end - buf,
 					"%s%s: active %d total %d\n", prefix,
-					binder_objstat_strings[i],
+				binder_objstat_strings[i],
 					stats->obj_created[i] -
 						stats->obj_deleted[i],
-					stats->obj_created[i]);
+				stats->obj_created[i]);
 		if (buf >= end)
 			return buf;
 	}
@@ -3442,7 +3442,7 @@ static char *print_binder_stats(char *buf, char *end, const char *prefix,
 }
 
 static char *print_binder_proc_stats(char *buf, char *end,
-				     struct binder_proc *proc)
+				    struct binder_proc *proc)
 {
 	struct binder_work *w;
 	struct rb_node *n;
@@ -3675,10 +3675,10 @@ static char *print_binder_transaction_log_entry(char *buf, char *end,
 	buf += snprintf(buf, end - buf,
 			"%d: %s from %d:%d to %d:%d node %d handle %d "
 			"size %d:%d\n",
-			e->debug_id, (e->call_type == 2) ? "reply" :
-			((e->call_type == 1) ? "async" : "call "), e->from_proc,
-			e->from_thread, e->to_proc, e->to_thread, e->to_node,
-			e->target_handle, e->data_size, e->offsets_size);
+		   e->debug_id, (e->call_type == 2) ? "reply" :
+		   ((e->call_type == 1) ? "async" : "call "), e->from_proc,
+		   e->from_thread, e->to_proc, e->to_thread, e->to_node,
+		   e->target_handle, e->data_size, e->offsets_size);
 	return buf;
 }
 
@@ -3700,7 +3700,7 @@ static int binder_read_proc_transaction_log(
 				break;
 			buf = print_binder_transaction_log_entry(buf, end,
 								&log->entry[i]);
-		}
+	}
 	}
 	for (i = 0; i < log->next; i++) {
 		if (buf >= end)
@@ -3751,27 +3751,27 @@ static int __init binder_init(void)
 	ret = misc_register(&binder_miscdev);
 	if (binder_proc_dir_entry_root) {
 		create_proc_read_entry("state",
-				       S_IRUGO,
+				    S_IRUGO,
 				       binder_proc_dir_entry_root,
 				       binder_read_proc_state,
 				       NULL);
 		create_proc_read_entry("stats",
-				       S_IRUGO,
+				    S_IRUGO,
 				       binder_proc_dir_entry_root,
 				       binder_read_proc_stats,
 				       NULL);
 		create_proc_read_entry("transactions",
-				       S_IRUGO,
+				    S_IRUGO,
 				       binder_proc_dir_entry_root,
 				       binder_read_proc_transactions,
 				       NULL);
 		create_proc_read_entry("transaction_log",
-				       S_IRUGO,
+				    S_IRUGO,
 				       binder_proc_dir_entry_root,
 				       binder_read_proc_transaction_log,
 				       &binder_transaction_log);
 		create_proc_read_entry("failed_transaction_log",
-				       S_IRUGO,
+				    S_IRUGO,
 				       binder_proc_dir_entry_root,
 				       binder_read_proc_transaction_log,
 				       &binder_transaction_log_failed);

@@ -10,6 +10,7 @@
 /* Copyright (C) Rusty Russell IBM Corporation 2006.
  * GPL v2 and any later version */
 #include <linux/mm.h>
+#include <linux/gfp.h>
 #include <linux/types.h>
 #include <linux/spinlock.h>
 #include <linux/random.h>
@@ -1136,7 +1137,7 @@ void free_guest_pagetable(struct lguest *lg)
  */
 void map_switcher_in_guest(struct lg_cpu *cpu, struct lguest_pages *pages)
 {
-	pte_t *switcher_pte_page = __get_cpu_var(switcher_pte_pages);
+	pte_t *switcher_pte_page = __this_cpu_read(switcher_pte_pages);
 	pte_t regs_pte;
 
 #ifdef CONFIG_X86_PAE

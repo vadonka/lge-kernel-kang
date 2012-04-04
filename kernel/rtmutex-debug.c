@@ -37,8 +37,8 @@ do {								\
 	if (rt_trace_on) {					\
 		rt_trace_on = 0;				\
 		console_verbose();				\
-		if (spin_is_locked(&current->pi_lock))		\
-			spin_unlock(&current->pi_lock);		\
+		if (raw_spin_is_locked(&current->pi_lock))	\
+			raw_spin_unlock(&current->pi_lock);	\
 	}							\
 } while (0)
 
@@ -215,7 +215,6 @@ void debug_rt_mutex_free_waiter(struct rt_mutex_waiter *waiter)
 	put_pid(waiter->deadlock_task_pid);
 	TRACE_WARN_ON(!plist_node_empty(&waiter->list_entry));
 	TRACE_WARN_ON(!plist_node_empty(&waiter->pi_list_entry));
-	TRACE_WARN_ON(waiter->task);
 	memset(waiter, 0x22, sizeof(*waiter));
 }
 

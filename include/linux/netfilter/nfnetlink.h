@@ -47,7 +47,8 @@ struct nfgenmsg {
 #define NFNL_SUBSYS_QUEUE		3
 #define NFNL_SUBSYS_ULOG		4
 #define NFNL_SUBSYS_OSF			5
-#define NFNL_SUBSYS_COUNT		6
+#define NFNL_SUBSYS_IPSET		6
+#define NFNL_SUBSYS_COUNT		7
 
 #ifdef __KERNEL__
 
@@ -55,8 +56,7 @@ struct nfgenmsg {
 #include <linux/capability.h>
 #include <net/netlink.h>
 
-struct nfnl_callback
-{
+struct nfnl_callback {
 	int (*call)(struct sock *nl, struct sk_buff *skb, 
 		    const struct nlmsghdr *nlh,
 		    const struct nlattr * const cda[]);
@@ -64,8 +64,7 @@ struct nfnl_callback
 	const u_int16_t attr_count;		/* number of nlattr's */
 };
 
-struct nfnetlink_subsystem
-{
+struct nfnetlink_subsystem {
 	const char *name;
 	__u8 subsys_id;			/* nfnetlink subsystem ID */
 	__u8 cb_count;			/* number of callbacks */
@@ -75,11 +74,11 @@ struct nfnetlink_subsystem
 extern int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n);
 extern int nfnetlink_subsys_unregister(const struct nfnetlink_subsystem *n);
 
-extern int nfnetlink_has_listeners(unsigned int group);
-extern int nfnetlink_send(struct sk_buff *skb, u32 pid, unsigned group, 
+extern int nfnetlink_has_listeners(struct net *net, unsigned int group);
+extern int nfnetlink_send(struct sk_buff *skb, struct net *net, u32 pid, unsigned group,
 			  int echo, gfp_t flags);
-extern void nfnetlink_set_err(u32 pid, u32 group, int error);
-extern int nfnetlink_unicast(struct sk_buff *skb, u_int32_t pid, int flags);
+extern int nfnetlink_set_err(struct net *net, u32 pid, u32 group, int error);
+extern int nfnetlink_unicast(struct sk_buff *skb, struct net *net, u_int32_t pid, int flags);
 
 extern void nfnl_lock(void);
 extern void nfnl_unlock(void);

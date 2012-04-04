@@ -214,8 +214,8 @@ el2_probe1(struct net_device *dev, int ioaddr)
     iobase_reg = inb(ioaddr+0x403);
     membase_reg = inb(ioaddr+0x404);
     /* ASIC location registers should be 0 or have only a single bit set. */
-    if (   (iobase_reg  & (iobase_reg - 1))
-	|| (membase_reg & (membase_reg - 1))) {
+    if ((iobase_reg  & (iobase_reg - 1)) ||
+	(membase_reg & (membase_reg - 1))) {
 	retval = -ENODEV;
 	goto out1;
     }
@@ -291,8 +291,8 @@ el2_probe1(struct net_device *dev, int ioaddr)
 	    writel(0xba5eba5e, mem_base);
 	    for (i = sizeof(test_val); i < EL2_MEMSIZE; i+=sizeof(test_val)) {
 		writel(test_val, mem_base + i);
-		if (readl(mem_base) != 0xba5eba5e
-		    || readl(mem_base + i) != test_val) {
+		if (readl(mem_base) != 0xba5eba5e ||
+		    readl(mem_base + i) != test_val) {
 		    pr_warning("3c503: memory failure or memory address conflict.\n");
 		    dev->mem_start = 0;
 		    ei_status.name = "3c503-PIO";
@@ -337,10 +337,10 @@ el2_probe1(struct net_device *dev, int ioaddr)
     /* Finish setting the board's parameters. */
     ei_status.stop_page = EL2_MB1_STOP_PG;
     ei_status.word16 = wordlength;
-    ei_status.reset_8390 = &el2_reset_8390;
-    ei_status.get_8390_hdr = &el2_get_8390_hdr;
-    ei_status.block_input = &el2_block_input;
-    ei_status.block_output = &el2_block_output;
+    ei_status.reset_8390 = el2_reset_8390;
+    ei_status.get_8390_hdr = el2_get_8390_hdr;
+    ei_status.block_input = el2_block_input;
+    ei_status.block_output = el2_block_output;
 
     if (dev->irq == 2)
 	dev->irq = 9;
@@ -392,8 +392,8 @@ el2_open(struct net_device *dev)
     int retval;
 
     if (dev->irq < 2) {
-	int irqlist[] = {5, 9, 3, 4, 0};
-	int *irqp = irqlist;
+	static const int irqlist[] = {5, 9, 3, 4, 0};
+	const int *irqp = irqlist;
 
 	outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
 	do {
@@ -412,7 +412,7 @@ el2_open(struct net_device *dev)
 		outb_p(0x04 << ((*irqp == 9) ? 2 : *irqp), E33G_IDCFR);
 		outb_p(0x00, E33G_IDCFR);
 		msleep(1);
-		free_irq(*irqp, el2_probe_interrupt);
+		free_irq(*irqp, &seen);
 		if (!seen)
 			continue;
 
@@ -422,6 +422,7 @@ el2_open(struct net_device *dev)
 			continue;
 		if (retval < 0)
 			goto err_disable;
+		break;
 	} while (*++irqp);
 
 	if (*irqp == 0) {
@@ -573,7 +574,6 @@ el2_block_output(struct net_device *dev, int count,
     }
     blocked:;
     outb_p(ei_status.interface_num==0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
-    return;
 }
 
 /* Read the 4 byte, page aligned 8390 specific header. */
@@ -689,7 +689,6 @@ el2_block_input(struct net_device *dev, int count, struct sk_buff *skb, int ring
     }
     blocked:;
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
-    return;
 }
 
 

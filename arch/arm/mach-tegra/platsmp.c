@@ -13,26 +13,21 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <linux/kernel.h>
 #include <linux/init.h>
-#include <linux/errno.h>
-#include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/jiffies.h>
 #include <linux/smp.h>
 #include <linux/io.h>
 #include <linux/completion.h>
 #include <linux/sched.h>
 #include <linux/cpu.h>
+#include <linux/slab.h>
 
-#include <asm/cacheflush.h>
-#include <mach/hardware.h>
-#include <asm/mach-types.h>
-#include <asm/localtimer.h>
 #include <asm/tlbflush.h>
 #include <asm/smp_scu.h>
 #include <asm/cpu.h>
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
+#include <asm/hardware/gic.h>
 
 #include <mach/iomap.h>
 
@@ -40,13 +35,11 @@
 
 extern void tegra_secondary_startup(void);
 
-static DEFINE_SPINLOCK(boot_lock);
 static void __iomem *scu_base = IO_ADDRESS(TEGRA_ARM_PERIF_BASE);
 extern void __cortex_a9_restore(void);
 extern void __shut_off_mmu(void);
 
 #ifdef CONFIG_HOTPLUG_CPU
-static DEFINE_PER_CPU(struct completion, cpu_killed);
 extern void tegra_hotplug_startup(void);
 #endif
 
@@ -79,31 +72,13 @@ void __cpuinit platform_secondary_init(unsigned int cpu)
 	asm volatile ("mcr p15, 0, %0, c15, c0, 0" : : "r" (reg) : "cc");
 #endif
 
-	trace_hardirqs_off();
-	gic_cpu_init(0, IO_ADDRESS(TEGRA_ARM_PERIF_BASE) + 0x100);
-	/*
-	 * Synchronise with the boot thread.
-	 */
-	spin_lock(&boot_lock);
-#ifdef CONFIG_HOTPLUG_CPU
-	cpu_set(cpu, cpu_init_map);
-	INIT_COMPLETION(per_cpu(cpu_killed, cpu));
-#endif
-	spin_unlock(&boot_lock);
+	gic_secondary_init(0);
 }
 
 int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
-	unsigned long old_boot_vector;
 	unsigned long boot_vector;
-	unsigned long timeout;
 	u32 reg;
-
-	/*
-	 * set synchronisation state between this boot processor
-	 * and the secondary one
-	 */
-	spin_lock(&boot_lock);
 
 	/* set the reset vector to point to the secondary_startup routine */
 #ifdef CONFIG_HOTPLUG_CPU
@@ -115,7 +90,6 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 	smp_wmb();
 
-	old_boot_vector = readl(EVP_CPU_RESET_VECTOR);
 	writel(boot_vector, EVP_CPU_RESET_VECTOR);
 
 	/* enable cpu clock on cpu */
@@ -127,22 +101,6 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 
 	/* unhalt the cpu */
 	writel(0, IO_ADDRESS(TEGRA_FLOW_CTRL_BASE) + 0x14 + 0x8*(cpu-1));
-
-	timeout = jiffies + HZ;
-	while (time_before(jiffies, timeout)) {
-		if (readl(EVP_CPU_RESET_VECTOR) != boot_vector)
-			break;
-		udelay(10);
-	}
-
-	/* put the old boot vector back */
-	writel(old_boot_vector, EVP_CPU_RESET_VECTOR);
-
-	/*
-	 * now the secondary core is starting up let it run its
-	 * calibrations, then wait for it to finish
-	 */
-	spin_unlock(&boot_lock);
 
 	return 0;
 }
@@ -157,6 +115,8 @@ void __init smp_init_cpus(void)
 
 	for (i = 0; i < ncores; i++)
 		cpu_set(i, cpu_possible_map);
+
+	set_smp_cross_call(gic_raise_softirq);
 }
 
 #if defined(CONFIG_PM) || defined(CONFIG_HOTPLUG_CPU)
@@ -216,19 +176,10 @@ static int create_suspend_pgtable(void)
 }
 #endif
 
-void __init smp_prepare_cpus(unsigned int max_cpus)
+void __init platform_smp_prepare_cpus(unsigned int max_cpus)
 {
 	unsigned int ncores = scu_get_core_count(scu_base);
-	unsigned int cpu = smp_processor_id();
 	int i;
-
-	smp_store_cpu_info(cpu);
-
-	/*
-	 * are we trying to boot more cores than exist?
-	 */
-	if (max_cpus > ncores)
-		max_cpus = ncores;
 
 #if defined(CONFIG_PM) || defined(CONFIG_HOTPLUG_CPU)
 	tegra_context_area = kzalloc(CONTEXT_SIZE_BYTES * ncores, GFP_KERNEL);
@@ -246,24 +197,8 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	for (i = 0; i < max_cpus; i++)
 		set_cpu_present(i, true);
 
-#ifdef CONFIG_HOTPLUG_CPU
-	for_each_present_cpu(i) {
-		init_completion(&per_cpu(cpu_killed, i));
-	}
-#endif
-
-	/*
-	 * Initialise the SCU if there are more than one CPU and let
-	 * them know where to start. Note that, on modern versions of
-	 * MILO, the "poke" doesn't actually do anything until each
-	 * individual core is sent a soft interrupt to get it out of
-	 * WFI
-	 */
-	if (max_cpus > 1) {
-		percpu_timer_setup();
 		scu_enable(scu_base);
 	}
-}
 
 #ifdef CONFIG_HOTPLUG_CPU
 
@@ -274,26 +209,16 @@ void __cpuinit secondary_start_kernel(void);
 int platform_cpu_kill(unsigned int cpu)
 {
 	unsigned int reg;
-	int e;
 
-	e = wait_for_completion_timeout(&per_cpu(cpu_killed, cpu), 100);
-	printk(KERN_NOTICE "CPU%u: %s shutdown\n", cpu, (e) ? "clean":"forced");
-
-	if (e) {
 		do {
 			reg = readl(CLK_RST_CONTROLLER_RST_CPU_CMPLX_SET);
 			cpu_relax();
 		} while (!(reg & (1<<cpu)));
-	} else {
-		writel(0x1111<<cpu, CLK_RST_CONTROLLER_RST_CPU_CMPLX_SET);
-		/* put flow controller in WAIT_EVENT mode */
-		writel(2<<29, IO_ADDRESS(TEGRA_FLOW_CTRL_BASE)+0x14 + 0x8*(cpu-1));
-	}
-	spin_lock(&boot_lock);
+
 	reg = readl(CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
 	writel(reg | (1<<(8+cpu)), CLK_RST_CONTROLLER_CLK_CPU_CMPLX);
-	spin_unlock(&boot_lock);
-	return e;
+
+	return 1;
 }
 
 void platform_cpu_die(unsigned int cpu)
@@ -310,7 +235,6 @@ void platform_cpu_die(unsigned int cpu)
 
 	gic_cpu_exit(0);
 	barrier();
-	complete(&per_cpu(cpu_killed, cpu));
 	flush_cache_all();
 	barrier();
 	__cortex_a9_save(0);
@@ -324,7 +248,7 @@ void platform_cpu_die(unsigned int cpu)
 	preempt_enable_no_resched();
 }
 
-int mach_cpu_disable(unsigned int cpu)
+int platform_cpu_disable(unsigned int cpu)
 {
 	/*
 	 * we don't allow CPU 0 to be shutdown (it is still too special

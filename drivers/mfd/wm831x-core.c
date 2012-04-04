@@ -14,10 +14,10 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/i2c.h>
 #include <linux/bcd.h>
 #include <linux/delay.h>
 #include <linux/mfd/core.h>
+#include <linux/slab.h>
 
 #include <linux/mfd/wm831x/core.h>
 #include <linux/mfd/wm831x/pdata.h>
@@ -88,12 +88,6 @@ int wm831x_isinkv_values[WM831X_ISINK_MAX_ISEL + 1] = {
 	27554,
 };
 EXPORT_SYMBOL_GPL(wm831x_isinkv_values);
-
-enum wm831x_parent {
-	WM8310 = 0,
-	WM8311 = 1,
-	WM8312 = 2,
-};
 
 static int wm831x_reg_locked(struct wm831x *wm831x, unsigned short reg)
 {
@@ -320,8 +314,11 @@ EXPORT_SYMBOL_GPL(wm831x_set_bits);
  */
 int wm831x_auxadc_read(struct wm831x *wm831x, enum wm831x_auxadc input)
 {
-	int tries = 10;
-	int ret, src;
+	int ret, src, irq_masked, timeout;
+
+	/* Are we using the interrupt? */
+	irq_masked = wm831x_reg_read(wm831x, WM831X_INTERRUPT_STATUS_1_MASK);
+	irq_masked &= WM831X_AUXADC_DATA_EINT;
 
 	mutex_lock(&wm831x->auxadc_lock);
 
@@ -341,6 +338,9 @@ int wm831x_auxadc_read(struct wm831x *wm831x, enum wm831x_auxadc input)
 		goto out;
 	}
 
+	/* Clear any notification from a very late arriving interrupt */
+	try_wait_for_completion(&wm831x->auxadc_done);
+
 	ret = wm831x_set_bits(wm831x, WM831X_AUXADC_CONTROL,
 			      WM831X_AUX_CVT_ENA, WM831X_AUX_CVT_ENA);
 	if (ret < 0) {
@@ -348,18 +348,46 @@ int wm831x_auxadc_read(struct wm831x *wm831x, enum wm831x_auxadc input)
 		goto disable;
 	}
 
-	do {
-		msleep(1);
+	if (irq_masked) {
+		/* If we're not using interrupts then poll the
+		 * interrupt status register */
+		timeout = 5;
+		while (timeout) {
+			msleep(1);
 
-		ret = wm831x_reg_read(wm831x, WM831X_AUXADC_CONTROL);
-		if (ret < 0)
-			ret = WM831X_AUX_CVT_ENA;
-	} while ((ret & WM831X_AUX_CVT_ENA) && --tries);
+			ret = wm831x_reg_read(wm831x,
+					      WM831X_INTERRUPT_STATUS_1);
+			if (ret < 0) {
+				dev_err(wm831x->dev,
+					"ISR 1 read failed: %d\n", ret);
+				goto disable;
+			}
 
-	if (ret & WM831X_AUX_CVT_ENA) {
-		dev_err(wm831x->dev, "Timed out reading AUXADC\n");
-		ret = -EBUSY;
-		goto disable;
+			/* Did it complete? */
+			if (ret & WM831X_AUXADC_DATA_EINT) {
+				wm831x_reg_write(wm831x,
+						 WM831X_INTERRUPT_STATUS_1,
+						 WM831X_AUXADC_DATA_EINT);
+				break;
+			} else {
+				dev_err(wm831x->dev,
+					"AUXADC conversion timeout\n");
+				ret = -EBUSY;
+				goto disable;
+			}
+		}
+	} else {
+		/* If we are using interrupts then wait for the
+		 * interrupt to complete.  Use an extremely long
+		 * timeout to handle situations with heavy load where
+		 * the notification of the interrupt may be delayed by
+		 * threaded IRQ handling. */
+		if (!wait_for_completion_timeout(&wm831x->auxadc_done,
+						 msecs_to_jiffies(500))) {
+			dev_err(wm831x->dev, "Timed out waiting for AUXADC\n");
+			ret = -EBUSY;
+			goto disable;
+		}
 	}
 
 	ret = wm831x_reg_read(wm831x, WM831X_AUXADC_DATA);
@@ -388,6 +416,15 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(wm831x_auxadc_read);
+
+static irqreturn_t wm831x_auxadc_irq(int irq, void *irq_data)
+{
+	struct wm831x *wm831x = irq_data;
+
+	complete(&wm831x->auxadc_done);
+
+	return IRQ_HANDLED;
+}
 
 /**
  * wm831x_auxadc_read_uv: Read a voltage from the WM831x AUXADC
@@ -468,6 +505,20 @@ static struct resource wm831x_dcdc4_resources[] = {
 	{
 		.start = WM831X_DC4_CONTROL,
 		.end   = WM831X_DC4_SLEEP_CONTROL,
+		.flags = IORESOURCE_IO,
+	},
+	{
+		.name  = "UV",
+		.start = WM831X_IRQ_UV_DC4,
+		.end   = WM831X_IRQ_UV_DC4,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct resource wm8320_dcdc4_buck_resources[] = {
+	{
+		.start = WM831X_DC4_CONTROL,
+		.end   = WM832X_DC4_SLEEP_CONTROL,
 		.flags = IORESOURCE_IO,
 	},
 	{
@@ -794,6 +845,9 @@ static struct resource wm831x_wdt_resources[] = {
 
 static struct mfd_cell wm8310_devs[] = {
 	{
+		.name = "wm831x-backup",
+	},
+	{
 		.name = "wm831x-buckv",
 		.id = 1,
 		.num_resources = ARRAY_SIZE(wm831x_dcdc1_resources),
@@ -947,6 +1001,9 @@ static struct mfd_cell wm8310_devs[] = {
 
 static struct mfd_cell wm8311_devs[] = {
 	{
+		.name = "wm831x-backup",
+	},
+	{
 		.name = "wm831x-buckv",
 		.id = 1,
 		.num_resources = ARRAY_SIZE(wm831x_dcdc1_resources),
@@ -1080,6 +1137,9 @@ static struct mfd_cell wm8311_devs[] = {
 };
 
 static struct mfd_cell wm8312_devs[] = {
+	{
+		.name = "wm831x-backup",
+	},
 	{
 		.name = "wm831x-buckv",
 		.id = 1,
@@ -1237,6 +1297,137 @@ static struct mfd_cell wm8312_devs[] = {
 	},
 };
 
+static struct mfd_cell wm8320_devs[] = {
+	{
+		.name = "wm831x-backup",
+	},
+	{
+		.name = "wm831x-buckv",
+		.id = 1,
+		.num_resources = ARRAY_SIZE(wm831x_dcdc1_resources),
+		.resources = wm831x_dcdc1_resources,
+	},
+	{
+		.name = "wm831x-buckv",
+		.id = 2,
+		.num_resources = ARRAY_SIZE(wm831x_dcdc2_resources),
+		.resources = wm831x_dcdc2_resources,
+	},
+	{
+		.name = "wm831x-buckp",
+		.id = 3,
+		.num_resources = ARRAY_SIZE(wm831x_dcdc3_resources),
+		.resources = wm831x_dcdc3_resources,
+	},
+	{
+		.name = "wm831x-buckp",
+		.id = 4,
+		.num_resources = ARRAY_SIZE(wm8320_dcdc4_buck_resources),
+		.resources = wm8320_dcdc4_buck_resources,
+	},
+	{
+		.name = "wm831x-gpio",
+		.num_resources = ARRAY_SIZE(wm831x_gpio_resources),
+		.resources = wm831x_gpio_resources,
+	},
+	{
+		.name = "wm831x-hwmon",
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 1,
+		.num_resources = ARRAY_SIZE(wm831x_ldo1_resources),
+		.resources = wm831x_ldo1_resources,
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 2,
+		.num_resources = ARRAY_SIZE(wm831x_ldo2_resources),
+		.resources = wm831x_ldo2_resources,
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 3,
+		.num_resources = ARRAY_SIZE(wm831x_ldo3_resources),
+		.resources = wm831x_ldo3_resources,
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 4,
+		.num_resources = ARRAY_SIZE(wm831x_ldo4_resources),
+		.resources = wm831x_ldo4_resources,
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 5,
+		.num_resources = ARRAY_SIZE(wm831x_ldo5_resources),
+		.resources = wm831x_ldo5_resources,
+	},
+	{
+		.name = "wm831x-ldo",
+		.id = 6,
+		.num_resources = ARRAY_SIZE(wm831x_ldo6_resources),
+		.resources = wm831x_ldo6_resources,
+	},
+	{
+		.name = "wm831x-aldo",
+		.id = 7,
+		.num_resources = ARRAY_SIZE(wm831x_ldo7_resources),
+		.resources = wm831x_ldo7_resources,
+	},
+	{
+		.name = "wm831x-aldo",
+		.id = 8,
+		.num_resources = ARRAY_SIZE(wm831x_ldo8_resources),
+		.resources = wm831x_ldo8_resources,
+	},
+	{
+		.name = "wm831x-aldo",
+		.id = 9,
+		.num_resources = ARRAY_SIZE(wm831x_ldo9_resources),
+		.resources = wm831x_ldo9_resources,
+	},
+	{
+		.name = "wm831x-aldo",
+		.id = 10,
+		.num_resources = ARRAY_SIZE(wm831x_ldo10_resources),
+		.resources = wm831x_ldo10_resources,
+	},
+	{
+		.name = "wm831x-alive-ldo",
+		.id = 11,
+		.num_resources = ARRAY_SIZE(wm831x_ldo11_resources),
+		.resources = wm831x_ldo11_resources,
+	},
+	{
+		.name = "wm831x-on",
+		.num_resources = ARRAY_SIZE(wm831x_on_resources),
+		.resources = wm831x_on_resources,
+	},
+	{
+		.name = "wm831x-rtc",
+		.num_resources = ARRAY_SIZE(wm831x_rtc_resources),
+		.resources = wm831x_rtc_resources,
+	},
+	{
+		.name = "wm831x-status",
+		.id = 1,
+		.num_resources = ARRAY_SIZE(wm831x_status1_resources),
+		.resources = wm831x_status1_resources,
+	},
+	{
+		.name = "wm831x-status",
+		.id = 2,
+		.num_resources = ARRAY_SIZE(wm831x_status2_resources),
+		.resources = wm831x_status2_resources,
+	},
+	{
+		.name = "wm831x-watchdog",
+		.num_resources = ARRAY_SIZE(wm831x_wdt_resources),
+		.resources = wm831x_wdt_resources,
+	},
+};
+
 static struct mfd_cell backlight_devs[] = {
 	{
 		.name = "wm831x-backlight",
@@ -1246,16 +1437,17 @@ static struct mfd_cell backlight_devs[] = {
 /*
  * Instantiate the generic non-control parts of the device.
  */
-static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
+int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 {
 	struct wm831x_pdata *pdata = wm831x->dev->platform_data;
 	int rev;
 	enum wm831x_parent parent;
-	int ret;
+	int ret, i;
 
 	mutex_init(&wm831x->io_lock);
 	mutex_init(&wm831x->key_lock);
 	mutex_init(&wm831x->auxadc_lock);
+	init_completion(&wm831x->auxadc_done);
 	dev_set_drvdata(wm831x->dev, wm831x);
 
 	ret = wm831x_reg_read(wm831x, WM831X_PARENT_ID);
@@ -1263,7 +1455,11 @@ static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 		dev_err(wm831x->dev, "Failed to read parent ID: %d\n", ret);
 		goto err;
 	}
-	if (ret != 0x6204) {
+	switch (ret) {
+	case 0x6204:
+	case 0x6246:
+		break;
+	default:
 		dev_err(wm831x->dev, "Device is not a WM831x: ID %x\n", ret);
 		ret = -EINVAL;
 		goto err;
@@ -1282,50 +1478,73 @@ static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 		goto err;
 	}
 
+	/* Some engineering samples do not have the ID set, rely on
+	 * the device being registered correctly.
+	 */
+	if (ret == 0) {
+		dev_info(wm831x->dev, "Device is an engineering sample\n");
+		ret = id;
+	}
+
 	switch (ret) {
-	case 0x8310:
+	case WM8310:
 		parent = WM8310;
-		switch (rev) {
-		case 0:
-			dev_info(wm831x->dev, "WM8310 revision %c\n",
-				 'A' + rev);
-			break;
+		wm831x->num_gpio = 16;
+		wm831x->charger_irq_wake = 1;
+		if (rev > 0) {
+			wm831x->has_gpio_ena = 1;
+			wm831x->has_cs_sts = 1;
 		}
+
+		dev_info(wm831x->dev, "WM8310 revision %c\n", 'A' + rev);
 		break;
 
-	case 0x8311:
+	case WM8311:
 		parent = WM8311;
-		switch (rev) {
-		case 0:
-			dev_info(wm831x->dev, "WM8311 revision %c\n",
-				 'A' + rev);
-			break;
+		wm831x->num_gpio = 16;
+		wm831x->charger_irq_wake = 1;
+		if (rev > 0) {
+			wm831x->has_gpio_ena = 1;
+			wm831x->has_cs_sts = 1;
 		}
+
+		dev_info(wm831x->dev, "WM8311 revision %c\n", 'A' + rev);
 		break;
 
-	case 0x8312:
+	case WM8312:
 		parent = WM8312;
-		switch (rev) {
-		case 0:
-			dev_info(wm831x->dev, "WM8312 revision %c\n",
-				 'A' + rev);
-			break;
+		wm831x->num_gpio = 16;
+		wm831x->charger_irq_wake = 1;
+		if (rev > 0) {
+			wm831x->has_gpio_ena = 1;
+			wm831x->has_cs_sts = 1;
 		}
+
+		dev_info(wm831x->dev, "WM8312 revision %c\n", 'A' + rev);
 		break;
 
-	case 0:
-		/* Some engineering samples do not have the ID set,
-		 * rely on the device being registered correctly.
-		 * This will need revisiting for future devices with
-		 * multiple dies.
-		 */
-		parent = id;
-		switch (rev) {
-		case 0:
-			dev_info(wm831x->dev, "WM831%d ES revision %c\n",
-				 parent, 'A' + rev);
-			break;
-		}
+	case WM8320:
+		parent = WM8320;
+		wm831x->num_gpio = 12;
+		dev_info(wm831x->dev, "WM8320 revision %c\n", 'A' + rev);
+		break;
+
+	case WM8321:
+		parent = WM8321;
+		wm831x->num_gpio = 12;
+		dev_info(wm831x->dev, "WM8321 revision %c\n", 'A' + rev);
+		break;
+
+	case WM8325:
+		parent = WM8325;
+		wm831x->num_gpio = 12;
+		dev_info(wm831x->dev, "WM8325 revision %c\n", 'A' + rev);
+		break;
+
+	case WM8326:
+		parent = WM8326;
+		wm831x->num_gpio = 12;
+		dev_info(wm831x->dev, "WM8326 revision %c\n", 'A' + rev);
 		break;
 
 	default:
@@ -1338,7 +1557,7 @@ static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 	 * current parts.
 	 */
 	if (parent != id)
-		dev_warn(wm831x->dev, "Device was registered as a WM831%lu\n",
+		dev_warn(wm831x->dev, "Device was registered as a WM%lx\n",
 			 id);
 
 	/* Bootstrap the user key */
@@ -1362,28 +1581,58 @@ static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 		}
 	}
 
+	if (pdata) {
+		for (i = 0; i < ARRAY_SIZE(pdata->gpio_defaults); i++) {
+			if (!pdata->gpio_defaults[i])
+				continue;
+
+			wm831x_reg_write(wm831x,
+					 WM831X_GPIO1_CONTROL + i,
+					 pdata->gpio_defaults[i] & 0xffff);
+		}
+	}
+
 	ret = wm831x_irq_init(wm831x, irq);
 	if (ret != 0)
 		goto err;
+
+	if (wm831x->irq_base) {
+		ret = request_threaded_irq(wm831x->irq_base +
+					   WM831X_IRQ_AUXADC_DATA,
+					   NULL, wm831x_auxadc_irq, 0,
+					   "auxadc", wm831x);
+		if (ret < 0)
+			dev_err(wm831x->dev, "AUXADC IRQ request failed: %d\n",
+				ret);
+	}
 
 	/* The core device is up, instantiate the subdevices. */
 	switch (parent) {
 	case WM8310:
 		ret = mfd_add_devices(wm831x->dev, -1,
 				      wm8310_devs, ARRAY_SIZE(wm8310_devs),
-				      NULL, 0);
+				      NULL, wm831x->irq_base);
 		break;
 
 	case WM8311:
 		ret = mfd_add_devices(wm831x->dev, -1,
 				      wm8311_devs, ARRAY_SIZE(wm8311_devs),
-				      NULL, 0);
+				      NULL, wm831x->irq_base);
 		break;
 
 	case WM8312:
 		ret = mfd_add_devices(wm831x->dev, -1,
 				      wm8312_devs, ARRAY_SIZE(wm8312_devs),
-				      NULL, 0);
+				      NULL, wm831x->irq_base);
+		break;
+
+	case WM8320:
+	case WM8321:
+	case WM8325:
+	case WM8326:
+		ret = mfd_add_devices(wm831x->dev, -1,
+				      wm8320_devs, ARRAY_SIZE(wm8320_devs),
+				      NULL, wm831x->irq_base);
 		break;
 
 	default:
@@ -1399,7 +1648,8 @@ static int wm831x_device_init(struct wm831x *wm831x, unsigned long id, int irq)
 	if (pdata && pdata->backlight) {
 		/* Treat errors as non-critical */
 		ret = mfd_add_devices(wm831x->dev, -1, backlight_devs,
-				      ARRAY_SIZE(backlight_devs), NULL, 0);
+				      ARRAY_SIZE(backlight_devs), NULL,
+				      wm831x->irq_base);
 		if (ret < 0)
 			dev_err(wm831x->dev, "Failed to add backlight: %d\n",
 				ret);
@@ -1425,125 +1675,52 @@ err:
 	return ret;
 }
 
-static void wm831x_device_exit(struct wm831x *wm831x)
+void wm831x_device_exit(struct wm831x *wm831x)
 {
 	wm831x_otp_exit(wm831x);
 	mfd_remove_devices(wm831x->dev);
+	if (wm831x->irq_base)
+		free_irq(wm831x->irq_base + WM831X_IRQ_AUXADC_DATA, wm831x);
 	wm831x_irq_exit(wm831x);
 	kfree(wm831x);
 }
 
-static int wm831x_i2c_read_device(struct wm831x *wm831x, unsigned short reg,
-				  int bytes, void *dest)
+int wm831x_device_suspend(struct wm831x *wm831x)
 {
-	struct i2c_client *i2c = wm831x->control_data;
-	int ret;
-	u16 r = cpu_to_be16(reg);
+	int reg, mask;
 
-	ret = i2c_master_send(i2c, (unsigned char *)&r, 2);
-	if (ret < 0)
-		return ret;
-	if (ret != 2)
-		return -EIO;
+	/* If the charger IRQs are a wake source then make sure we ack
+	 * them even if they're not actively being used (eg, no power
+	 * driver or no IRQ line wired up) then acknowledge the
+	 * interrupts otherwise suspend won't last very long.
+	 */
+	if (wm831x->charger_irq_wake) {
+		reg = wm831x_reg_read(wm831x, WM831X_INTERRUPT_STATUS_2_MASK);
 
-	ret = i2c_master_recv(i2c, dest, bytes);
-	if (ret < 0)
-		return ret;
-	if (ret != bytes)
-		return -EIO;
-	return 0;
-}
+		mask = WM831X_CHG_BATT_HOT_EINT |
+			WM831X_CHG_BATT_COLD_EINT |
+			WM831X_CHG_BATT_FAIL_EINT |
+			WM831X_CHG_OV_EINT | WM831X_CHG_END_EINT |
+			WM831X_CHG_TO_EINT | WM831X_CHG_MODE_EINT |
+			WM831X_CHG_START_EINT;
 
-/* Currently we allocate the write buffer on the stack; this is OK for
- * small writes - if we need to do large writes this will need to be
- * revised.
- */
-static int wm831x_i2c_write_device(struct wm831x *wm831x, unsigned short reg,
-				   int bytes, void *src)
-{
-	struct i2c_client *i2c = wm831x->control_data;
-	unsigned char msg[bytes + 2];
-	int ret;
+		/* If any of the interrupts are masked read the statuses */
+		if (reg & mask)
+			reg = wm831x_reg_read(wm831x,
+					      WM831X_INTERRUPT_STATUS_2);
 
-	reg = cpu_to_be16(reg);
-	memcpy(&msg[0], &reg, 2);
-	memcpy(&msg[2], src, bytes);
-
-	ret = i2c_master_send(i2c, msg, bytes + 2);
-	if (ret < 0)
-		return ret;
-	if (ret < bytes + 2)
-		return -EIO;
-
-	return 0;
-}
-
-static int wm831x_i2c_probe(struct i2c_client *i2c,
-			    const struct i2c_device_id *id)
-{
-	struct wm831x *wm831x;
-
-	wm831x = kzalloc(sizeof(struct wm831x), GFP_KERNEL);
-	if (wm831x == NULL) {
-		kfree(i2c);
-		return -ENOMEM;
+		if (reg & mask) {
+			dev_info(wm831x->dev,
+				 "Acknowledging masked charger IRQs: %x\n",
+				 reg & mask);
+			wm831x_reg_write(wm831x, WM831X_INTERRUPT_STATUS_2,
+					 reg & mask);
+		}
 	}
 
-	i2c_set_clientdata(i2c, wm831x);
-	wm831x->dev = &i2c->dev;
-	wm831x->control_data = i2c;
-	wm831x->read_dev = wm831x_i2c_read_device;
-	wm831x->write_dev = wm831x_i2c_write_device;
-
-	return wm831x_device_init(wm831x, id->driver_data, i2c->irq);
-}
-
-static int wm831x_i2c_remove(struct i2c_client *i2c)
-{
-	struct wm831x *wm831x = i2c_get_clientdata(i2c);
-
-	wm831x_device_exit(wm831x);
-
 	return 0;
 }
 
-static const struct i2c_device_id wm831x_i2c_id[] = {
-	{ "wm8310", WM8310 },
-	{ "wm8311", WM8311 },
-	{ "wm8312", WM8312 },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, wm831x_i2c_id);
-
-
-static struct i2c_driver wm831x_i2c_driver = {
-	.driver = {
-		   .name = "wm831x",
-		   .owner = THIS_MODULE,
-	},
-	.probe = wm831x_i2c_probe,
-	.remove = wm831x_i2c_remove,
-	.id_table = wm831x_i2c_id,
-};
-
-static int __init wm831x_i2c_init(void)
-{
-	int ret;
-
-	ret = i2c_add_driver(&wm831x_i2c_driver);
-	if (ret != 0)
-		pr_err("Failed to register wm831x I2C driver: %d\n", ret);
-
-	return ret;
-}
-subsys_initcall(wm831x_i2c_init);
-
-static void __exit wm831x_i2c_exit(void)
-{
-	i2c_del_driver(&wm831x_i2c_driver);
-}
-module_exit(wm831x_i2c_exit);
-
-MODULE_DESCRIPTION("I2C support for the WM831X AudioPlus PMIC");
+MODULE_DESCRIPTION("Core support for the WM831X AudioPlus PMIC");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Mark Brown");

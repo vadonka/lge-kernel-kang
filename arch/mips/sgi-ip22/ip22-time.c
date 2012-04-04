@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 #include <linux/time.h>
+#include <linux/ftrace.h>
 
 #include <asm/cpu.h>
 #include <asm/mipsregs.h>
@@ -31,7 +32,7 @@
 static unsigned long dosample(void)
 {
 	u32 ct0, ct1;
-	u8 msb, lsb;
+	u8 msb;
 
 	/* Start the counter. */
 	sgint->tcword = (SGINT_TCWORD_CNT2 | SGINT_TCWORD_CALL |
@@ -45,7 +46,7 @@ static unsigned long dosample(void)
 	/* Latch and spin until top byte of counter2 is zero */
 	do {
 		writeb(SGINT_TCWORD_CNT2 | SGINT_TCWORD_CLAT, &sgint->tcword);
-		lsb = readb(&sgint->tcnt2);
+		(void) readb(&sgint->tcnt2);
 		msb = readb(&sgint->tcnt2);
 		ct1 = read_c0_count();
 	} while (msb);
@@ -115,7 +116,7 @@ __init void plat_time_init(void)
 }
 
 /* Generic SGI handler for (spurious) 8254 interrupts */
-void indy_8254timer_irq(void)
+void __irq_entry indy_8254timer_irq(void)
 {
 	int irq = SGI_8254_0_IRQ;
 	ULONG cnt;

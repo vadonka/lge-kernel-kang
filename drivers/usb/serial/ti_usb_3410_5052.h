@@ -45,6 +45,13 @@
 #define MTS_CDMA_PRODUCT_ID		0xF110
 #define MTS_GSM_PRODUCT_ID		0xF111
 #define MTS_EDGE_PRODUCT_ID		0xF112
+#define MTS_MT9234MU_PRODUCT_ID		0xF114
+#define MTS_MT9234ZBA_PRODUCT_ID	0xF115
+#define MTS_MT9234ZBAOLD_PRODUCT_ID	0x0319
+
+/* Abbott Diabetics vendor and product ids */
+#define ABBOTT_VENDOR_ID		0x1a61
+#define ABBOTT_PRODUCT_ID		0x3410
 
 /* Commands */
 #define TI_GET_VERSION			0x01

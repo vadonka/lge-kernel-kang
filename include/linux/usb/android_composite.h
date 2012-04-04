@@ -32,7 +32,7 @@ struct android_usb_product {
 	 */
 	__u16 vendor_id;
 
-	/* Default product ID. */
+	/* Product ID for this set of functions. */
 	__u16 product_id;
 
 	/* List of function names associated with this product.
@@ -84,7 +84,6 @@ struct usb_mass_storage_platform_data {
 
 	/* number of LUNS */
 	int nluns;
-	size_t bulk_size;
 };
 
 /* Platform data for USB ethernet driver. */
@@ -92,6 +91,11 @@ struct usb_ether_platform_data {
 	u8	ethaddr[ETH_ALEN];
 	u32	vendorID;
 	const char *vendorDescr;
+};
+
+/* Platform data for ACM driver. */
+struct acm_platform_data {
+	u8	num_inst;
 };
 
 extern void android_register_function(struct android_usb_function *f);

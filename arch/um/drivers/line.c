@@ -6,6 +6,7 @@
 #include "linux/irqreturn.h"
 #include "linux/kd.h"
 #include "linux/sched.h"
+#include "linux/slab.h"
 #include "chan_kern.h"
 #include "irq_kern.h"
 #include "irq_user.h"
@@ -18,10 +19,9 @@ static irqreturn_t line_interrupt(int irq, void *data)
 {
 	struct chan *chan = data;
 	struct line *line = chan->line;
-	struct tty_struct *tty = line->tty;
 
 	if (line)
-		chan_interrupt(&line->chan_list, &line->task, tty, irq);
+		chan_interrupt(&line->chan_list, &line->task, line->tty, irq);
 	return IRQ_HANDLED;
 }
 
@@ -255,8 +255,8 @@ static const struct {
 	{ KDSIGACCEPT, KERN_INFO,  "KDSIGACCEPT" },
 };
 
-int line_ioctl(struct tty_struct *tty, struct file * file,
-	       unsigned int cmd, unsigned long arg)
+int line_ioctl(struct tty_struct *tty, unsigned int cmd,
+				unsigned long arg)
 {
 	int ret;
 	int i;
@@ -821,12 +821,12 @@ void register_winch_irq(int fd, int tty_fd, int pid, struct tty_struct *tty,
 
 static void unregister_winch(struct tty_struct *tty)
 {
-	struct list_head *ele;
+	struct list_head *ele, *next;
 	struct winch *winch;
 
 	spin_lock(&winch_handler_lock);
 
-	list_for_each(ele, &winch_handlers) {
+	list_for_each_safe(ele, next, &winch_handlers) {
 		winch = list_entry(ele, struct winch, list);
 		if (winch->tty == tty) {
 			free_winch(winch, 1);

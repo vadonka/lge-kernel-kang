@@ -349,10 +349,6 @@ void reiserfs_debug(struct super_block *s, int level, const char *fmt, ...)
 
    .  */
 
-#ifdef CONFIG_REISERFS_CHECK
-extern struct tree_balance *cur_tb;
-#endif
-
 void __reiserfs_panic(struct super_block *sb, const char *id,
 		      const char *function, const char *fmt, ...)
 {
@@ -590,12 +586,12 @@ void print_block(struct buffer_head *bh, ...)	//int print_mode, int first, int l
 	va_list args;
 	int mode, first, last;
 
-	va_start(args, bh);
-
 	if (!bh) {
 		printk("print_block: buffer is NULL\n");
 		return;
 	}
+
+	va_start(args, bh);
 
 	mode = va_arg(args, int);
 	first = va_arg(args, int);

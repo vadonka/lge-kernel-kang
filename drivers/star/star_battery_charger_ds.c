@@ -1098,7 +1098,7 @@ static ssize_t tegra_battery_store_property(
 
 static struct device_attribute tegra_battery_attr = {
 	.attr = { .name = "bat_gauge", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			 /* .owner = THIS_MODULE */},
 	.show = tegra_battery_show_property,
 	.store = tegra_battery_store_property,
 };
@@ -1202,7 +1202,7 @@ static ssize_t star_cbc_store_property(
 
 static struct device_attribute star_cbc_attr = {
 	.attr = { .name = "true_gauge", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			 /* .owner = THIS_MODULE */},
 	.show = star_cbc_show_property,
 	.store = star_cbc_store_property,
 };
@@ -1253,7 +1253,7 @@ static ssize_t star_debug_store_property(
 
 static struct device_attribute star_debug_attr = {
 	.attr = { .name = "dbatt", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			/* .owner = THIS_MODULE */},
 	.show = star_debug_show_property,
 	.store = star_debug_store_property,
 };
@@ -1311,7 +1311,7 @@ static ssize_t star_cbcdc_store_property(
 
 static struct device_attribute star_cbcdc_attr = {
 	.attr = { .name = "cbc_dc", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			/* .owner = THIS_MODULE */},
 	.show = star_cbcdc_show_property,
 	.store = star_cbcdc_store_property,
 };
@@ -1992,7 +1992,7 @@ static ssize_t star_at_charge_store_property(
 
 static struct device_attribute star_at_charge_attr = {
 	.attr = { .name = "at_charge", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			/* .owner = THIS_MODULE */},
 	.show = star_at_charge_show_property,
 	.store = star_at_charge_store_property,
 };
@@ -2057,7 +2057,7 @@ static ssize_t star_at_chcomp_store_property(
 
 static struct device_attribute star_at_chcomp_attr = {
 	.attr = { .name = "at_chcomp", .mode = S_IRUGO | S_IWUGO,
-			  .owner = THIS_MODULE },
+			/* .owner = THIS_MODULE */},
 	.show = star_at_chcomp_show_property,
 	.store = star_at_chcomp_store_property,
 };

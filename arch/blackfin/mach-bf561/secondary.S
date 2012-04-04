@@ -11,8 +11,13 @@
 #include <linux/init.h>
 #include <asm/blackfin.h>
 #include <asm/asm-offsets.h>
+#include <asm/trace.h>
 
-__INIT
+/*
+ * This code must come first as CoreB is hardcoded (in hardware)
+ * to start at the beginning of its L1 instruction memory.
+ */
+.section .l1.text.head
 
 /* Lay the initial stack into the L1 scratch area of Core B */
 #define INITIAL_STACK	(COREB_L1_SCRATCH_START + L1_SCRATCH_LENGTH - 12)
@@ -61,6 +66,8 @@ ENTRY(_coreb_trampoline_start)
 	M1 = r0;
 	M2 = r0;
 	M3 = r0;
+
+	trace_buffer_init(p0,r0);
 
 	/* Turn off the icache */
 	p0.l = LO(IMEM_CONTROL);
@@ -157,8 +164,34 @@ ENTRY(_coreb_trampoline_start)
 .LWAIT_HERE:
 	jump .LWAIT_HERE;
 ENDPROC(_coreb_trampoline_start)
-ENTRY(_coreb_trampoline_end)
 
+#ifdef CONFIG_HOTPLUG_CPU
+.section ".text"
+ENTRY(_coreb_die)
+	sp.l = lo(INITIAL_STACK);
+	sp.h = hi(INITIAL_STACK);
+	fp = sp;
+	usp = sp;
+
+	CLI R2;
+	SSYNC;
+	IDLE;
+	STI R2;
+
+	R0 = IWR_DISABLE_ALL;
+	P0.H = hi(SYSMMR_BASE);
+	P0.L = lo(SYSMMR_BASE);
+	[P0 + (SICB_IWR0 - SYSMMR_BASE)] = R0;
+	[P0 + (SICB_IWR1 - SYSMMR_BASE)] = R0;
+	SSYNC;
+
+	p0.h = hi(COREB_L1_CODE_START);
+	p0.l = lo(COREB_L1_CODE_START);
+	jump (p0);
+ENDPROC(_coreb_die)
+#endif
+
+__INIT
 ENTRY(_coreb_start)
 	[--sp] = reti;
 
@@ -176,12 +209,20 @@ ENTRY(_coreb_start)
 	sp = [p0];
 	usp = sp;
 	fp = sp;
+#ifdef CONFIG_HOTPLUG_CPU
+	p0.l = _hotplug_coreb;
+	p0.h = _hotplug_coreb;
+	r0 = [p0];
+	cc = BITTST(r0, 0);
+	if cc jump 3f;
+#endif
 	sp += -12;
 	call _init_pda
 	sp += 12;
+#ifdef CONFIG_HOTPLUG_CPU
+3:
+#endif
 	call _secondary_start_kernel;
 .L_exit:
 	jump.s	.L_exit;
 ENDPROC(_coreb_start)
-
-__FINIT

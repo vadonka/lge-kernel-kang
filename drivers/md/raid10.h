@@ -17,8 +17,8 @@ struct r10_private_data_s {
 	spinlock_t		device_lock;
 
 	/* geometry */
-	int			near_copies;  /* number of copies layed out raid0 style */
-	int 			far_copies;   /* number of copies layed out
+	int			near_copies;  /* number of copies laid out raid0 style */
+	int 			far_copies;   /* number of copies laid out
 					       * at large strides across drives
 					       */
 	int			far_offset;   /* far_copies are offset by 1 stripe
@@ -32,6 +32,8 @@ struct r10_private_data_s {
 					       * far_offset, in which case it is
 					       * 1 stripe.
 					       */
+
+	sector_t		dev_sectors;  /* temp copy of mddev->dev_sectors */
 
 	int chunk_shift; /* shift from chunks to sectors */
 	sector_t chunk_mask;
@@ -57,6 +59,11 @@ struct r10_private_data_s {
 	mempool_t *r10bio_pool;
 	mempool_t *r10buf_pool;
 	struct page		*tmppage;
+
+	/* When taking over an array from a different personality, we store
+	 * the new thread here until we fully activate the array.
+	 */
+	struct mdk_thread_s	*thread;
 };
 
 typedef struct r10_private_data_s conf_t;

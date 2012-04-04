@@ -644,7 +644,7 @@ static int star_accel_misc_open( struct inode *inode, struct file *file )
 	return nonseekable_open(inode, file);
 }
 
-static int star_accel_misc_ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg )
+static long star_accel_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg )
 {
 	void __user *argp = (void __user *)arg;
 	NvS32 x=0, y=0, z=0;
@@ -669,7 +669,7 @@ static const struct file_operations star_accel_misc_fop =
 {
 	.owner = THIS_MODULE,
 	.open = star_accel_misc_open,
-	.ioctl = star_accel_misc_ioctl,
+	.unlocked_ioctl = star_accel_misc_ioctl,
 };
 
 static struct miscdevice star_accel_misc_device =
@@ -1145,7 +1145,7 @@ RELEASE_INT:
 
 }
 
-static int __init star_accel_probe( struct platform_device *pdev )
+static int __devinit star_accel_probe( struct platform_device *pdev )
 {
 	NvU32 I2cInstance = 0;
 	const NvOdmPeripheralConnectivity *pcon;

@@ -18,7 +18,7 @@
 #include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/rwsem.h>
-#include <linux/smp_lock.h>
+#include <linux/slab.h>
 #include <linux/usb.h>
 
 #include "usb.h"
@@ -34,7 +34,6 @@ static int usb_open(struct inode * inode, struct file * file)
 	int err = -ENODEV;
 	const struct file_operations *old_fops, *new_fops = NULL;
 
-	lock_kernel();
 	down_read(&minor_rwsem);
 	c = usb_minors[minor];
 
@@ -53,13 +52,13 @@ static int usb_open(struct inode * inode, struct file * file)
 	fops_put(old_fops);
  done:
 	up_read(&minor_rwsem);
-	unlock_kernel();
 	return err;
 }
 
 static const struct file_operations usb_fops = {
 	.owner =	THIS_MODULE,
 	.open =		usb_open,
+	.llseek =	noop_llseek,
 };
 
 static struct usb_class {
@@ -99,6 +98,7 @@ static int init_usb_class(void)
 		printk(KERN_ERR "class_create failed for usb devices\n");
 		kfree(usb_class);
 		usb_class = NULL;
+		goto exit;
 	}
 	usb_class->class->devnode = usb_devnode;
 
@@ -236,13 +236,6 @@ EXPORT_SYMBOL_GPL(usb_register_dev);
 void usb_deregister_dev(struct usb_interface *intf,
 			struct usb_class_driver *class_driver)
 {
-	int minor_base = class_driver->minor_base;
-	char name[20];
-
-#ifdef CONFIG_USB_DYNAMIC_MINORS
-	minor_base = 0;
-#endif
-
 	if (intf->minor == -1)
 		return;
 
@@ -252,7 +245,6 @@ void usb_deregister_dev(struct usb_interface *intf,
 	usb_minors[intf->minor] = NULL;
 	up_write(&minor_rwsem);
 
-	snprintf(name, sizeof(name), class_driver->name, intf->minor - minor_base);
 	device_destroy(usb_class->class, MKDEV(USB_MAJOR, intf->minor));
 	intf->usb_dev = NULL;
 	intf->minor = -1;

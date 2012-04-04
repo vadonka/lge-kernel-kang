@@ -71,10 +71,12 @@ struct ica_z90_status {
 #define ZCRYPT_PCIXCC_MCL3	4
 #define ZCRYPT_CEX2C		5
 #define ZCRYPT_CEX2A		6
+#define ZCRYPT_CEX3C		7
+#define ZCRYPT_CEX3A		8
 
 /**
  * Large random numbers are pulled in 4096 byte chunks from the crypto cards
- * and stored in a page. Be carefull when increasing this buffer due to size
+ * and stored in a page. Be careful when increasing this buffer due to size
  * limitations for AP requests.
  */
 #define ZCRYPT_RNG_BUFFER_SIZE	4096
@@ -107,6 +109,7 @@ struct zcrypt_device {
 	int request_count;		/* # current requests. */
 
 	struct ap_message reply;	/* Per-device reply structure. */
+	int max_exp_bit_length;
 };
 
 struct zcrypt_device *zcrypt_device_alloc(size_t);

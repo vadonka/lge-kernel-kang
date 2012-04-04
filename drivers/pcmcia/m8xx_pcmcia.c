@@ -42,7 +42,6 @@
 
 #include <linux/kernel.h>
 #include <linux/errno.h>
-#include <linux/slab.h>
 #include <linux/timer.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
@@ -60,17 +59,7 @@
 #include <asm/irq.h>
 #include <asm/fs_pd.h>
 
-#include <pcmcia/cs_types.h>
-#include <pcmcia/cs.h>
 #include <pcmcia/ss.h>
-
-#ifdef CONFIG_PCMCIA_DEBUG
-static int pc_debug;
-module_param(pc_debug, int, 0);
-#define dprintk(args...) printk(KERN_DEBUG "m8xx_pcmcia: " args);
-#else
-#define dprintk(args...)
-#endif
 
 #define pcmcia_info(args...) printk(KERN_INFO "m8xx_pcmcia: "args)
 #define pcmcia_error(args...) printk(KERN_ERR "m8xx_pcmcia: "args)
@@ -565,7 +554,7 @@ static irqreturn_t m8xx_interrupt(int irq, void *dev)
 	unsigned int i, events, pscr, pipr, per;
 	pcmconf8xx_t *pcmcia = socket[0].pcmcia;
 
-	dprintk("Interrupt!\n");
+	pr_debug("m8xx_pcmcia: Interrupt!\n");
 	/* get interrupt sources */
 
 	pscr = in_be32(&pcmcia->pcmc_pscr);
@@ -614,7 +603,7 @@ static irqreturn_t m8xx_interrupt(int irq, void *dev)
 
 		/* call the handler */
 
-		dprintk("slot %u: events = 0x%02x, pscr = 0x%08x, "
+		pr_debug("m8xx_pcmcia: slot %u: events = 0x%02x, pscr = 0x%08x, "
 			"pipr = 0x%08x\n", i, events, pscr, pipr);
 
 		if (events) {
@@ -641,7 +630,7 @@ static irqreturn_t m8xx_interrupt(int irq, void *dev)
 	/* clear the interrupt sources */
 	out_be32(&pcmcia->pcmc_pscr, pscr);
 
-	dprintk("Interrupt done.\n");
+	pr_debug("m8xx_pcmcia: Interrupt done.\n");
 
 	return IRQ_HANDLED;
 }
@@ -815,7 +804,7 @@ static int m8xx_get_status(struct pcmcia_socket *sock, unsigned int *value)
 		};
 	}
 
-	dprintk("GetStatus(%d) = %#2.2x\n", lsock, *value);
+	pr_debug("m8xx_pcmcia: GetStatus(%d) = %#2.2x\n", lsock, *value);
 	return 0;
 }
 
@@ -828,7 +817,7 @@ static int m8xx_set_socket(struct pcmcia_socket *sock, socket_state_t * state)
 	unsigned long flags;
 	pcmconf8xx_t *pcmcia = socket[0].pcmcia;
 
-	dprintk("SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
+	pr_debug("m8xx_pcmcia: SetSocket(%d, flags %#3.3x, Vcc %d, Vpp %d, "
 		"io_irq %d, csc_mask %#2.2x)\n", lsock, state->flags,
 		state->Vcc, state->Vpp, state->io_irq, state->csc_mask);
 
@@ -974,7 +963,7 @@ static int m8xx_set_io_map(struct pcmcia_socket *sock, struct pccard_io_map *io)
 #define M8XX_SIZE (io->stop - io->start + 1)
 #define M8XX_BASE (PCMCIA_IO_WIN_BASE + io->start)
 
-	dprintk("SetIOMap(%d, %d, %#2.2x, %d ns, "
+	pr_debug("m8xx_pcmcia: SetIOMap(%d, %d, %#2.2x, %d ns, "
 		"%#4.4llx-%#4.4llx)\n", lsock, io->map, io->flags,
 		io->speed, (unsigned long long)io->start,
 		(unsigned long long)io->stop);
@@ -988,7 +977,7 @@ static int m8xx_set_io_map(struct pcmcia_socket *sock, struct pccard_io_map *io)
 
 	if (io->flags & MAP_ACTIVE) {
 
-		dprintk("io->flags & MAP_ACTIVE\n");
+		pr_debug("m8xx_pcmcia: io->flags & MAP_ACTIVE\n");
 
 		winnr = (PCMCIA_MEM_WIN_NO * PCMCIA_SOCKETS_NO)
 		    + (lsock * PCMCIA_IO_WIN_NO) + io->map;
@@ -1018,8 +1007,8 @@ static int m8xx_set_io_map(struct pcmcia_socket *sock, struct pccard_io_map *io)
 
 		out_be32(&w->or, reg);
 
-		dprintk("Socket %u: Mapped io window %u at %#8.8x, "
-			"OR = %#8.8x.\n", lsock, io->map, w->br, w->or);
+		pr_debug("m8xx_pcmcia: Socket %u: Mapped io window %u at "
+			"%#8.8x, OR = %#8.8x.\n", lsock, io->map, w->br, w->or);
 	} else {
 		/* shutdown IO window */
 		winnr = (PCMCIA_MEM_WIN_NO * PCMCIA_SOCKETS_NO)
@@ -1033,14 +1022,14 @@ static int m8xx_set_io_map(struct pcmcia_socket *sock, struct pccard_io_map *io)
 		out_be32(&w->or, 0);	/* turn off window */
 		out_be32(&w->br, 0);	/* turn off base address */
 
-		dprintk("Socket %u: Unmapped io window %u at %#8.8x, "
-			"OR = %#8.8x.\n", lsock, io->map, w->br, w->or);
+		pr_debug("m8xx_pcmcia: Socket %u: Unmapped io window %u at "
+			"%#8.8x, OR = %#8.8x.\n", lsock, io->map, w->br, w->or);
 	}
 
 	/* copy the struct and modify the copy */
 	s->io_win[io->map] = *io;
 	s->io_win[io->map].flags &= (MAP_WRPROT | MAP_16BIT | MAP_ACTIVE);
-	dprintk("SetIOMap exit\n");
+	pr_debug("m8xx_pcmcia: SetIOMap exit\n");
 
 	return 0;
 }
@@ -1055,7 +1044,7 @@ static int m8xx_set_mem_map(struct pcmcia_socket *sock,
 	unsigned int reg, winnr;
 	pcmconf8xx_t *pcmcia = s->pcmcia;
 
-	dprintk("SetMemMap(%d, %d, %#2.2x, %d ns, "
+	pr_debug("m8xx_pcmcia: SetMemMap(%d, %d, %#2.2x, %d ns, "
 		"%#5.5llx, %#5.5x)\n", lsock, mem->map, mem->flags,
 		mem->speed, (unsigned long long)mem->static_start,
 		mem->card_start);
@@ -1098,7 +1087,7 @@ static int m8xx_set_mem_map(struct pcmcia_socket *sock,
 
 	out_be32(&w->or, reg);
 
-	dprintk("Socket %u: Mapped memory window %u at %#8.8x, "
+	pr_debug("m8xx_pcmcia: Socket %u: Mapped memory window %u at %#8.8x, "
 		"OR = %#8.8x.\n", lsock, mem->map, w->br, w->or);
 
 	if (mem->flags & MAP_ACTIVE) {
@@ -1108,7 +1097,7 @@ static int m8xx_set_mem_map(struct pcmcia_socket *sock,
 		    + mem->card_start;
 	}
 
-	dprintk("SetMemMap(%d, %d, %#2.2x, %d ns, "
+	pr_debug("m8xx_pcmcia: SetMemMap(%d, %d, %#2.2x, %d ns, "
 		"%#5.5llx, %#5.5x)\n", lsock, mem->map, mem->flags,
 		mem->speed, (unsigned long long)mem->static_start,
 		mem->card_start);
@@ -1129,7 +1118,7 @@ static int m8xx_sock_init(struct pcmcia_socket *sock)
 	pccard_io_map io = { 0, 0, 0, 0, 1 };
 	pccard_mem_map mem = { 0, 0, 0, 0, 0, 0 };
 
-	dprintk("sock_init(%d)\n", s);
+	pr_debug("m8xx_pcmcia: sock_init(%d)\n", s);
 
 	m8xx_set_socket(sock, &dead_socket);
 	for (i = 0; i < PCMCIA_IO_WIN_NO; i++) {
@@ -1159,14 +1148,13 @@ static struct pccard_operations m8xx_services = {
 	.set_mem_map = m8xx_set_mem_map,
 };
 
-static int __init m8xx_probe(struct of_device *ofdev,
-			     const struct of_device_id *match)
+static int __init m8xx_probe(struct platform_device *ofdev)
 {
 	struct pcmcia_win *w;
 	unsigned int i, m, hwirq;
 	pcmconf8xx_t *pcmcia;
 	int status;
-	struct device_node *np = ofdev->node;
+	struct device_node *np = ofdev->dev.of_node;
 
 	pcmcia_info("%s\n", version);
 
@@ -1209,7 +1197,7 @@ static int __init m8xx_probe(struct of_device *ofdev,
 	out_be32(M8XX_PGCRX(1),
 		 M8XX_PGCRX_CXOE | (mk_int_int_mask(hwirq) << 16));
 
-	/* intialize the fixed memory windows */
+	/* initialize the fixed memory windows */
 
 	for (i = 0; i < PCMCIA_SOCKETS_NO; i++) {
 		for (m = 0; m < PCMCIA_MEM_WIN_NO; m++) {
@@ -1241,7 +1229,7 @@ static int __init m8xx_probe(struct of_device *ofdev,
 		socket[i].socket.io_offset = 0;
 		socket[i].socket.pci_irq = pcmcia_schlvl;
 		socket[i].socket.ops = &m8xx_services;
-		socket[i].socket.resource_ops = &pccard_nonstatic_ops;
+		socket[i].socket.resource_ops = &pccard_iodyn_ops;
 		socket[i].socket.cb_dev = NULL;
 		socket[i].socket.dev.parent = &ofdev->dev;
 		socket[i].pcmcia = pcmcia;
@@ -1259,7 +1247,7 @@ static int __init m8xx_probe(struct of_device *ofdev,
 	return 0;
 }
 
-static int m8xx_remove(struct of_device *ofdev)
+static int m8xx_remove(struct platform_device *ofdev)
 {
 	u32 m, i;
 	struct pcmcia_win *w;
@@ -1296,22 +1284,7 @@ static int m8xx_remove(struct of_device *ofdev)
 	return 0;
 }
 
-#ifdef CONFIG_PM
-static int m8xx_suspend(struct platform_device *pdev, pm_message_t state)
-{
-	return pcmcia_socket_dev_suspend(&pdev->dev);
-}
-
-static int m8xx_resume(struct platform_device *pdev)
-{
-	return pcmcia_socket_dev_resume(&pdev->dev);
-}
-#else
-#define m8xx_suspend NULL
-#define m8xx_resume NULL
-#endif
-
-static struct of_device_id m8xx_pcmcia_match[] = {
+static const struct of_device_id m8xx_pcmcia_match[] = {
 	{
 	 .type = "pcmcia",
 	 .compatible = "fsl,pq-pcmcia",
@@ -1321,23 +1294,24 @@ static struct of_device_id m8xx_pcmcia_match[] = {
 
 MODULE_DEVICE_TABLE(of, m8xx_pcmcia_match);
 
-static struct of_platform_driver m8xx_pcmcia_driver = {
-	.name = driver_name,
-	.match_table = m8xx_pcmcia_match,
+static struct platform_driver m8xx_pcmcia_driver = {
+	.driver = {
+		.name = driver_name,
+		.owner = THIS_MODULE,
+		.of_match_table = m8xx_pcmcia_match,
+	},
 	.probe = m8xx_probe,
 	.remove = m8xx_remove,
-	.suspend = m8xx_suspend,
-	.resume = m8xx_resume,
 };
 
 static int __init m8xx_init(void)
 {
-	return of_register_platform_driver(&m8xx_pcmcia_driver);
+	return platform_driver_register(&m8xx_pcmcia_driver);
 }
 
 static void __exit m8xx_exit(void)
 {
-	of_unregister_platform_driver(&m8xx_pcmcia_driver);
+	platform_driver_unregister(&m8xx_pcmcia_driver);
 }
 
 module_init(m8xx_init);

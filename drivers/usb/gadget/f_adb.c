@@ -25,7 +25,7 @@
 #include <linux/wait.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
-
+#include <linux/sched.h>
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
@@ -154,14 +154,12 @@ static void adb_request_free(struct usb_request *req, struct usb_ep *ep)
 
 static inline int _lock(atomic_t *excl)
 {
-	int ret = -1;
-	preempt_disable();
 	if (atomic_inc_return(excl) == 1) {
-		ret= 0;
-	} else
+		return 0;
+	} else {
 		atomic_dec(excl);
-	preempt_enable();
-	return ret;
+		return -1;
+	}
 }
 
 static inline void _unlock(atomic_t *excl)
@@ -323,6 +321,7 @@ requeue_req:
 	if (ret < 0) {
 		dev->error = 1;
 		r = ret;
+		usb_ep_dequeue(dev->ep_out, req);
 		goto done;
 	}
 	if (!dev->error) {
@@ -411,43 +410,21 @@ static ssize_t adb_write(struct file *fp, const char __user *buf,
 
 static int adb_open(struct inode *ip, struct file *fp)
 {
-	static unsigned long last_print;
-	static unsigned long count = 0;
-	if (++count == 1)
-		last_print = jiffies;
-	else {
-		if (!time_before(jiffies, last_print + HZ/2))
-			count = 0;
-		last_print = jiffies;
-	}
-	if (_lock(&_adb_dev->open_excl)) {
-		cpu_relax();
+	printk(KERN_INFO "adb_open\n");
+	if (_lock(&_adb_dev->open_excl))
 		return -EBUSY;
-	}
 
-	if (count < 5)
-		printk(KERN_INFO "adb_open(%s)\n", current->comm);
 	fp->private_data = _adb_dev;
 
 	/* clear the error latch */
 	_adb_dev->error = 0;
+
 	return 0;
 }
 
 static int adb_release(struct inode *ip, struct file *fp)
 {
-	static unsigned long last_print;
-	static unsigned long count = 0;
-	if (++count == 1)
-		last_print = jiffies;
-	else {
-		if (!time_before(jiffies, last_print + HZ/2))
-		count = 0;
-		last_print = jiffies;
-	}
-
-	if (count < 5)
-		printk(KERN_INFO "adb_release\n");
+	printk(KERN_INFO "adb_release\n");
 	_unlock(&_adb_dev->open_excl);
 	return 0;
 }

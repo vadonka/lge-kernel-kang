@@ -75,18 +75,17 @@ struct ixgb_adapter;
 #include "ixgb_ee.h"
 #include "ixgb_ids.h"
 
-#ifdef _DEBUG_DRIVER_
-#define IXGB_DBG(args...) printk(KERN_DEBUG "ixgb: " args)
-#else
-#define IXGB_DBG(args...)
-#endif
-
 #define PFX "ixgb: "
-#define DPRINTK(nlevel, klevel, fmt, args...) \
-	(void)((NETIF_MSG_##nlevel & adapter->msg_enable) && \
-	printk(KERN_##klevel PFX "%s: %s: " fmt, adapter->netdev->name, \
-		__func__ , ## args))
 
+#ifdef _DEBUG_DRIVER_
+#define IXGB_DBG(fmt, args...) printk(KERN_DEBUG PFX fmt, ##args)
+#else
+#define IXGB_DBG(fmt, args...)				\
+do {							\
+	if (0)						\
+		printk(KERN_DEBUG PFX fmt, ##args);	\
+} while (0)
+#endif
 
 /* TX/RX descriptor defines */
 #define DEFAULT_TXD      256
@@ -117,6 +116,7 @@ struct ixgb_buffer {
 	unsigned long time_stamp;
 	u16 length;
 	u16 next_to_watch;
+	u16 mapped_as_page;
 };
 
 struct ixgb_desc_ring {
@@ -149,16 +149,13 @@ struct ixgb_desc_ring {
 
 struct ixgb_adapter {
 	struct timer_list watchdog_timer;
-	struct vlan_group *vlgrp;
+	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	u32 bd_number;
 	u32 rx_buffer_len;
 	u32 part_num;
 	u16 link_speed;
 	u16 link_duplex;
 	struct work_struct tx_timeout_task;
-
-	struct timer_list blink_timer;
-	unsigned long led_status;
 
 	/* TX */
 	struct ixgb_desc_ring tx_ring ____cacheline_aligned_in_smp;
@@ -183,7 +180,6 @@ struct ixgb_adapter {
 	struct napi_struct napi;
 	struct net_device *netdev;
 	struct pci_dev *pdev;
-	struct net_device_stats net_stats;
 
 	/* structs defined in ixgb_hw.h */
 	struct ixgb_hw hw;
