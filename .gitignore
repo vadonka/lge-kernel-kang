@@ -44,6 +44,7 @@ Module.symvers
 !.gitignore
 !.mailmap
 warn.log
+git_push.sh
 
 #
 # Generated include files
