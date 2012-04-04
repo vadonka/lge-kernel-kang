@@ -1460,22 +1460,16 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
     }
 }
 
-#define ONE_MB	0x00100000
-#ifdef CONFIG_OTF_GPURAM
-#include <linux/spica.h>
 NvU32 NvOdmQueryCarveoutSize(void)
 {
-    return (GPURAMSIZE*ONE_MB);
+    //20100802  increase carveout memory
+    extern unsigned int nvmap_carveout_size;
+    //return 0x08000000; // 128 MB <- 64MB
+    return nvmap_carveout_size;
 }
-#else
-NvU32 NvOdmQueryCarveoutSize(void)
-{
-    return (128*ONE_MB);
-}
-#endif
 
 NvU32 NvOdmQuerySecureRegionSize(void)
 {
-    return (8*ONE_MB);// 8 MB
+    return 0x00800000;// 8 MB
 }
 

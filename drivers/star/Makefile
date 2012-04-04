@@ -15,11 +15,7 @@ obj-y				+= tegra_user_gpio.o
 ifeq ($(CONFIG_USE_DS_BATTERY_DRIVER),y)
 obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger_ds.o
 else
-ifeq ($(CONFIG_USE_LITE_BATTERY_DRIVER),y)
-obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger_lite.o
-else
 obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
-endif
 endif
 
 obj-$(CONFIG_STAR_MUIC_TI)	+= star_muic_TI.o
