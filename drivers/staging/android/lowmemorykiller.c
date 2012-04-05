@@ -36,11 +36,6 @@
 #include <linux/sched.h>
 #include <linux/notifier.h>
 
-#ifdef CONFIG_SWAP
-#include <linux/fs.h>
-#include <linux/swap.h>
-#endif
-
 static uint32_t lowmem_debug_level = 2;
 static int lowmem_adj[6] = {
 	0,
@@ -59,10 +54,6 @@ static int lowmem_minfree_size = 4;
 
 static struct task_struct *lowmem_deathpending;
 static unsigned long lowmem_deathpending_timeout;
-
-#ifdef CONFIG_SWAP
-static int fudgeswap = 768;
-#endif
 
 #define lowmem_print(level, x...)			\
 	do {						\
@@ -113,20 +104,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	if (lowmem_deathpending &&
 	    time_before_eq(jiffies, lowmem_deathpending_timeout))
 		return 0;
-
-#ifdef CONFIG_SWAP
-	if(fudgeswap != 0){
-		struct sysinfo si;
-		si_swapinfo(&si);
-
-		if(si.freeswap > 0){
-			if(fudgeswap > si.freeswap)
-				other_file += si.freeswap;
-			else
-				other_file += fudgeswap;
-		}
-	}
-#endif
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
@@ -190,12 +167,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     p->pid, p->comm, oom_adj, tasksize);
 	}
 	if (selected) {
-		if (fatal_signal_pending(selected)) {
-		pr_warning("process %d is suffering a slow death\n",
-		selected->pid);
-		read_unlock(&tasklist_lock);
-		return rem;
-		}
 		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_adj, selected_tasksize);
@@ -214,34 +185,6 @@ static struct shrinker lowmem_shrinker = {
 	.shrink = lowmem_shrink,
 	.seeks = DEFAULT_SEEKS * 16
 };
-
-/* This will provide a true status based off minfree calculation of free ram
- * There are two numbers free_file and free_other as calculated above
- */
-static int param_get_minfree_stat(char *buffer, struct kernel_param *kp)
-{
-  int other_free = global_page_state(NR_FREE_PAGES);
-  int other_file = global_page_state(NR_FILE_PAGES) -
-                   global_page_state(NR_SHMEM);
-  
-#ifdef CONFIG_SWAP
-  if(fudgeswap != 0){
-    struct sysinfo si;
-    si_swapinfo(&si);
-    
-    if(si.freeswap > 0){
-      if(fudgeswap > si.freeswap)
-        other_file += si.freeswap;
-      else
-        other_file += fudgeswap;
-    }
-  }
-#endif
-  return sprintf(buffer,"other_free:  %d kB\nother_file:  %d kB",
-                 other_free << (PAGE_SHIFT - 10),
-                 other_file << (PAGE_SHIFT - 10));
-}
-module_param_call(minfree_stat, NULL, param_get_minfree_stat, NULL, S_IRUGO);
 
 static int __init lowmem_init(void)
 {
@@ -262,10 +205,6 @@ module_param_array_named(adj, lowmem_adj, int, &lowmem_adj_size,
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
-
-#ifdef CONFIG_SWAP
-module_param_named(fudgeswap, fudgeswap, int, S_IRUGO | S_IWUSR);
-#endif
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);
