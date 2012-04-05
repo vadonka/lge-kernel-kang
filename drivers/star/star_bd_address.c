@@ -103,7 +103,7 @@ static int bd_address_resume(struct platform_device *pdev)
 
 static struct platform_driver bd_address_driver = {
 	.probe		= bd_address_probe,
-	.remove		= __exit_p(bd_address_remove),
+	.remove		= __devexit_p(bd_address_remove),
 	.suspend	= bd_address_suspend,
 	.resume		= bd_address_resume,
 	.driver		= {
@@ -115,13 +115,13 @@ MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:star_bd_address");
 MODULE_AUTHOR("LG Electronics Inc");
 
-static int __devinit bd_address_init(void)
+static int __init bd_address_init(void)
 {
 	return platform_driver_register(&bd_address_driver);
 }
 module_init(bd_address_init);
 
-static void __devexit bd_address_exit(void)
+static void __exit bd_address_exit(void)
 {
 	platform_driver_unregister(&bd_address_driver);
 }

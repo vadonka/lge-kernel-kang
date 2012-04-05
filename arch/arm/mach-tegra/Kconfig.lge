@@ -8,6 +8,20 @@ choice
        depends on MACH_STAR
 endchoice
 
+config STAR_PMIC
+	bool "star pmic test"
+	depends on MACH_STAR
+	default y
+
+config STAR_HIDDEN_RESET
+	bool "star hidden reset"
+	depends on MACH_STAR
+	default n
+
+menuconfig LPRINTK
+        bool "LGE Debugging Message"
+        depends on MACH_STAR && DEBUG_FS
+
 config FAKE_SHMOO
 	bool "Tegra2 Overclocking Enable"
 	depends on MACH_STAR
@@ -20,21 +34,23 @@ config BOOST_PERIPHERALS
 
 config MAX_AVP_OC_FREQ
 	int "AVP Overclock Frequency"
-	default 240000
+	default 280000
         depends on FAKE_SHMOO && BOOST_PERIPHERALS
 
-config MAX_3D_OC_FREQ
-	int "3D Overclock Frequency"
-	default 340000
+config MAX_GPU_OC_FREQ
+	int "3D GPU Overclock Frequency"
+	default 350000
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+
+config MAX_DDR_OC_FREQ
+	int "DDR Overclock Frequency"
+	default 350000
         depends on FAKE_SHMOO && BOOST_PERIPHERALS
 
 config DDR2_SDRAM_FREQ
-	int "DDR2 SDRAM Frequency"
+	int
+	default 350000 if BOOST_PERIPHERALS
 	default 300000
-
-config GPU_MEM_CARVEOUT_SZ
-	int "GPU Memory Carveout Size"
-	default 128
 
 config STOCK_VOLTAGE
 	bool "Stock voltage values"
@@ -68,20 +84,12 @@ config OTF_LPDDR2
 	bool "OTF LPDDR2 Min Frequency"
 	default y
 
-config OTF_SCMV
-	bool "OTF Suspend Core mV (DANGEROUS)"
-	default n
-
 config OTF_AP20LC
 	bool "OTF AP20 Low Corners voltages"
 	default n
 
 config OTF_CPU1
 	bool "OTF CPU Second Core activation"
-	default y
-
-config OTF_GPURAM
-	bool "OTF GPU RAM size (dynamic declaration)"
 	default y
 
 config OTF_MAXSCOFF
@@ -97,20 +105,6 @@ config OTF_BATTPROT
 	default y
 
 endif # SPICA_OTF
-
-config STAR_PMIC
-	bool "star pmic test"
-	depends on MACH_STAR
-	default y
-
-config STAR_HIDDEN_RESET
-	bool "star hidden reset"
-	depends on MACH_STAR
-	default n
-
-menuconfig LPRINTK
-        bool "LGE Debugging Message"
-        depends on MACH_STAR && DEBUG_FS
 
 if LPRINTK
 config  LPRINTK_ALL

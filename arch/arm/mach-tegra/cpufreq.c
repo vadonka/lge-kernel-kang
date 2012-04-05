@@ -32,7 +32,6 @@
 #include <linux/freezer.h>
 #include <linux/kthread.h>
 #include <linux/workqueue.h>
-//#include <linux/smp_lock.h>
 #include <linux/suspend.h>
 // 20100728 related deepsleep wakeup delay, (NVIDIA john moser) [START]
 #include <linux/delay.h>
@@ -83,8 +82,7 @@ static void tegra_cpufreq_hotplug(NvRmPmRequest req)
 
 		if (cpu_present(cpu) && !cpu_online(cpu))
 			rc = cpu_up(cpu);
-	} else
-	  if (req & NvRmPmRequest_CpuOffFlag && (policy < NR_CPUS || !policy)) {
+	} else if (req & NvRmPmRequest_CpuOffFlag && (policy < NR_CPUS || !policy)) {
 		cpu = cpumask_any_but(cpu_online_mask, 0);
 
 		if (cpu_present(cpu) && cpu_online(cpu))
@@ -150,10 +148,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 	last_rate = rate;
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
-	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
-	//set_freezable_with_signal();
 	set_freezable();
-	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 
 		req = NvRmPrivPmThread();

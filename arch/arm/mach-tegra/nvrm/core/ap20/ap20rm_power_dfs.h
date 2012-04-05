@@ -307,9 +307,7 @@ extern "C"
 #define NVRM_AP20_LOW_CPU_MV (750)
 #endif
 /// Core voltage in suspend
-#ifndef CONFIG_OTF_SCMV
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
-#endif
 
 /// Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \

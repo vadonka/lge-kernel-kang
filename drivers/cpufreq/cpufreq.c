@@ -2349,7 +2349,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			AVPFREQ = 240000;
 #endif
 #ifdef CONFIG_OTF_GPU
-			GPUFREQ = 380000;
+			GPUFREQ = 350000;
 #endif
 #ifdef CONFIG_OTF_VDE
 			VDEFREQ = 680000;
@@ -2473,7 +2473,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = 250000;
 #endif
 #ifdef CONFIG_OTF_GPU
-			GPUFREQ = 390000;
+			GPUFREQ = 350000;
 #endif
 #ifdef CONFIG_OTF_VDE
 			VDEFREQ = 700000;

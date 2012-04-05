@@ -33,10 +33,10 @@ unsigned int AVPHIGH = 250000;
 #ifdef CONFIG_OTF_GPU
 /*******************************************/
 /* Default GPU Freq */
-unsigned int GPUFREQ = 380000;
+unsigned int GPUFREQ = 350000;
 /* Min & Max Limit */
 unsigned int GPULOW = 280000;
-unsigned int GPUHIGH = 400000;
+unsigned int GPUHIGH = 350000;
 /*******************************************/
 #endif
 
@@ -66,20 +66,6 @@ unsigned int SCREENOFFFREQ = 324000;
 /* Min & Max Limit */
 unsigned int SMFREQLOW = 216000;
 unsigned int SMFREQHIGH = 816000;
-/*******************************************/
-#endif
-
-#ifdef CONFIG_OTF_GPURAM
-unsigned int GPURAMSIZE = CONFIG_GPU_MEM_CARVEOUT_SZ;
-#endif
-
-#ifdef CONFIG_OTF_SCMV
-/*******************************************/
-/* Default Suspend Core mV */
-const unsigned int NVRM_AP20_SUSPEND_CORE_MV = 1000;
-/* Min & Max Limit */
-unsigned int SCMVLOW = 600;
-unsigned int SCMVHIGH = 1100;
 /*******************************************/
 #endif
 

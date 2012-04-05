@@ -370,7 +370,11 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 {
     NvU32 i;
     NvRmFreqKHz CpuMaxKHz, AvpMaxKHz, VdeMaxKHz, TDMaxKHz, DispMaxKHz;
+#if defined(CONFIG_FAKE_SHMOO) || defined(CONFIG_BOOST_PERIPHERALS)
     NvRmSKUedLimits* pSKUedLimits;
+#else
+    const NvRmSKUedLimits* pSKUedLimits;
+#endif
     const NvRmScaledClkLimits* pHwLimits;
     const NvRmSocShmoo* pShmoo;
 
@@ -403,7 +407,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // AVP clock
     pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
     // 3D clock
-    pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
+    pSKUedLimits->TDMaxKHz = CONFIG_MAX_GPU_OC_FREQ;
 #endif // CONFIG_BOOST_PERIPHERALS
 #endif // CONFIG_SPICA_OTF
 
@@ -473,13 +477,17 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         }
     }
 
-	/* Imperticus work
-	s_ClockRangeLimits[2].MaxKHz = 280000;
-	s_ClockRangeLimits[7].MaxKHz = 340000;
-	s_ClockRangeLimits[8].MaxKHz = 400000;
-	s_ClockRangeLimits[10].MaxKHz = 400000;
-	*/
-	
+#ifndef CONFIG_SPICA_OTF
+AVPHIGH = CONFIG_MAX_AVP_OC_FREQ;
+GPUHIGH = CONFIG_MAX_GPU_OC_FREQ;
+#endif
+#ifdef CONFIG_SPICA_OTF || CONFIG_BOOST_PERIPHERALS
+    s_ClockRangeLimits[NvRmModuleID_Avp].MaxKHz = AVPHIGH;
+    s_ClockRangeLimits[NvRmModuleID_2D].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUHIGH;
+    s_ClockRangeLimits[NvRmModuleID_Epp].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
+#endif
+
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)
