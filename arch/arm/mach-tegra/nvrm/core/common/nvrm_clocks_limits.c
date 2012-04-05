@@ -477,17 +477,6 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         }
     }
 
-#ifndef CONFIG_SPICA_OTF
-AVPHIGH = CONFIG_MAX_AVP_OC_FREQ;
-GPUHIGH = CONFIG_MAX_GPU_OC_FREQ;
-#endif
-#ifdef CONFIG_SPICA_OTF || CONFIG_BOOST_PERIPHERALS
-    s_ClockRangeLimits[NvRmModuleID_Avp].MaxKHz = AVPHIGH;
-    s_ClockRangeLimits[NvRmModuleID_2D].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUHIGH;
-    s_ClockRangeLimits[NvRmModuleID_Epp].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
-#endif
-
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)
