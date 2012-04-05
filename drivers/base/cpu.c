@@ -25,10 +25,6 @@ EXPORT_SYMBOL(cpu_sysdev_class);
 static DEFINE_PER_CPU(struct sys_device *, cpu_sys_devices);
 
 #ifdef CONFIG_HOTPLUG_CPU
-
-/* 0 = auto, N = keep N cpus online */
-atomic_t hotplug_policy = ATOMIC_INIT(0);
-
 static ssize_t show_online(struct sys_device *dev, struct sysdev_attribute *attr,
 			   char *buf)
 {
@@ -41,23 +37,19 @@ static ssize_t __ref store_online(struct sys_device *dev, struct sysdev_attribut
 				 const char *buf, size_t count)
 {
 	struct cpu *cpu = container_of(dev, struct cpu, sysdev);
-	ssize_t ret = 0;
+	ssize_t ret;
 
 	cpu_hotplug_driver_lock();
 	switch (buf[0]) {
 	case '0':
 		ret = cpu_down(cpu->sysdev.id);
-		if (!ret) {
-			atomic_set(&hotplug_policy, 1);
+		if (!ret)
 			kobject_uevent(&dev->kobj, KOBJ_OFFLINE);
-		}
 		break;
 	case '1':
 		ret = cpu_up(cpu->sysdev.id);
-		if (!ret) {
-			atomic_set(&hotplug_policy, 2);
+		if (!ret)
 			kobject_uevent(&dev->kobj, KOBJ_ONLINE);
-		}
 		break;
 	default:
 		ret = -EINVAL;
