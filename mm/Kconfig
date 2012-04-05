@@ -302,6 +302,16 @@ config NOMMU_INITIAL_TRIM_EXCESS
 
 	  See Documentation/nommu-mmap.txt for more information.
 
+config VM_MAX_READAHEAD
+	int "Default max vm read ahead size (16-4096 kbytes)"
+	default "128"
+	range 16 4096
+	help
+	 This entry specifies the default max size used to read ahead 
+	 sequential access patterns in kilobytes.
+
+	 The default value is 128kbytes. 
+
 config TRANSPARENT_HUGEPAGE
 	bool "Transparent Hugepage Support"
 	depends on X86 && MMU

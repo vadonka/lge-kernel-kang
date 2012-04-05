@@ -171,8 +171,6 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ \
 				  -e s/ppc.*/powerpc/ -e s/mips.*/mips/ \
 				  -e s/sh[234].*/sh/ )
 
-SUBARCH := arm
-
 # Cross compiling and selecting different set of gcc/bin-utils
 # ---------------------------------------------------------------------------
 #
@@ -245,8 +243,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-HOSTCC       = ccache gcc
-HOSTCXX      = ccache g++
+HOSTCC       = gcc
+HOSTCXX      = g++
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
 HOSTCXXFLAGS = -O2
 
@@ -346,34 +344,20 @@ DEPMOD		= /sbin/depmod
 KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
-GCCVERSION	= $(shell gcc --version | grep ^gcc | sed 's/^.* //g')
-GCCVERSION45	:= $(shell expr 4.5.0 \<= `$(CC) -dumpversion`)
-GCCVERSION46	:= $(shell expr 4.6.0 \<= `$(CC) -dumpversion`)
-GCCVERSION47	:= $(shell expr 4.7.0 \<= `$(CC) -dumpversion`)
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-
-ifeq "$(GCCVERSION46)" "1"
-MODFLAGS	= -DMODULE -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-math-optimizations -mno-unaligned-access
-else
-MODFLAGS	= -DMODULE -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops
-endif
-CFLAGS_MODULE   = $(MODFLAGS) 
-AFLAGS_MODULE   = $(MODFLAGS)
-LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-ifeq "$(GCCVERSION46)" "1"
-CFLAGS_KERNEL	= -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-math-optimizations -mno-unaligned-access
-else
-CFLAGS_KERNEL	= -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops
-endif
+CFLAGS_MODULE   =
+AFLAGS_MODULE   =
+LDFLAGS_MODULE  =
+CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
-# 20100705, ,[LGE_START]
+# 20100705, sunghoon.kim@lge.com,[LGE_START]
 CFLAGS_MODULE	+= -DSTAR_COUNTRY_$(TARGET_STAR_COUNTRY) -DSTAR_OPERATOR_$(TARGET_STAR_OPERATOR)
 CFLAGS_KERNEL	+= -DSTAR_COUNTRY_$(TARGET_STAR_COUNTRY) -DSTAR_OPERATOR_$(TARGET_STAR_OPERATOR)
-# 20100705, ,[LGE_END]
+# 20100705, sunghoon.kim@lge.com,[LGE_END]
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
@@ -384,23 +368,11 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include \
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 
-ifeq "$(GCCVERSION46)" "1"
-KBUILD_CFLAGS   :=	-Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-					-fno-strict-aliasing -fno-common \
-					-Werror-implicit-function-declaration \
-					-Wno-format-security \
-					-fno-delete-null-pointer-checks \
-					-march=armv7-a -mfpu=vfpv3-d16 -mtune=cortex-a9 \
-					-funsafe-math-optimizations -mno-unaligned-access
-else
-KBUILD_CFLAGS   :=	-Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-					-fno-strict-aliasing -fno-common \
-					-Werror-implicit-function-declaration \
-					-Wno-format-security \
-					-fno-delete-null-pointer-checks \
-					-march=armv7-a -mfpu=vfpv3-d16 -mtune=cortex-a9
-endif
-
+KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+		   -fno-strict-aliasing -fno-common \
+		   -Werror-implicit-function-declaration \
+		   -Wno-format-security \
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
