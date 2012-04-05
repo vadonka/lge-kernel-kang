@@ -349,17 +349,18 @@ CHECK		= sparse
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-CFLAGS_MODULE   =
-AFLAGS_MODULE   =
-LDFLAGS_MODULE  =
-CFLAGS_KERNEL	=
-AFLAGS_KERNEL	=
+MODFLAGS	= -DMODULE -mtune=cortex-a9 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
+CFLAGS_MODULE   = $(MODFLAGS) 
+AFLAGS_MODULE   = $(MODFLAGS)
+LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
+CFLAGS_KERNEL	= -mtune=cortex-a9 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
+AFLAGS_KERNEL	= -mtune=cortex-a9 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
-# 20100705, sunghoon.kim@lge.com,[LGE_START]
+# 20100705, ,[LGE_START]
 CFLAGS_MODULE	+= -DSTAR_COUNTRY_$(TARGET_STAR_COUNTRY) -DSTAR_OPERATOR_$(TARGET_STAR_OPERATOR)
 CFLAGS_KERNEL	+= -DSTAR_COUNTRY_$(TARGET_STAR_COUNTRY) -DSTAR_OPERATOR_$(TARGET_STAR_OPERATOR)
-# 20100705, sunghoon.kim@lge.com,[LGE_END]
+# 20100705, ,[LGE_END]
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
@@ -374,12 +375,7 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks \
-		   -march=armv7-a \
-		   -mtune=cortex-a8 \
-		   -mfpu=neon \
-		   -funsafe-math-optimizations \
-		   -mno-unaligned-access
+		   -fno-delete-null-pointer-checks -mtune=cortex-a9 -march=armv7-a -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
