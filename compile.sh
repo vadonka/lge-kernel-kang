@@ -1,6 +1,6 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.1.7
-# Date: 2012.03.09
+# ANYKERNEL compiler script by vadonka v1.2.0
+# Date: 2012.04.05
 #
 # You need to define this below:
 ######################################################
