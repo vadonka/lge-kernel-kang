@@ -42,11 +42,11 @@ obj-$(CONFIG_SPI_MPC52xx)		+= mpc52xx_spi.o
 obj-$(CONFIG_SPI_FSL_LIB)		+= spi_fsl_lib.o
 obj-$(CONFIG_SPI_FSL_ESPI)		+= spi_fsl_espi.o
 obj-$(CONFIG_SPI_FSL_SPI)		+= spi_fsl_spi.o
+obj-$(CONFIG_SPI_TEGRA)			+= tegra_spi.o
 obj-$(CONFIG_SPI_PPC4xx)		+= spi_ppc4xx.o
 obj-$(CONFIG_SPI_S3C24XX_GPIO)		+= spi_s3c24xx_gpio.o
 obj-$(CONFIG_SPI_S3C24XX)		+= spi_s3c24xx_hw.o
 obj-$(CONFIG_SPI_S3C64XX)		+= spi_s3c64xx.o
-obj-$(CONFIG_SPI_TEGRA)			+= spi_tegra.o
 obj-$(CONFIG_SPI_TI_SSP)		+= ti-ssp-spi.o
 obj-$(CONFIG_SPI_TOPCLIFF_PCH)		+= spi_topcliff_pch.o
 obj-$(CONFIG_SPI_TXX9)			+= spi_txx9.o
@@ -56,8 +56,6 @@ obj-$(CONFIG_SPI_SH_SCI)		+= spi_sh_sci.o
 obj-$(CONFIG_SPI_SH_MSIOF)		+= spi_sh_msiof.o
 obj-$(CONFIG_SPI_STMP3XXX)		+= spi_stmp.o
 obj-$(CONFIG_SPI_NUC900)		+= spi_nuc900.o
-obj-$(CONFIG_SPI_TEGRA)			+= tegra_spi.o
-obj-$(CONFIG_SPI_TEGRA)			+= ifx_n721_spi.o
 
 # special build for s3c24xx spi driver with fiq support
 spi_s3c24xx_hw-y			:= spi_s3c24xx.o
@@ -68,7 +66,7 @@ spi_s3c24xx_hw-$(CONFIG_SPI_S3C24XX_FIQ) += spi_s3c24xx_fiq.o
 # SPI protocol drivers (device/link on bus)
 obj-$(CONFIG_SPI_SPIDEV)	+= spidev.o
 obj-$(CONFIG_SPI_TLE62X0)	+= tle62x0.o
-#obj-$(CONFIG_SPI_TEGRA)	+= ifx_n721_spi.o
+obj-$(CONFIG_SPI_TEGRA)	+= ifx_n721_spi.o
 # 	... add above this line ...
 
 # SPI slave controller drivers (upstream link)

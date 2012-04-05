@@ -1564,7 +1564,7 @@ static __always_inline void *slab_alloc(struct kmem_cache *s,
 	lockdep_trace_alloc(gfpflags);
 	might_sleep_if(gfpflags & __GFP_WAIT);
 
-	if (should_failslab(s->objsize, gfpflags))
+	if (should_failslab(s->objsize, gfpflags, s->flags))
 		return NULL;
 
 again:

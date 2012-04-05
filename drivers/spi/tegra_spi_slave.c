@@ -459,11 +459,11 @@ static void tegra_spi_workerthread(struct work_struct *w)
 
 		struct spi_message *m;
 // LGE_UPDATE_S  ebs 0707 	 
-	 if (spi_shutdown )
-	 {
-        printk("tegra_spi_workthread stopped\n");
-			   return;
-	 }
+        if (spi_shutdown )
+        {
+           printk("tegra_spi_workthread stopped\n");
+		   return;
+        }  
 // LGE_UPDATE_E  ebs 0707
 		 
 		m = container_of(spi->msg_queue.next, struct spi_message, queue);
