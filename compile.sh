@@ -86,7 +86,7 @@ export endtime=`date +%s`
 if [ -e $kh/arch/arm/boot/zImage ]; then
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 
-export cdir=`date +%y%m%d%H%M`$kver
+export cdir=`date +%y%m%d%H%M`$kver-3.0.y
 mkdir -p $ch/$cdir
 cp -r $kinstsrc/* -d $ch/$cdir
 
