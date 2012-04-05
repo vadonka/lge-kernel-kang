@@ -2460,28 +2460,13 @@ static void sensor_workaround()
                  goto error_open_gpio_pin_acquire_fail;
          }  
 
-// LGE_CHANGE_S [dongjin73.kim@lge.com] 2011-05-27, [P999GB] Invalid GPIO configuration
-	NvOdmGpioConfig(hGpio, hSclGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hSclGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hSdaGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hSdaGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hHalGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hHalGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hComGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hComGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hGyrGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hGyrGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hMotGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hMotGpioPinHandle, 0);
-
-	NvOdmGpioConfig(hGpio, hProGpioPinHandle, NvOdmGpioPinMode_Output);
-	NvOdmGpioSetState(hGpio,hProGpioPinHandle, 0);
-// LGE_CHANGE_E [dongjin73.kim@lge.com] 2011-05-27, [P999GB] Invalid GPIO configuration
+	NvOdmGpioSetState(hGpio,hSclGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hSclGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hSdaGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hSdaGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hHalGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hHalGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hComGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hComGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hGyrGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hGyrGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hMotGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hMotGpioPinHandle, 5 );
+	NvOdmGpioSetState(hGpio,hProGpioPinHandle , 0x0); NvOdmGpioConfig(hGpio, hProGpioPinHandle, 5 );
 
        if (!sensor_poweron())
        {
