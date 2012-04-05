@@ -1,7 +1,7 @@
 /**
 	@brief		 star hw test
  
-	@author		 
+	@author		 cs77.ha@lge.com
 	@date		 2010-06-03
  
 	@version	 V1.00		 2010.06.03		 Changsu Ha	 Create

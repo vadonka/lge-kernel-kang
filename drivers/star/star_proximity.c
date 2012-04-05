@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2010 LGE, Inc.
  *
- * Author: Taewan.kim <>
+ * Author: Taewan.kim <taewan.kim@lge.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -762,6 +762,6 @@ static void __exit proximity_exit(void)
 module_init(proximity_init);
 module_exit(proximity_exit);
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("sk.hwang@lge.com");
 MODULE_DESCRIPTION("star proximity driver");
 MODULE_LICENSE("GPL");

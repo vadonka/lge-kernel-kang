@@ -956,12 +956,14 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
-
 #ifdef CONFIG_FAKE_SHMOO
-    // Set maximum scaling frequency to 1015mhz at boot
+    /*
+     * Set CPU Clock scaling range manually to
+     * avoid booting up out of specifications
+     * and to minimize the "sleep of death" bug
+     */
     pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1015000;
-#endif // FAKE_SHMOO
-
+#endif  // FAKE_SHMOO
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -2541,16 +2543,10 @@ void NvRmPrivDvsInit(void)
     }
     else if (pDfs->hRm->ChipId.Id == 0x20)
     {
-        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv,
-            NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
-        NV_ASSERT(pDvs->MinCoreMv <= pDvs->NominalCoreMv);
         pDvs->LowCornerCoreMv = NV_MAX(NVRM_AP20_LOW_CORE_MV, pDvs->MinCoreMv);
         pDvs->LowCornerCoreMv =
             NV_MIN(pDvs->LowCornerCoreMv, pDvs->NominalCoreMv);
 
-        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv,
-            NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
-        NV_ASSERT(pDvs->MinCpuMv <= pDvs->NominalCpuMv);
         pDvs->LowCornerCpuMv = NV_MAX(NVRM_AP20_LOW_CPU_MV, pDvs->MinCpuMv);
         pDvs->LowCornerCpuMv =
             NV_MIN(pDvs->LowCornerCpuMv, pDvs->NominalCpuMv);
@@ -2865,7 +2861,6 @@ void NvRmPrivDfsSuspend(NvOdmSocPowerState state)
             NvRmMilliVolts v = NV_MAX(pDvs->DvsCorner.SystemMv,
                                       NV_MAX(pDvs->DvsCorner.EmcMv,
                                              pDvs->DvsCorner.ModulesMv));
-            v = NV_MAX(v, pDvs->MinCoreMv);
 
             // If CPU rail returns to default level by PMU underneath DVFS
             // need to synchronize voltage after LP1 same way as after LP2

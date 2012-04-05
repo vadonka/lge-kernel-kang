@@ -1566,6 +1566,6 @@ static void __exit muic_exit(void)
 module_init(muic_init);
 module_exit(muic_exit);
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("jm1.lee@lge.com");
 MODULE_DESCRIPTION("star MUIC Driver");
 MODULE_LICENSE("GPL");

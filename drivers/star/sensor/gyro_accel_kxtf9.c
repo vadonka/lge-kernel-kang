@@ -1359,6 +1359,6 @@ static void __exit star_accel_exit(void)
 module_init(star_accel_init);
 module_exit(star_accel_exit);
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("sk.hwang@lge.com");
 MODULE_DESCRIPTION("driver of star accelerometer sensor");
 MODULE_LICENSE("GPL");

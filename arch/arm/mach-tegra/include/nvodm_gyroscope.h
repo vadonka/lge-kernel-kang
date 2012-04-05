@@ -33,7 +33,7 @@
 /**
  * @file
  * <b>NVIDIA Tegra ODM Kit:
- *         Gyroscope Interface</b> //
+ *         Gyroscope Interface</b> //di.yu@lge.com
  *
  * @b Description: Defines the ODM interface for compass devices.
  *

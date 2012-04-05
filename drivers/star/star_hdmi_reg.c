@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2009 LGE, Inc.
  *
- * Author: Changsu Ha <>
+ * Author: Changsu Ha <cs77.ha@lge.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 /**
 	@brief		 star(lgp990) HDMI regulator
  
-	@author		 
+	@author		 cs77.ha@lge.com
 	@date		 2010-07-02
  
 	@version	 V1.00		 2010.07.02		 Changsu Ha	 Create
@@ -125,7 +125,7 @@ static void __exit hdmi_reg_exit(void)
 module_init(hdmi_reg_init);
 module_exit(hdmi_reg_exit);
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("cs77.ha@lge.com");
 MODULE_DESCRIPTION("star hdmi regulator");
 MODULE_LICENSE("GPL");
 

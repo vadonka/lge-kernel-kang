@@ -21,9 +21,9 @@
 #include <linux/platform_device.h>
 
 // 20101108 BT: Added for the BT Address Read Factory command dohyung10.lee [Start]
-// 
+// dohyung10.lee@lge.com
 /** @brief  To store Bluetooth Address value that is sent via AT command from CP
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.08
 */
 char mBDAddr[13];
@@ -37,7 +37,7 @@ static ssize_t bd_address_store(struct device *dev,struct device_attribute *attr
 }
 
 /** @brief  To read Bluetooth Address value that is sent via AT command from CP
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.08
 */
 
@@ -54,7 +54,7 @@ static DEVICE_ATTR(bdaddr_if, 0666, bd_address_show, bd_address_store);
 
 
 /** @brief  It doesn't do anything. Just a stub.
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.11
 */
 
@@ -64,7 +64,7 @@ static int __devexit bd_address_remove(struct platform_device *pdev)
 }
 
 /** @brief  It doesn't do anything. Just a stub.
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.11
 */
 
@@ -81,7 +81,7 @@ static int __devinit bd_address_probe(struct platform_device *pdev)
 }
 
 /** @brief  It doesn't do anything. Just a stub.
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.11
 */
 
@@ -92,7 +92,7 @@ static int bd_address_suspend(struct platform_device *pdev,
 }
 
 /** @brief  It doesn't do anything. Just a stub.
-    @author 
+    @author dohyung10.lee@lge.com
     @date   2010.11.11
 */
 

@@ -46,8 +46,6 @@
 #include <linux/nvmap.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
-#include <linux/oom.h>
-#include <linux/syscalls.h>
 #include <asm/tlbflush.h>
 #include <mach/iovmm.h>
 #include "nvcommon.h"
@@ -66,7 +64,6 @@ static unsigned int trace_mask = 0x00;
 #define NVMAP_TRACE_FREE	2
 #define NVMAP_TRACE_LFB 	4
 #define NVMAP_TRACE_FREE_SIZE	8
-#define NVMAP_TRACE_OOM_KILLER	0x10
 
 module_param_named(trace_mask, trace_mask, int, 0600);
 #define NVMAP_TRACE(x, args...)	\
@@ -132,9 +129,6 @@ static struct backing_dev_info nvmap_bdi = {
 /* Heaps for which secure allocations are allowed */
 #define NVMAP_SECURE_HEAPS (NVMEM_HEAP_CARVEOUT_IRAM | NVMEM_HEAP_IOVMM)
 
-/* Heaps that can handle out of memory. */
-#define NVMAP_OOM_HANDLE_HEAPS (NVMEM_HEAP_CARVEOUT_GENERIC)
-
 static pte_t *nvmap_pte[NUM_NVMAP_PTES];
 static unsigned long nvmap_ptebits[NVMAP_PAGES/BITS_PER_LONG];
 
@@ -153,13 +147,6 @@ static DECLARE_WAIT_QUEUE_HEAD(nvmap_pin_wait);
 static struct rb_root nvmap_handles = RB_ROOT;
 
 static struct tegra_iovmm_client *nvmap_vm_client = NULL;
-
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-static struct list_head clients_list = LIST_HEAD_INIT(clients_list);
-static DEFINE_SPINLOCK(clients_lock);
-static DECLARE_WAIT_QUEUE_HEAD(nvmap_release_wait);
-static struct task_struct *oom_death_pending = NULL;
-#endif
 
 /* default heap order policy */
 static unsigned int _nvmap_heap_policy (unsigned int heaps, int numpages)
@@ -626,10 +613,6 @@ struct nvmap_file_priv {
 	size_t iovm_limit;
 	spinlock_t ref_lock;
 	bool su;
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	struct list_head list;
-	struct task_struct *task;
-#endif
 };
 
 struct nvmap_carveout_node {
@@ -1893,158 +1876,6 @@ out:
 	return err;
 }
 
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-static void get_memory_used(struct nvmap_file_priv *priv,
-	unsigned int heap_bit, size_t* used_mem, size_t* shared_mem)
-{
-	struct rb_node *n;
-	struct nvmap_handle *h;
-	struct nvmap_handle_ref *r;
-	struct nvmap_carveout_node *carveout_node;
-
-	spin_lock(&priv->ref_lock);
-	*used_mem = 0;
-	*shared_mem = 0;
-	n = rb_first(&priv->handle_refs);
-	while (n) {
-		r = rb_entry(n, struct nvmap_handle_ref, node);
-		h = r->h;
-		if (h->alloc && !h->heap_pgalloc) {
-			carveout_node = container_of(h->carveout.co_heap,
-				struct nvmap_carveout_node, carveout);
-			if (carveout_node->heap_bit & heap_bit) {
-				*shared_mem += (h->global ? h->size : 0);
-				*used_mem += (h->global ? 0 : h->size);
-			}
-		}
-		n = rb_next(n);
-	}
-	spin_unlock(&priv->ref_lock);
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-		"\n*** %s: pid=%d, oom_adj=%d, used_mem=%d, shared_mem=%d",
-		__func__, task_tgid_vnr(priv->task), priv->task->signal->oom_adj,
-		*used_mem, *shared_mem);
-#endif
-}
-
-static void add_to_clients_list(struct list_head *new)
-{
-	INIT_LIST_HEAD(new);
-	spin_lock(&clients_lock);
-	list_add_tail(new, &clients_list);
-	spin_unlock(&clients_lock);
-}
-
-static void remove_from_clients_list(struct list_head *del)
-{
-	spin_lock(&clients_lock);
-	list_del(del);
-	spin_unlock(&clients_lock);
-}
-
-static void boost_dying_task_prio(struct task_struct *p)
-{
-	struct sched_param param = { .sched_priority = 1 };
-
-	if (!rt_task(p))
-		sched_setscheduler_nocheck(p, SCHED_FIFO, &param);
-}
-
-static void kill_task(struct task_struct *p)
-{
-	/*
-	 * We give our sacrificial lamb high priority and access to
-	 * all the memory it needs. That way it should be able to
-	 * exit() and clear out its resources quickly...
-	 */
-	set_tsk_thread_flag(p, TIF_MEMDIE);
-	boost_dying_task_prio(p);
-	force_sig(SIGKILL, p);
-}
-
-static bool carveout_out_of_memory(struct nvmap_carveout_node *node)
-{
-	struct nvmap_file_priv *priv;
-	size_t selected_size = 0;
-	int selected_oom_adj = OOM_ADJUST_MIN;
-	struct task_struct *selected_task = NULL;
-	bool death_pending = false;
-
-	spin_lock(&clients_lock);
-	if (oom_death_pending)
-		goto out;
-	list_for_each_entry(priv, &clients_list, list) {
-		size_t used_mem, shared_mem;
-		struct task_struct *task = priv->task;
-		struct signal_struct *sig = task->signal;
-
-		if (!task->mm || !sig)
-			continue;
-		get_memory_used(priv, node->heap_bit, &used_mem, &shared_mem);
-		if (used_mem == 0)
-			continue;
-		if (sig->oom_adj < selected_oom_adj)
-			continue;
-		if ((sig->oom_adj == selected_oom_adj) &&
-			(used_mem <= selected_size))
-			continue;
-		selected_oom_adj = sig->oom_adj;
-		selected_size = used_mem;
-		selected_task = task;
-	}
-
-	if ((task_tgid_vnr(selected_task) == task_tgid_vnr(current)) ||
-		(selected_task == NULL))
-		goto out;
-
-	if (fatal_signal_pending(selected_task)) {
-		boost_dying_task_prio(selected_task);
-		pr_err("\ncarveout_killer: process pid=%d dying "
-			"slowly\n", task_tgid_vnr(selected_task));
-		goto out;
-	}
-	pr_err("\ncarveout_killer: killing process pid=%d with"
-		" oom_adj %d to reclaim %d, current=%d\n",
-		task_tgid_vnr(selected_task), selected_oom_adj,
-		selected_size, task_tgid_vnr(current));
-	death_pending = true;
-	oom_death_pending = selected_task;
-	kill_task(selected_task);
-out:
-	spin_unlock(&clients_lock);
-	return death_pending;
-}
-
-#define NVMAP_CARVEOUT_KILLER_RETRY_TIME 500 /* msecs */
-static bool free_space_available(struct nvmap_carveout_node *n, int free_size, int size)
-{
-	bool ret = false;
-	int available_size = _nvmap_carveout_blockstat(&n->carveout,
-		CARVEOUT_STAT_FREE_SIZE);
-	int largest_available = _nvmap_carveout_blockstat(&n->carveout,
-		CARVEOUT_STAT_LARGEST_FREE);
-
-	// round up size to multiple of PAGE_SIZE.
-	size = (size & PAGE_MASK) + ((size & (~PAGE_MASK)) ? PAGE_SIZE: 0);
-
-	if ( (available_size > free_size) && (available_size >= size)) {
-		if (largest_available < size) {
-			if (available_size > (2 * size)) {
-				ret = true;
-			}
-		} else
-			ret = true;
-	}
-	NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-		"\n%s: %s, free_size=%d, size=%d, available_size=%d",
-		__func__, ret ? "yes":"no",free_size, size, available_size);
-	if (oom_death_pending == NULL)
-		ret = true;
-	return ret;
-}
-#endif
-
 static int nvmap_release(struct inode *inode, struct file *filp)
 {
 	struct nvmap_file_priv *priv = filp->private_data;
@@ -2054,11 +1885,6 @@ static int nvmap_release(struct inode *inode, struct file *filp)
 	int do_wake = 0;
 	int pins;
 
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-		"\n%s: pid=%ld, org_pid=%d", __func__, sys_getpid(),
-		task_tgid_vnr(priv->task));
-#endif
 	if (!priv) return 0;
 
 	while ((n = rb_first(&priv->handle_refs))) {
@@ -2075,14 +1901,6 @@ static int nvmap_release(struct inode *inode, struct file *filp)
 		kfree(r);
 	}
 	if (do_wake) wake_up(&nvmap_pin_wait);
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	remove_from_clients_list(&priv->list);
-	put_task_struct(priv->task);
-	if (oom_death_pending == priv->task) {
-		oom_death_pending = NULL;
-		wake_up(&nvmap_release_wait);
-	}
-#endif
 	kfree(priv);
 	return 0;
 }
@@ -2093,8 +1911,6 @@ static int nvmap_open(struct inode *inode, struct file *filp)
 	struct nvmap_file_priv *priv;
 	int ret;
 
-	NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER, "\n%s: pid=%ld",
-		__func__, sys_getpid());
 	/* nvmap doesn't track total number of pinned references, so its
 	 * IOVMM client is always locked. */
 	if (!nvmap_vm_client) {
@@ -2128,11 +1944,7 @@ static int nvmap_open(struct inode *inode, struct file *filp)
 #endif
 
 	spin_lock_init(&priv->ref_lock);
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	get_task_struct(current);
-	priv->task = current;
-	add_to_clients_list(&priv->list);
-#endif
+
 	filp->f_mapping->backing_dev_info = &nvmap_bdi;
 
 	filp->private_data = priv;
@@ -2319,11 +2131,9 @@ static bool _nvmap_carveout_do_compact(struct nvmap_handle *h,
 	void *addr_d = NULL;
 	void *addr_s = NULL;
 
-#if NVMAP_DEBUG_COMPACTION
 	int compact_kbytes_count_prev = nvmap_context.compact_kbytes_count;
 	int relocate_fail_mem_count_prev = nvmap_context.relocate_fail_mem_count;
 	int relocate_fail_pin_count_prev = nvmap_context.relocate_fail_pin_count;
-#endif
 	int relocation_count = 0;
 
 #if NVMAP_DEBUG_COMPACTION
@@ -2462,24 +2272,15 @@ static bool _nvmap_carveout_do_compact(struct nvmap_handle *h,
 	return compaction_success;
 }
 
+
 static void _nvmap_carveout_do_alloc(struct nvmap_handle *h,
-	unsigned int heap_type, size_t align, bool disable_co_killer)
+	unsigned int heap_type, size_t align)
 {
 	struct nvmap_carveout_node *n;
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	u64 jiffies_64 = get_jiffies_64() +
-		msecs_to_jiffies(NVMAP_CARVEOUT_KILLER_RETRY_TIME);
-	/* FIXME: timeout is not working sometimes.  debug it.
-	 * using retry_count for bailing out.
-	 */
-	int retry_count = 10;
-#endif
-	int free_space = 0;
+	bool enough_free_space = false;
 	down_read(&nvmap_context.list_sem);
+	int free_space = 0;
 
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-retry:
-#endif
 	list_for_each_entry(n, &nvmap_context.heaps, heap_list) {
 		if (heap_type & n->heap_bit) {
 			struct nvmap_carveout* co = &n->carveout;
@@ -2495,7 +2296,7 @@ retry:
 				h->heap_pgalloc = false;
 				h->alloc = true;
 				spin_unlock(&co->lock);
-				goto out;
+				break;
 			}
 			spin_unlock(&co->lock);
 
@@ -2504,8 +2305,9 @@ retry:
 		}
 	}
 
-	if (free_space < h->size)
-		goto no_space;
+	if (h->alloc || free_space < h->size) {
+		goto done;
+	}
 
 	/* try fast compaction first */
 	if (!_nvmap_carveout_do_compact(h, heap_type, align,
@@ -2521,7 +2323,6 @@ retry:
 		);
 	}
 
-	free_space = 0;
 	/* retry allocation */
 	list_for_each_entry(n, &nvmap_context.heaps, heap_list) {
 		if (heap_type & n->heap_bit) {
@@ -2538,49 +2339,13 @@ retry:
 				h->heap_pgalloc = false;
 				h->alloc = true;
 				spin_unlock(&co->lock);
-				goto out;
+				break;
 			}
 			spin_unlock(&co->lock);
-			free_space += _nvmap_carveout_blockstat(co, CARVEOUT_STAT_FREE_SIZE);
 		}
 	}
 
-no_space:
-#ifdef CONFIG_NVMAP_CARVEOUT_KILLER
-	if (disable_co_killer == true)
-	{
-		NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-			"\n%s: Skipping killer upon request\n", __func__);
-		goto out;
-	}
-
-	if ((jiffies_64 < get_jiffies_64()) && (retry_count <= 0)) {
-		pr_err("\n%s: timeout during carveout_out_of_memory, pid=%ld,"
-			" retry_count_remaining=%d", __func__, sys_getpid(), retry_count);
-		goto out;
-	}
-	list_for_each_entry(n, &nvmap_context.heaps, heap_list) {
-		if ((NVMAP_OOM_HANDLE_HEAPS & n->heap_bit) &&
-			(heap_type & n->heap_bit)) {
-			int ret = 0;
-			if (!carveout_out_of_memory(n))
-				goto out;
-			ret = wait_event_interruptible(nvmap_release_wait,
-				free_space_available(n, free_space, h->size));
-			if (ret) {
-				NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-					"\n%s: wait_event_interruptible exited with error=%d, pid=%ld",
-					__func__, ret, sys_getpid());
-				goto out;
-			}
-			NVMAP_TRACE(NVMAP_TRACE_OOM_KILLER,
-				"\n%s: retry allocationg carveout after oom", __func__);
-			retry_count--;
-			goto retry;
-		}
-	}
-#endif
-out:
+done:
 	up_read(&nvmap_context.list_sem);
 }
 
@@ -2591,7 +2356,6 @@ static int _nvmap_do_alloc(struct nvmap_file_priv *priv,
 	struct nvmap_handle_ref *r;
 	struct nvmap_handle *h;
 	int numpages;
-	bool disable_co_killer = false;
 
 	align = max_t(size_t, align, L1_CACHE_BYTES);
 
@@ -2606,8 +2370,6 @@ static int _nvmap_do_alloc(struct nvmap_file_priv *priv,
 	h = r->h;
 	if (h->alloc) return 0;
 
-	disable_co_killer = (flags & NVMEM_HANDLE_NO_COKILLER)?
-				 true : false;
 	numpages = ((h->size + PAGE_SIZE - 1) >> PAGE_SHIFT);
 	h->secure = (flags & NVMEM_HANDLE_SECURE);
 	h->flags = (flags & 0x3);
@@ -2635,8 +2397,7 @@ static int _nvmap_do_alloc(struct nvmap_file_priv *priv,
 		unsigned int heap_type = _nvmap_heap_policy(heap_mask, numpages);
 
 		if (heap_type & NVMEM_HEAP_CARVEOUT_MASK) {
-			_nvmap_carveout_do_alloc(h, heap_type, align,
-						disable_co_killer);
+			_nvmap_carveout_do_alloc(h, heap_type, align);
 
 			NVMAP_TRACE(NVMAP_TRACE_ALLOC,
 				"nvmap: CO Req - %s,%u,0x%lx,0x%lx,%d,%d,%d\n",
@@ -3077,7 +2838,7 @@ static int _nvmap_do_cache_maint(struct nvmap_handle *h,
 		spin_unlock(&h->carveout.co_heap->lock);
 	}
 
-	while (start < end && (inner_maint || outer_maint)) {
+	while (start < end) {
 		struct page *page = NULL;
 		unsigned long phys;
 		void *src;
@@ -3106,7 +2867,7 @@ static int _nvmap_do_cache_maint(struct nvmap_handle *h,
 		src = addr + (phys & ~PAGE_MASK);
 		count = min_t(size_t, end-start, PAGE_SIZE-(phys&~PAGE_MASK));
 
-		if (inner_maint) inner_maint(src, src+count);
+		inner_maint(src, src+count);
 		if (outer_maint) outer_maint(phys, phys+count);
 		start += count;
 		if (page) put_page(page);

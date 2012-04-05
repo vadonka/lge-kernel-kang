@@ -311,6 +311,6 @@ static void __exit star_hall_exit( void )
 module_init(star_hall_init);
 module_exit(star_hall_exit);
 
-MODULE_AUTHOR("");
+MODULE_AUTHOR("sk.hwang@lge.com");
 MODULE_DESCRIPTION("driver of star hall ic");
 MODULE_LICENSE("GPL");
