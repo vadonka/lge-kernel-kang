@@ -32,22 +32,6 @@
 
 #include <trace/events/power.h>
 
-//#define DISABLE_FAKE_SHMOO_UV
-#ifdef CONFIG_FAKE_SHMOO
-#include "../nvrm/core/common/nvrm_clocks_limits_private.h"
-#include "../nvrm/core/common/nvrm_power_dfs.h"
-#include <nvrm_diag.h>
-
-/*
- * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/tegra_lg_p990_kernel_oc_uv
- * Inspired by mblaster @ https://github.com/mblaster/linux_2.6.32_folio100
- */
-
-int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
-extern NvRmCpuShmoo fake_CpuShmoo;  // Stored faked CpuShmoo values
-extern NvRmDfs *fakeShmoo_Dfs;
-#endif // CONFIG_FAKE_SHMOO
-
 //Spica OTF Start
 #ifdef CONFIG_OTF_MAXSCOFF
 #include <linux/spica.h>
@@ -654,71 +638,6 @@ static ssize_t show_bios_limit(struct cpufreq_policy *policy, char *buf)
 	return sprintf(buf, "%u\n", policy->cpuinfo.max_freq);
 }
 
-#ifdef CONFIG_FAKE_SHMOO
-static ssize_t show_cpu_temp(struct cpufreq_policy *policy, char *buf)
-{
-	int pTemp = 0;
-
-	if( fakeShmoo_Dfs != NULL )
-	{
-		NvRmDtt* pDtt = &fakeShmoo_Dfs->ThermalThrottler;
-		NvOdmTmonTemperatureGet(pDtt->hOdmTcore, &pTemp);
-	}
-	return sprintf(buf, "%i\n",  pTemp);
-}
-
-static ssize_t show_frequency_voltage_table(struct cpufreq_policy *policy, char *buf)
-{
-	int i;
-	char *table = buf;
-
-	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
-	{
-		table += sprintf(table, "%d %d %d\n", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i], fake_CpuShmoo.ShmooVoltages[i], fake_CpuShmoo.ShmooVoltages[i] - FakeShmoo_UV_mV_Ptr[i] );
-	}
-	return table - buf;
-}
-
-static ssize_t show_scaling_available_frequencies(struct cpufreq_policy *policy, char *buf)
-{
-	int i;
-	char *table = buf;
-
-	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
-	{
-		table += sprintf(table, "%d ", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i]);
-	}
-	return table - buf;
-}
-
-static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
-{
-	int i;
-	char *table = buf;
-
-	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
-	{
-		table += sprintf(table, "%d ", FakeShmoo_UV_mV_Ptr[i] );
-	}
-	table += sprintf(table, "\n" );
-	return table - buf;
-}
-
-#ifndef DISABLE_FAKE_SHMOO_UV
-static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
-{
-	int ret = sscanf( buf, "%i %i %i %i %i %i %i %i", &FakeShmoo_UV_mV_Ptr[7], &FakeShmoo_UV_mV_Ptr[6],
-								&FakeShmoo_UV_mV_Ptr[5], &FakeShmoo_UV_mV_Ptr[4],
-								&FakeShmoo_UV_mV_Ptr[3], &FakeShmoo_UV_mV_Ptr[2],
-								&FakeShmoo_UV_mV_Ptr[1], &FakeShmoo_UV_mV_Ptr[0] );
-	if (ret != 1)
-		return -EINVAL;
-
-	return count;
-}
-#endif // DISABLE_FAKE_SHMOO_UV
-#endif // CONFIG_FAKE_SHMOO
-
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
 cpufreq_freq_attr_ro(cpuinfo_max_freq);
@@ -733,16 +652,6 @@ cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
-#ifdef CONFIG_FAKE_SHMOO
-cpufreq_freq_attr_ro(cpu_temp);
-cpufreq_freq_attr_ro(frequency_voltage_table);
-cpufreq_freq_attr_ro(scaling_available_frequencies);
-#ifdef DISABLE_FAKE_SHMOO_UV
-cpufreq_freq_attr_ro(UV_mV_table);
-#else
-cpufreq_freq_attr_rw(UV_mV_table);
-#endif
-#endif // CONFIG_FAKE_SHMOO
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -756,12 +665,6 @@ static struct attribute *default_attrs[] = {
 	&scaling_driver.attr,
 	&scaling_available_governors.attr,
 	&scaling_setspeed.attr,
-#ifdef CONFIG_FAKE_SHMOO
-	&cpu_temp.attr,
-	&frequency_voltage_table.attr,
-	&scaling_available_frequencies.attr,
-	&UV_mV_table.attr,
-#endif // CONFIG_FAKE_SHMOO
 	NULL
 };
 
@@ -2082,10 +1985,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_VDE
 			oldvdefreq = VDEFREQ;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			oldcoremv= NVRM_AP20_LOW_CORE_MV;
-			oldlowcpu = NVRM_AP20_LOW_CPU_MV;
-#endif
 #ifdef CONFIG_OTF_DDR2MIN
 			oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
 #endif
@@ -2120,10 +2019,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 910;
-			NVRM_AP20_LOW_CPU_MV = 760;
-#endif
 		} else if (PWONOFF == 5) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
@@ -2144,10 +2039,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #endif
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 895;
-			NVRM_AP20_LOW_CPU_MV = 750;
 #endif
 		} else if (PWONOFF == 6) {
 			NITROONOFF = 0;
@@ -2170,10 +2061,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 880;
-			NVRM_AP20_LOW_CPU_MV = 740;
-#endif
 		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
@@ -2194,10 +2081,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 #endif
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 925;
-			NVRM_AP20_LOW_CPU_MV = 770;
 #endif
 		}
 #endif // OTF_PSNIT
@@ -2244,10 +2127,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 910;
-			NVRM_AP20_LOW_CPU_MV = 760;
-#endif
 		} else if (PWONOFF == 2) {
 			NITROONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
@@ -2268,10 +2147,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #endif
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 895;
-			NVRM_AP20_LOW_CPU_MV = 750;
 #endif
 		} else if (PWONOFF == 3) {
 			NITROONOFF = 0;
@@ -2294,10 +2169,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 880;
-			NVRM_AP20_LOW_CPU_MV = 740;
-#endif
 		} else if (NITROONOFF == 1) {
 			PWONOFF = 0;
 #ifdef CONFIG_OTF_CPU1
@@ -2318,10 +2189,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #endif
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
-#endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = 925;
-			NVRM_AP20_LOW_CPU_MV = 770;
 #endif
 		} else if ((PWONOFF == 4) || (PWONOFF == 5) || (PWONOFF == 6)) { //applying powersave 4,5,6 for screen off purposes only, restoring normal to screen wakeup
 			NITROONOFF = 0;
@@ -2344,12 +2211,9 @@ static void powersave_late_resume(struct early_suspend *handler) {
 #ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = oldlpddr2;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-			NVRM_AP20_LOW_CORE_MV = oldcoremv;
-			NVRM_AP20_LOW_CPU_MV = oldlowcpu;
-#endif
 		}
 #endif // OTF_PSNIT
+
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2367,17 +2231,13 @@ static int __init cpufreq_core_init(void)
 {
 	int cpu;
 
-#ifdef CONFIG_FAKE_SHMOO
-	// Allocate some memory for the voltage tab
-	FakeShmoo_UV_mV_Ptr = kzalloc(sizeof(int)*(fake_CpuShmoo.ShmooVmaxIndex+1), GFP_KERNEL);
-#endif // CONFIG_FAKE_SHMOO
-
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_policy_cpu, cpu) = -1;
 		init_rwsem(&per_cpu(cpu_policy_rwsem, cpu));
 	}
 
-	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_sysdev_class.kset.kobj);
+	cpufreq_global_kobject = kobject_create_and_add("cpufreq",
+							    &cpu_sysdev_class.kset.kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
 

@@ -1288,13 +1288,21 @@ Ap20SystemClockSourceFind(
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
 #ifdef CONFIG_OTF_VDE
-	C1KHz = M1KHz = DomainKHz;
-	c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &C1KHz);
-	m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &M1KHz);
+        C1KHz = M1KHz = DomainKHz;
+        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                VDEFREQ,
+                MaxKHz, &C1KHz);
+        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                VDEFREQ,
+                MaxKHz, &M1KHz);
 #else
-	C1KHz = M1KHz = DomainKHz;
-	c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0), MaxKHz, &C1KHz);
-	m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0), MaxKHz, &M1KHz);
+        C1KHz = M1KHz = DomainKHz;
+        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
+                MaxKHz, &C1KHz);
+        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
+                MaxKHz, &M1KHz);
 #endif // OTF_VDE
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);

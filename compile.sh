@@ -18,8 +18,7 @@ export kinstsrc=/home/android/android/kernel-installer/source
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 export mthm=1
 # Compiler
-export cc=arm-linux-androideabi-
-export cc=/home/android/android/android-toolchain-eabi/bin/arm-linux-androideabi-
+export cc=arm-linux-gnueabi-
 ######################################################
 
 # Check executables
@@ -47,6 +46,8 @@ export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
 export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
 export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
+a()
+{
 if [ "$nooc" == "0" ]; then
 	if [ "$loc" == "1" ]; then
 		export ocver="LOC"
@@ -74,17 +75,18 @@ else
 		sed -i "s/$cver/$nver/g" $kh/.config
 	fi
 fi
+}
 
 export starttime=`date +%s`
-export USE_CCACHE=1
-export CCACHE_DIR=~/android/ccache
+#export USE_CCACHE=1
+#export CCACHE_DIR=~/android/ccache
 make clean -j $(($mthd*$mthm))
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 export endtime=`date +%s`
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
-export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
+export kver=`echo $cver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
 mkdir -p $ch/$cdir

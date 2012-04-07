@@ -200,7 +200,7 @@ static void tegra_machine_restart(char mode, const char *cmd)
 
 #if 0
 	if (pwky_shutdown)
-	{
+            {
             if ( (cmd)&&(*cmd == 'm'))
             {
                 printk ("cmd = %s \n",cmd);

@@ -1,9 +1,8 @@
 #!/bin/sh
 
-#export cc=arm-linux-gnueabi-
-export cc=/home/android/android/android-toolchain-eabi/bin/arm-eabi-
-export USE_CCACHE=1
-export CCACHE_DIR=~/android/ccache
+export cc=arm-linux-gnueabi-
+#export USE_CCACHE=1
+#export CCACHE_DIR=~/android/ccache
 
 if [ -e .config ]; then
     cp .config config.orig

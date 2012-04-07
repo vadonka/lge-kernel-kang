@@ -30,8 +30,6 @@
  *
  */
 
-#include <linux/module.h>
-#include <linux/init.h>
 #include "ap20rm_power_dfs.h"
 #include "nvassert.h"
 #include "nvrm_drf.h"

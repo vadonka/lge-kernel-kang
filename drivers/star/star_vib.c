@@ -496,6 +496,6 @@ static void __exit star_vib_exit(void)
 module_init(star_vib_init);
 module_exit(star_vib_exit);
 
-MODULE_AUTHOR("sk.hwang@lge.com");
+MODULE_AUTHOR("");
 MODULE_DESCRIPTION("driver of star viberator");
 MODULE_LICENSE("GPL");

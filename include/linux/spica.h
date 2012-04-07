@@ -36,11 +36,6 @@ extern unsigned int PWONOFF;
 extern unsigned int NITROONOFF;
 #endif
 
-#ifdef CONFIG_OTF_AP20LC
-extern unsigned int NVRM_AP20_LOW_CORE_MV;
-extern unsigned int NVRM_AP20_LOW_CPU_MV;
-#endif
-
 #ifdef CONFIG_OTF_MAXSCOFF
 extern unsigned int SCREENOFFFREQ;
 #endif

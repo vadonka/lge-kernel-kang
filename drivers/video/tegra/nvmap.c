@@ -21,7 +21,7 @@
  */
 
 #define NV_DEBUG 0
-#define NVMAP_DEBUG_FS 0
+#define NVMAP_DEBUG_FS 1
 #define NVMAP_DEBUG_COMPACTION 0
 
 
@@ -57,7 +57,7 @@
 #define NVMAP_SIZE SZ_2M
 #endif
 
-static unsigned int trace_mask = 0x00;
+static unsigned int trace_mask = 0;
 
 #define NVMAP_TRACE_NONE	0
 #define NVMAP_TRACE_ALLOC	1
@@ -3308,8 +3308,8 @@ static int __init nvmap_heap_arg(char *options)
 	if (nvmap_carveout_cmds < ARRAY_SIZE(nvmap_carveout_cmd_size)) {
 		nvmap_carveout_cmd_base[nvmap_carveout_cmds] = start;
 		nvmap_carveout_cmd_size[nvmap_carveout_cmds] = size;
-		pr_info("%s: total carveout size=%d\n", __func__, size);
-		nvmap_carveout_size += size;
+        pr_info("%s: total carveout size=%d\n", __func__, size);
+        nvmap_carveout_size += size;
 		nvmap_carveout_cmds++;
 	}
 	return 0;

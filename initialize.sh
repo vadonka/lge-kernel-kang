@@ -1,16 +1,15 @@
 #!/bin/sh
 
-#export cc=arm-linux-gnueabi-
-export cc=/home/android/android/android-toolchain-eabi/bin/arm-eabi-
-export USE_CCACHE=1
-export CCACHE_DIR=~/android/ccache
+export cc=arm-linux-gnueabi-
+#export USE_CCACHE=1
+#export CCACHE_DIR=~/android/ccache
 
 if [ -e .config ]; then
 	rm -f .config
 fi
 
 if [ -z $1 ]; then
-	export DEFCONFIG="vadonka_loc_defconfig"
+	export DEFCONFIG="vadonka_defconfig"
 else
 	export DEFCONFIG="$1"
 fi

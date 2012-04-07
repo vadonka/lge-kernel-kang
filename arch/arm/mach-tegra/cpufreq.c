@@ -144,6 +144,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
 	set_freezable();
+
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 
 		req = NvRmPrivPmThread();

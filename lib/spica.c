@@ -54,10 +54,6 @@ unsigned int VDEHIGH = 700000;
 unsigned int PWONOFF = 0;
 unsigned int NITROONOFF = 0;
 #endif
-#ifdef CONFIG_OTF_AP20LC
-unsigned int NVRM_AP20_LOW_CORE_MV = 925;
-unsigned int NVRM_AP20_LOW_CPU_MV = 770;
-#endif
 
 #ifdef CONFIG_OTF_MAXSCOFF
 /*******************************************/

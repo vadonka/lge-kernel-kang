@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2009 LGE, Inc.
  *
- * Author: Changsu Ha <cs77.ha@lge.com>
+ * Author: Changsu Ha <>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@
 /**
 	@brief		 star(lgp990) power key
  
-	@author		 cs77.ha@lge.com
+	@author		
 	@date		 2010-04-13
  
 	@version	 V1.00		 2010.04.13		 Changsu Ha	 Create

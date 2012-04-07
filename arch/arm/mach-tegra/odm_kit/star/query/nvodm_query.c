@@ -49,7 +49,6 @@
 #include "tegra_devkit_custopt.h"
 #include "nvodm_keylist_reserved.h"
 #include "nvrm_drf.h"
-#include <linux/kernel.h>
 
 #define NVODM_ENABLE_EMC_DVFS (1)
 
@@ -71,8 +70,9 @@ s_NvOdmQueryProjectNameSetting[] = {'O','D','M',' ','K','i','t',0};
 static const NvOdmDownloadTransport
 s_NvOdmQueryDownloadTransportSetting = NvOdmDownloadTransport_None;
 
-#if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
 
+
+#if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -347,7 +347,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
+                300000,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
@@ -676,7 +676,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
+                300000,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {

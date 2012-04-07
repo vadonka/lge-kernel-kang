@@ -2790,11 +2790,9 @@ static const NvRmModuleID s_Ap15PllM0UsagePolicy[] =
     NvRmModuleID_Epp,
     NvRmModuleID_Mpe,
     NvRmModuleID_Vde,
-#if defined (CONFIG_MACH_STAR_TMUS)
     NvRmModuleID_Uart,
-    NvRmModuleID_Slink //===> adding this line };
-#elif defined (CONFIG_MACH_STAR_REV_F)
-    NvRmModuleID_Uart
+#ifdef CONFIG_MACH_STAR_TMUS
+    NvRmModuleID_Slink
 #endif
 };
 

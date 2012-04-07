@@ -398,7 +398,7 @@ static int __devinit touchLED_probe(struct platform_device *pdev)
     /* Add leds class support */
     s_touchLED.leddev.name = "buttonpanel";
     s_touchLED.leddev.brightness_set = _led_brightness_set;
-    s_touchLED.leddev.max_brightness = 200;
+    s_touchLED.leddev.max_brightness = 255;
     s_touchLED.leddev.flags = 0;
     s_touchLED.pulse_interval = 0;
     led_classdev_register(&pdev->dev, &s_touchLED.leddev);

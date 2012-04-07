@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #export cc=arm-linux-gnueabi-
-export cc=/home/android/android/android-toolchain-eabi/bin/arm-eabi-
+export cc=/home/android/android/android-toolchain-eabi/bin/arm-linux-androideabi-
 export USE_CCACHE=1
 export CCACHE_DIR=~/android/ccache
 

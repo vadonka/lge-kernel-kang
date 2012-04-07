@@ -748,9 +748,10 @@ static int tegra_suspend_enter(suspend_state_t state)
 			irq_get_chip(irq)->irq_unmask(&desc->irq_data);
 		}
 	}
-	unmask_wakeup_suspended_irqs();
 	*/
-
+	
+	unmask_wakeup_suspended_irqs();
+	
 	if (!pdata->dram_suspend || !iram_save) {
 		/* lie about the power state so that the RM restarts DVFS */
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP1);
@@ -765,8 +766,8 @@ static int tegra_suspend_enter(suspend_state_t state)
 			irq_get_chip(irq)->irq_mask(&desc->irq_data);
 		}
 	}
-	mask_wakeup_suspended_irqs();
 	*/
+	mask_wakeup_suspended_irqs();
 
 	/* Clear DPD sample */
 	writel(0x0, pmc + PMC_DPD_SAMPLE);

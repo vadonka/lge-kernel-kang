@@ -1060,7 +1060,6 @@ static u32 sleep_pinmux_reg[TRISTATE_REG_NUM + PIN_MUX_CTL_REG_NUM + PULLUPDOWN_
 };
 #endif
 
-#ifdef CONFIG_DEBUG_FS
 unsigned long get_reg_data( int pg, int reg )
 {
 	unsigned long ret = 0;
@@ -1170,7 +1169,6 @@ void set_reg_data( int pg, long data, int reg )
 	}
 
 }
-#endif
 
 //20100724  for gpio setting while sleep [LGE_END]
 
