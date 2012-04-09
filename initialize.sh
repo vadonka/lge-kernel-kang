@@ -7,7 +7,7 @@ if [ -e .config ]; then
 fi
 
 if [ -z $1 ]; then
-	export DEFCONFIG="vadonka_oc_defconfig"
+	export DEFCONFIG="vadonka_defconfig"
 else
 	export DEFCONFIG="$1"
 fi
