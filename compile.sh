@@ -43,40 +43,40 @@ fi
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
-export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
 export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
 export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
-a()
-{
 if [ "$nooc" == "0" ]; then
-	if [ "$loc" == "1" ]; then
-		export ocver="LOC"
-	else
-		export ocver="HOC"
-	fi
-else
 	export ocver="STOCK"
+else
+	export ocver="OC"
 fi
 
 if [ "$dsbatt" == "0" ]; then
 	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
+		echo "Kernel version string: $nver"
+		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	else
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
+		echo "Kernel version string: $nver"
+		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	fi
 else
 	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS"'`
+		echo "Kernel version string: $nver"
+		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	else
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_OTF"'`
+		echo "Kernel version string: $nver"
+		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	fi
 fi
-}
 
 export starttime=`date +%s`
 make clean -j $(($mthd*$mthm))

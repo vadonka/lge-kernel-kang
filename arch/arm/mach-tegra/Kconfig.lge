@@ -29,10 +29,12 @@ config FAKE_SHMOO
 
 config MAX_CPU_OC_FREQ
 	int "Maximum CPU Overclock Frequency"
+	depends on FAKE_SHMOO
 	default 1408000
 
 config MAX_CPU_OC_VOLT
 	int "Maximum CPU Overclock Voltage"
+	depends on FAKE_SHMOO
 	default 1255
 
 config BOOST_PERIPHERALS
