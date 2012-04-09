@@ -17,7 +17,6 @@
 #include <linux/buffer_head.h>
 #include <linux/mutex.h>
 #include <linux/mount.h>
-#include <linux/slab.h>
 
 #define ERROR(fmt, args...) printk(KERN_ERR "block2mtd: " fmt "\n" , ## args)
 #define INFO(fmt, args...) printk(KERN_INFO "block2mtd: " fmt "\n" , ## args)
@@ -91,6 +90,7 @@ static int block2mtd_erase(struct mtd_info *mtd, struct erase_info *instr)
 	} else
 		instr->state = MTD_ERASE_DONE;
 
+	instr->state = MTD_ERASE_DONE;
 	mtd_erase_callback(instr);
 	return err;
 }
@@ -224,7 +224,7 @@ static void block2mtd_free_device(struct block2mtd_dev *dev)
 	if (dev->blkdev) {
 		invalidate_mapping_pages(dev->blkdev->bd_inode->i_mapping,
 					0, -1);
-		blkdev_put(dev->blkdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
+		close_bdev_exclusive(dev->blkdev, FMODE_READ|FMODE_WRITE);
 	}
 
 	kfree(dev);
@@ -234,7 +234,6 @@ static void block2mtd_free_device(struct block2mtd_dev *dev)
 /* FIXME: ensure that mtd->size % erase_size == 0 */
 static struct block2mtd_dev *add_device(char *devname, int erase_size)
 {
-	const fmode_t mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 	struct block_device *bdev;
 	struct block2mtd_dev *dev;
 	char *name;
@@ -247,7 +246,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 		return NULL;
 
 	/* Get a handle on the device */
-	bdev = blkdev_get_by_path(devname, mode, dev);
+	bdev = open_bdev_exclusive(devname, FMODE_READ|FMODE_WRITE, NULL);
 #ifndef MODULE
 	if (IS_ERR(bdev)) {
 
@@ -255,8 +254,9 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 		   to resolve the device name by other means. */
 
 		dev_t devt = name_to_dev_t(devname);
-		if (devt)
-			bdev = blkdev_get_by_dev(devt, mode, dev);
+		if (devt) {
+			bdev = open_by_devnum(devt, FMODE_WRITE | FMODE_READ);
+		}
 	}
 #endif
 
@@ -275,10 +275,12 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 
 	/* Setup the MTD structure */
 	/* make the name contain the block device in */
-	name = kasprintf(GFP_KERNEL, "block2mtd: %s", devname);
+	name = kmalloc(sizeof("block2mtd: ") + strlen(devname) + 1,
+			GFP_KERNEL);
 	if (!name)
 		goto devinit_err;
 
+	sprintf(name, "block2mtd: %s", devname);
 	dev->mtd.name = name;
 
 	dev->mtd.size = dev->blkdev->bd_inode->i_size & PAGE_MASK;
@@ -294,8 +296,8 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size)
 	dev->mtd.priv = dev;
 	dev->mtd.owner = THIS_MODULE;
 
-	if (mtd_device_register(&dev->mtd, NULL, 0)) {
-		/* Device didn't get added, so free the entry */
+	if (add_mtd_device(&dev->mtd)) {
+		/* Device didnt get added, so free the entry */
 		goto devinit_err;
 	}
 	list_add(&dev->list, &blkmtd_device_list);
@@ -465,7 +467,7 @@ static void __devexit block2mtd_exit(void)
 	list_for_each_safe(pos, next, &blkmtd_device_list) {
 		struct block2mtd_dev *dev = list_entry(pos, typeof(*dev), list);
 		block2mtd_sync(&dev->mtd);
-		mtd_device_unregister(&dev->mtd);
+		del_mtd_device(&dev->mtd);
 		INFO("mtd%d: [%s] removed", dev->mtd.index,
 				dev->mtd.name + strlen("block2mtd: "));
 		list_del(&dev->list);

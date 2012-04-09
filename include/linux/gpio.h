@@ -3,17 +3,6 @@
 
 /* see Documentation/gpio.txt */
 
-/* make these flag values available regardless of GPIO kconfig options */
-#define GPIOF_DIR_OUT	(0 << 0)
-#define GPIOF_DIR_IN	(1 << 0)
-
-#define GPIOF_INIT_LOW	(0 << 1)
-#define GPIOF_INIT_HIGH	(1 << 1)
-
-#define GPIOF_IN		(GPIOF_DIR_IN)
-#define GPIOF_OUT_INIT_LOW	(GPIOF_DIR_OUT | GPIOF_INIT_LOW)
-#define GPIOF_OUT_INIT_HIGH	(GPIOF_DIR_OUT | GPIOF_INIT_HIGH)
-
 #ifdef CONFIG_GENERIC_GPIO
 #include <asm/gpio.h>
 
@@ -24,8 +13,6 @@
 #include <linux/errno.h>
 
 struct device;
-struct gpio;
-struct gpio_chip;
 
 /*
  * Some platforms don't support the GPIO programming interface.
@@ -36,9 +23,9 @@ struct gpio_chip;
  * warning when something is wrongly called.
  */
 
-static inline bool gpio_is_valid(int number)
+static inline int gpio_is_valid(int number)
 {
-	return false;
+	return 0;
 }
 
 static inline int gpio_request(unsigned gpio, const char *label)
@@ -46,26 +33,7 @@ static inline int gpio_request(unsigned gpio, const char *label)
 	return -ENOSYS;
 }
 
-static inline int gpio_request_one(unsigned gpio,
-					unsigned long flags, const char *label)
-{
-	return -ENOSYS;
-}
-
-static inline int gpio_request_array(const struct gpio *array, size_t num)
-{
-	return -ENOSYS;
-}
-
 static inline void gpio_free(unsigned gpio)
-{
-	might_sleep();
-
-	/* GPIO can never have been requested */
-	WARN_ON(1);
-}
-
-static inline void gpio_free_array(const struct gpio *array, size_t num)
 {
 	might_sleep();
 
@@ -79,11 +47,6 @@ static inline int gpio_direction_input(unsigned gpio)
 }
 
 static inline int gpio_direction_output(unsigned gpio, int value)
-{
-	return -ENOSYS;
-}
-
-static inline int gpio_set_debounce(unsigned gpio, unsigned debounce)
 {
 	return -ENOSYS;
 }
@@ -136,12 +99,6 @@ static inline int gpio_export_link(struct device *dev, const char *name,
 	return -EINVAL;
 }
 
-static inline int gpio_sysfs_set_active_low(unsigned gpio, int value)
-{
-	/* GPIO can never have been requested */
-	WARN_ON(1);
-	return -EINVAL;
-}
 
 static inline void gpio_unexport(unsigned gpio)
 {

@@ -3,9 +3,8 @@
  * Provides Bus interface for MIIM regs
  *
  * Author: Andy Fleming <afleming@freescale.com>
- * Modifier: Sandeep Gopalpet <sandeep.kumar@freescale.com>
  *
- * Copyright 2002-2004, 2008-2009 Freescale Semiconductor, Inc.
+ * Copyright (c) 2002-2004,2008 Freescale Semiconductor, Inc.
  *
  * Based on gianfar_mii.c and ucc_geth_mii.c (Li Yang, Kim Phillips)
  *
@@ -35,7 +34,6 @@
 #include <linux/mii.h>
 #include <linux/phy.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/of_platform.h>
 
@@ -46,11 +44,6 @@
 
 #include "gianfar.h"
 #include "fsl_pq_mdio.h"
-
-struct fsl_pq_mdio_priv {
-	void __iomem *map;
-	struct fsl_pq_mdio __iomem *regs;
-};
 
 /*
  * Write value to the PHY at mii_id at register regnum,
@@ -109,23 +102,16 @@ int fsl_pq_local_mdio_read(struct fsl_pq_mdio __iomem *regs,
 	return value;
 }
 
-static struct fsl_pq_mdio __iomem *fsl_pq_mdio_get_regs(struct mii_bus *bus)
-{
-	struct fsl_pq_mdio_priv *priv = bus->priv;
-
-	return priv->regs;
-}
-
 /*
  * Write value to the PHY at mii_id at register regnum,
  * on the bus, waiting until the write is done before returning.
  */
 int fsl_pq_mdio_write(struct mii_bus *bus, int mii_id, int regnum, u16 value)
 {
-	struct fsl_pq_mdio __iomem *regs = fsl_pq_mdio_get_regs(bus);
+	struct fsl_pq_mdio __iomem *regs = (void __iomem *)bus->priv;
 
 	/* Write to the local MII regs */
-	return fsl_pq_local_mdio_write(regs, mii_id, regnum, value);
+	return(fsl_pq_local_mdio_write(regs, mii_id, regnum, value));
 }
 
 /*
@@ -134,16 +120,16 @@ int fsl_pq_mdio_write(struct mii_bus *bus, int mii_id, int regnum, u16 value)
  */
 int fsl_pq_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 {
-	struct fsl_pq_mdio __iomem *regs = fsl_pq_mdio_get_regs(bus);
+	struct fsl_pq_mdio __iomem *regs = (void __iomem *)bus->priv;
 
 	/* Read the local MII regs */
-	return fsl_pq_local_mdio_read(regs, mii_id, regnum);
+	return(fsl_pq_local_mdio_read(regs, mii_id, regnum));
 }
 
 /* Reset the MIIM registers, and wait for the bus to free */
 static int fsl_pq_mdio_reset(struct mii_bus *bus)
 {
-	struct fsl_pq_mdio __iomem *regs = fsl_pq_mdio_get_regs(bus);
+	struct fsl_pq_mdio __iomem *regs = (void __iomem *)bus->priv;
 	int timeout = PHY_INIT_TIMEOUT;
 
 	mutex_lock(&bus->mdio_lock);
@@ -203,7 +189,7 @@ static int fsl_pq_mdio_find_free(struct mii_bus *new_bus)
 
 
 #if defined(CONFIG_GIANFAR) || defined(CONFIG_GIANFAR_MODULE)
-static u32 __iomem *get_gfar_tbipa(struct fsl_pq_mdio __iomem *regs, struct device_node *np)
+static u32 __iomem *get_gfar_tbipa(struct fsl_pq_mdio __iomem *regs)
 {
 	struct gfar __iomem *enet_regs;
 
@@ -212,16 +198,10 @@ static u32 __iomem *get_gfar_tbipa(struct fsl_pq_mdio __iomem *regs, struct devi
 	 * Also, we have to cast back to struct gfar because of
 	 * definition weirdness done in gianfar.h.
 	 */
-	if(of_device_is_compatible(np, "fsl,gianfar-mdio") ||
-		of_device_is_compatible(np, "fsl,gianfar-tbi") ||
-		of_device_is_compatible(np, "gianfar")) {
-		enet_regs = (struct gfar __iomem *)regs;
-		return &enet_regs->tbipa;
-	} else if (of_device_is_compatible(np, "fsl,etsec2-mdio") ||
-			of_device_is_compatible(np, "fsl,etsec2-tbi")) {
-		return of_iomap(np, 1);
-	} else
-		return NULL;
+	enet_regs = (struct gfar __iomem *)
+		((char __iomem *)regs - offsetof(struct gfar, gfar_mii_regs));
+
+	return &enet_regs->tbipa;
 }
 #endif
 
@@ -265,64 +245,38 @@ static int get_ucc_id_for_range(u64 start, u64 end, u32 *ucc_id)
 #endif
 
 
-static int fsl_pq_mdio_probe(struct platform_device *ofdev)
+static int fsl_pq_mdio_probe(struct of_device *ofdev,
+		const struct of_device_id *match)
 {
-	struct device_node *np = ofdev->dev.of_node;
+	struct device_node *np = ofdev->node;
 	struct device_node *tbi;
-	struct fsl_pq_mdio_priv *priv;
-	struct fsl_pq_mdio __iomem *regs = NULL;
-	void __iomem *map;
+	struct fsl_pq_mdio __iomem *regs;
 	u32 __iomem *tbipa;
 	struct mii_bus *new_bus;
 	int tbiaddr = -1;
-	const u32 *addrp;
-	u64 addr = 0, size = 0;
-	int err;
-
-	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-	if (!priv)
-		return -ENOMEM;
+	u64 addr, size;
+	int err = 0;
 
 	new_bus = mdiobus_alloc();
-	if (!new_bus) {
-		err = -ENOMEM;
-		goto err_free_priv;
-	}
+	if (NULL == new_bus)
+		return -ENOMEM;
 
 	new_bus->name = "Freescale PowerQUICC MII Bus",
 	new_bus->read = &fsl_pq_mdio_read,
 	new_bus->write = &fsl_pq_mdio_write,
 	new_bus->reset = &fsl_pq_mdio_reset,
-	new_bus->priv = priv;
 	fsl_pq_mdio_bus_name(new_bus->id, np);
 
-	addrp = of_get_address(np, 0, &size, NULL);
-	if (!addrp) {
-		err = -EINVAL;
-		goto err_free_bus;
-	}
-
 	/* Set the PHY base address */
-	addr = of_translate_address(np, addrp);
-	if (addr == OF_BAD_ADDR) {
-		err = -EINVAL;
-		goto err_free_bus;
-	}
+	addr = of_translate_address(np, of_get_address(np, 0, &size, NULL));
+	regs = ioremap(addr, size);
 
-	map = ioremap(addr, size);
-	if (!map) {
+	if (NULL == regs) {
 		err = -ENOMEM;
 		goto err_free_bus;
 	}
-	priv->map = map;
 
-	if (of_device_is_compatible(np, "fsl,gianfar-mdio") ||
-			of_device_is_compatible(np, "fsl,gianfar-tbi") ||
-			of_device_is_compatible(np, "fsl,ucc-mdio") ||
-			of_device_is_compatible(np, "ucc_geth_phy"))
-		map -= offsetof(struct fsl_pq_mdio, miimcfg);
-	regs = map;
-	priv->regs = regs;
+	new_bus->priv = (void __force *)regs;
 
 	new_bus->irq = kcalloc(PHY_MAX_ADDR, sizeof(int), GFP_KERNEL);
 
@@ -336,15 +290,9 @@ static int fsl_pq_mdio_probe(struct platform_device *ofdev)
 
 	if (of_device_is_compatible(np, "fsl,gianfar-mdio") ||
 			of_device_is_compatible(np, "fsl,gianfar-tbi") ||
-			of_device_is_compatible(np, "fsl,etsec2-mdio") ||
-			of_device_is_compatible(np, "fsl,etsec2-tbi") ||
 			of_device_is_compatible(np, "gianfar")) {
 #if defined(CONFIG_GIANFAR) || defined(CONFIG_GIANFAR_MODULE)
-		tbipa = get_gfar_tbipa(regs, np);
-		if (!tbipa) {
-			err = -EINVAL;
-			goto err_free_irqs;
-		}
+		tbipa = get_gfar_tbipa(regs);
 #else
 		err = -ENODEV;
 		goto err_free_irqs;
@@ -415,29 +363,26 @@ static int fsl_pq_mdio_probe(struct platform_device *ofdev)
 err_free_irqs:
 	kfree(new_bus->irq);
 err_unmap_regs:
-	iounmap(priv->map);
+	iounmap(regs);
 err_free_bus:
 	kfree(new_bus);
-err_free_priv:
-	kfree(priv);
+
 	return err;
 }
 
 
-static int fsl_pq_mdio_remove(struct platform_device *ofdev)
+static int fsl_pq_mdio_remove(struct of_device *ofdev)
 {
 	struct device *device = &ofdev->dev;
 	struct mii_bus *bus = dev_get_drvdata(device);
-	struct fsl_pq_mdio_priv *priv = bus->priv;
 
 	mdiobus_unregister(bus);
 
 	dev_set_drvdata(device, NULL);
 
-	iounmap(priv->map);
+	iounmap((void __iomem *)bus->priv);
 	bus->priv = NULL;
 	mdiobus_free(bus);
-	kfree(priv);
 
 	return 0;
 }
@@ -460,35 +405,26 @@ static struct of_device_id fsl_pq_mdio_match[] = {
 	{
 		.compatible = "fsl,gianfar-mdio",
 	},
-	{
-		.compatible = "fsl,etsec2-tbi",
-	},
-	{
-		.compatible = "fsl,etsec2-mdio",
-	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, fsl_pq_mdio_match);
 
-static struct platform_driver fsl_pq_mdio_driver = {
-	.driver = {
-		.name = "fsl-pq_mdio",
-		.owner = THIS_MODULE,
-		.of_match_table = fsl_pq_mdio_match,
-	},
+static struct of_platform_driver fsl_pq_mdio_driver = {
+	.name = "fsl-pq_mdio",
 	.probe = fsl_pq_mdio_probe,
 	.remove = fsl_pq_mdio_remove,
+	.match_table = fsl_pq_mdio_match,
 };
 
 int __init fsl_pq_mdio_init(void)
 {
-	return platform_driver_register(&fsl_pq_mdio_driver);
+	return of_register_platform_driver(&fsl_pq_mdio_driver);
 }
 module_init(fsl_pq_mdio_init);
 
 void fsl_pq_mdio_exit(void)
 {
-	platform_driver_unregister(&fsl_pq_mdio_driver);
+	of_unregister_platform_driver(&fsl_pq_mdio_driver);
 }
 module_exit(fsl_pq_mdio_exit);
 MODULE_LICENSE("GPL");

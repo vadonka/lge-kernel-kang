@@ -6,7 +6,7 @@
  *  Copyright:	MontaVista Software, Inc.
  *
  * Spliting done by: Marek Vasut <marek.vasut@gmail.com>
- * If something doesn't work and it worked before spliting, e-mail me,
+ * If something doesnt work and it worked before spliting, e-mail me,
  * dont bother Nicolas please ;-)
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/suspend.h>
+#include <linux/slab.h>
 #include <linux/kthread.h>
 #include <linux/freezer.h>
 #include <linux/ucb1400.h>
@@ -354,13 +355,10 @@ static int ucb1400_ts_probe(struct platform_device *dev)
 		goto err;
 	}
 
-	/* Only in case the IRQ line wasn't supplied, try detecting it */
-	if (ucb->irq < 0) {
-		error = ucb1400_ts_detect_irq(ucb);
-		if (error) {
-			printk(KERN_ERR "UCB1400: IRQ probe failed\n");
-			goto err_free_devs;
-		}
+	error = ucb1400_ts_detect_irq(ucb);
+	if (error) {
+		printk(KERN_ERR "UCB1400: IRQ probe failed\n");
+		goto err_free_devs;
 	}
 
 	init_waitqueue_head(&ucb->ts_wait);

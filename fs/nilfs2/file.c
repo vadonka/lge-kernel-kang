@@ -27,7 +27,7 @@
 #include "nilfs.h"
 #include "segment.h"
 
-int nilfs_sync_file(struct file *file, int datasync)
+int nilfs_sync_file(struct file *file, struct dentry *dentry, int datasync)
 {
 	/*
 	 * Called from fsync() system call
@@ -37,7 +37,7 @@ int nilfs_sync_file(struct file *file, int datasync)
 	 * This function should be implemented when the writeback function
 	 * will be implemented.
 	 */
-	struct inode *inode = file->f_mapping->host;
+	struct inode *inode = dentry->d_inode;
 	int err;
 
 	if (!nilfs_inode_dirty(inode))
@@ -59,7 +59,7 @@ static int nilfs_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 	struct nilfs_transaction_info ti;
 	int ret;
 
-	if (unlikely(nilfs_near_disk_full(inode->i_sb->s_fs_info)))
+	if (unlikely(nilfs_near_disk_full(NILFS_SB(inode->i_sb)->s_nilfs)))
 		return VM_FAULT_SIGBUS; /* -ENOSPC */
 
 	lock_page(page);
@@ -72,9 +72,10 @@ static int nilfs_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 	/*
 	 * check to see if the page is mapped already (no holes)
 	 */
-	if (PageMappedToDisk(page))
+	if (PageMappedToDisk(page)) {
+		unlock_page(page);
 		goto mapped;
-
+	}
 	if (page_has_buffers(page)) {
 		struct buffer_head *bh, *head;
 		int fully_mapped = 1;
@@ -89,6 +90,7 @@ static int nilfs_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 		if (fully_mapped) {
 			SetPageMappedToDisk(page);
+			unlock_page(page);
 			goto mapped;
 		}
 	}
@@ -103,16 +105,16 @@ static int nilfs_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf)
 		return VM_FAULT_SIGBUS;
 
 	ret = block_page_mkwrite(vma, vmf, nilfs_get_block);
-	if (ret != VM_FAULT_LOCKED) {
+	if (unlikely(ret)) {
 		nilfs_transaction_abort(inode->i_sb);
 		return ret;
 	}
-	nilfs_set_file_dirty(inode, 1 << (PAGE_SHIFT - inode->i_blkbits));
 	nilfs_transaction_commit(inode->i_sb);
 
  mapped:
+	SetPageChecked(page);
 	wait_on_page_writeback(page);
-	return VM_FAULT_LOCKED;
+	return 0;
 }
 
 static const struct vm_operations_struct nilfs_file_vm_ops = {
@@ -140,7 +142,7 @@ const struct file_operations nilfs_file_operations = {
 	.aio_write	= generic_file_aio_write,
 	.unlocked_ioctl	= nilfs_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl	= nilfs_compat_ioctl,
+	.compat_ioctl	= nilfs_ioctl,
 #endif	/* CONFIG_COMPAT */
 	.mmap		= nilfs_file_mmap,
 	.open		= generic_file_open,
@@ -153,7 +155,6 @@ const struct inode_operations nilfs_file_inode_operations = {
 	.truncate	= nilfs_truncate,
 	.setattr	= nilfs_setattr,
 	.permission     = nilfs_permission,
-	.fiemap		= nilfs_fiemap,
 };
 
 /* end of file */

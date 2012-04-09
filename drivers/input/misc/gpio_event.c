@@ -19,7 +19,6 @@
 #include <linux/gpio_event.h>
 #include <linux/hrtimer.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 
 struct gpio_event {
 	struct gpio_event_input_devs *input_devs;
@@ -119,7 +118,7 @@ void gpio_event_resume(struct early_suspend *h)
 }
 #endif
 
-static int gpio_event_probe(struct platform_device *pdev)
+static int __init gpio_event_probe(struct platform_device *pdev)
 {
 	int err;
 	struct gpio_event *ip;

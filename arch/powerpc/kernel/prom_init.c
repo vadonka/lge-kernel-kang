@@ -311,31 +311,12 @@ static void __init prom_print_hex(unsigned long val)
 	call_prom("write", 3, 1, _prom->stdout, buf, nibbles);
 }
 
-/* max number of decimal digits in an unsigned long */
-#define UL_DIGITS 21
-static void __init prom_print_dec(unsigned long val)
-{
-	int i, size;
-	char buf[UL_DIGITS+1];
-	struct prom_t *_prom = &RELOC(prom);
-
-	for (i = UL_DIGITS-1; i >= 0;  i--) {
-		buf[i] = (val % 10) + '0';
-		val = val/10;
-		if (val == 0)
-			break;
-	}
-	/* shift stuff down */
-	size = UL_DIGITS - i;
-	call_prom("write", 3, 1, _prom->stdout, buf+i, size);
-}
 
 static void __init prom_printf(const char *format, ...)
 {
 	const char *p, *q, *s;
 	va_list args;
 	unsigned long v;
-	long vs;
 	struct prom_t *_prom = &RELOC(prom);
 
 	va_start(args, format);
@@ -368,37 +349,6 @@ static void __init prom_printf(const char *format, ...)
 			++q;
 			v = va_arg(args, unsigned long);
 			prom_print_hex(v);
-			break;
-		case 'd':
-			++q;
-			vs = va_arg(args, int);
-			if (vs < 0) {
-				prom_print(RELOC("-"));
-				vs = -vs;
-			}
-			prom_print_dec(vs);
-			break;
-		case 'l':
-			++q;
-			if (*q == 0)
-				break;
-			else if (*q == 'x') {
-				++q;
-				v = va_arg(args, unsigned long);
-				prom_print_hex(v);
-			} else if (*q == 'u') { /* '%lu' */
-				++q;
-				v = va_arg(args, unsigned long);
-				prom_print_dec(v);
-			} else if (*q == 'd') { /* %ld */
-				++q;
-				vs = va_arg(args, long);
-				if (vs < 0) {
-					prom_print(RELOC("-"));
-					vs = -vs;
-				}
-				prom_print_dec(vs);
-			}
 			break;
 		}
 	}
@@ -700,15 +650,9 @@ static void __init early_cmdline_parse(void)
 #endif /* CONFIG_PCI_MSI */
 #ifdef CONFIG_PPC_SMLPAR
 #define OV5_CMO			0x80	/* Cooperative Memory Overcommitment */
-#define OV5_XCMO			0x40	/* Page Coalescing */
 #else
 #define OV5_CMO			0x00
-#define OV5_XCMO			0x00
 #endif
-#define OV5_TYPE1_AFFINITY	0x80	/* Type 1 NUMA affinity */
-
-/* Option Vector 6: IBM PAPR hints */
-#define OV6_LINUX		0x02	/* Linux is our OS */
 
 /*
  * The architecture vector has an array of PVR mask/value pairs,
@@ -721,7 +665,7 @@ static unsigned char ibm_architecture_vec[] = {
 	W(0xffffffff), W(0x0f000003),	/* all 2.06-compliant */
 	W(0xffffffff), W(0x0f000002),	/* all 2.05-compliant */
 	W(0xfffffffe), W(0x0f000001),	/* all 2.04-compliant and earlier */
-	6 - 1,				/* 6 option vectors */
+	5 - 1,				/* 5 option vectors */
 
 	/* option vector 1: processor architectures supported */
 	3 - 2,				/* length */
@@ -753,29 +697,12 @@ static unsigned char ibm_architecture_vec[] = {
 	0,				/* don't halt */
 
 	/* option vector 5: PAPR/OF options */
-	13 - 2,				/* length */
+	5 - 2,				/* length */
 	0,				/* don't ignore, don't halt */
 	OV5_LPAR | OV5_SPLPAR | OV5_LARGE_PAGES | OV5_DRCONF_MEMORY |
 	OV5_DONATE_DEDICATE_CPU | OV5_MSI,
 	0,
-	OV5_CMO | OV5_XCMO,
-	OV5_TYPE1_AFFINITY,
-	0,
-	0,
-	0,
-	/* WARNING: The offset of the "number of cores" field below
-	 * must match by the macro below. Update the definition if
-	 * the structure layout changes.
-	 */
-#define IBM_ARCH_VEC_NRCORES_OFFSET	100
-	W(NR_CPUS),			/* number of cores supported */
-
-	/* option vector 6: IBM PAPR hints */
-	4 - 2,				/* length */
-	0,
-	0,
-	OV6_LINUX,
-
+	OV5_CMO,
 };
 
 /* Old method - ELF header with PT_NOTE sections */
@@ -865,70 +792,13 @@ static struct fake_elf {
 	}
 };
 
-static int __init prom_count_smt_threads(void)
-{
-	phandle node;
-	char type[64];
-	unsigned int plen;
-
-	/* Pick up th first CPU node we can find */
-	for (node = 0; prom_next_node(&node); ) {
-		type[0] = 0;
-		prom_getprop(node, "device_type", type, sizeof(type));
-
-		if (strcmp(type, RELOC("cpu")))
-			continue;
-		/*
-		 * There is an entry for each smt thread, each entry being
-		 * 4 bytes long.  All cpus should have the same number of
-		 * smt threads, so return after finding the first.
-		 */
-		plen = prom_getproplen(node, "ibm,ppc-interrupt-server#s");
-		if (plen == PROM_ERROR)
-			break;
-		plen >>= 2;
-		prom_debug("Found %lu smt threads per core\n", (unsigned long)plen);
-
-		/* Sanity check */
-		if (plen < 1 || plen > 64) {
-			prom_printf("Threads per core %lu out of bounds, assuming 1\n",
-				    (unsigned long)plen);
-			return 1;
-		}
-		return plen;
-	}
-	prom_debug("No threads found, assuming 1 per core\n");
-
-	return 1;
-
-}
-
-
 static void __init prom_send_capabilities(void)
 {
 	ihandle elfloader, root;
 	prom_arg_t ret;
-	u32 *cores;
 
 	root = call_prom("open", 1, 1, ADDR("/"));
 	if (root != 0) {
-		/* We need to tell the FW about the number of cores we support.
-		 *
-		 * To do that, we count the number of threads on the first core
-		 * (we assume this is the same for all cores) and use it to
-		 * divide NR_CPUS.
-		 */
-		cores = (u32 *)PTRRELOC(&ibm_architecture_vec[IBM_ARCH_VEC_NRCORES_OFFSET]);
-		if (*cores != NR_CPUS) {
-			prom_printf("WARNING ! "
-				    "ibm_architecture_vec structure inconsistent: %lu!\n",
-				    *cores);
-		} else {
-			*cores = DIV_ROUND_UP(NR_CPUS, prom_count_smt_threads());
-			prom_printf("Max number of cores passed to firmware: %lu (NR_CPUS = %lu)\n",
-				    *cores, NR_CPUS);
-		}
-
 		/* try calling the ibm,client-architecture-support method */
 		prom_printf("Calling ibm,client-architecture-support...");
 		if (call_prom_ret("call-method", 3, 2, &ret,
@@ -1020,7 +890,7 @@ static unsigned long __init alloc_up(unsigned long size, unsigned long align)
 	}
 	if (addr == 0)
 		return 0;
-	RELOC(alloc_bottom) = addr + size;
+	RELOC(alloc_bottom) = addr;
 
 	prom_debug(" -> %x\n", addr);
 	prom_debug("  alloc_bottom : %x\n", RELOC(alloc_bottom));
@@ -1534,7 +1404,7 @@ static void __init prom_hold_cpus(void)
 		reg = -1;
 		prom_getprop(node, "reg", &reg, sizeof(reg));
 
-		prom_debug("cpu hw idx   = %lu\n", reg);
+		prom_debug("cpu hw idx   = 0x%x\n", reg);
 
 		/* Init the acknowledge var which will be reset by
 		 * the secondary cpu when it awakens from its OF
@@ -1544,7 +1414,7 @@ static void __init prom_hold_cpus(void)
 
 		if (reg != _prom->cpu) {
 			/* Primary Thread of non-boot cpu */
-			prom_printf("starting cpu hw idx %lu... ", reg);
+			prom_printf("starting cpu hw idx %x... ", reg);
 			call_prom("start-cpu", 3, 0, node,
 				  secondary_hold, reg);
 
@@ -1559,7 +1429,7 @@ static void __init prom_hold_cpus(void)
 		}
 #ifdef CONFIG_SMP
 		else
-			prom_printf("boot cpu hw idx %lu\n", reg);
+			prom_printf("boot cpu hw idx %x\n", reg);
 #endif /* CONFIG_SMP */
 	}
 
@@ -1834,7 +1704,7 @@ static void __init *make_room(unsigned long *mem_start, unsigned long *mem_end,
 		chunk = alloc_up(room, 0);
 		if (chunk == 0)
 			prom_panic("No memory for flatten_device_tree (claim failed)");
-		*mem_end = chunk + room;
+		*mem_end = RELOC(alloc_top);
 	}
 
 	ret = (void *)*mem_start;
@@ -2053,7 +1923,7 @@ static void __init flatten_device_tree(void)
 	mem_start = (unsigned long)alloc_up(room, PAGE_SIZE);
 	if (mem_start == 0)
 		prom_panic("Can't allocate initial device-tree chunk\n");
-	mem_end = mem_start + room;
+	mem_end = RELOC(alloc_top);
 
 	/* Get root of tree */
 	root = call_prom("peer", 1, 1, (phandle)0);
@@ -2472,7 +2342,7 @@ static void __init prom_find_boot_cpu(void)
 	prom_getprop(cpu_pkg, "reg", &getprop_rval, sizeof(getprop_rval));
 	_prom->cpu = getprop_rval;
 
-	prom_debug("Booting CPU hw index = %lu\n", _prom->cpu);
+	prom_debug("Booting CPU hw index = 0x%x\n", _prom->cpu);
 }
 
 static void __init prom_check_initrd(unsigned long r3, unsigned long r4)

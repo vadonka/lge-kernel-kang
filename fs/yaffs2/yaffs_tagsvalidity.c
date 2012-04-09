@@ -1,7 +1,7 @@
 /*
  * YAFFS: Yet Another Flash File System. A NAND-flash specific file system.
  *
- * Copyright (C) 2002-2010 Aleph One Ltd.
+ * Copyright (C) 2002-2007 Aleph One Ltd.
  *   for Toby Churchill Ltd and Brightstar Engineering
  *
  * Created by Charles Manning <charles@aleph1.co.uk>
@@ -13,15 +13,16 @@
 
 #include "yaffs_tagsvalidity.h"
 
-void yaffs_init_tags(struct yaffs_ext_tags *tags)
+void yaffs_InitialiseTags(yaffs_ExtendedTags *tags)
 {
-	memset(tags, 0, sizeof(struct yaffs_ext_tags));
-	tags->validity0 = 0xAAAAAAAA;
-	tags->validity1 = 0x55555555;
+	memset(tags, 0, sizeof(yaffs_ExtendedTags));
+	tags->validMarker0 = 0xAAAAAAAA;
+	tags->validMarker1 = 0x55555555;
 }
 
-int yaffs_validate_tags(struct yaffs_ext_tags *tags)
+int yaffs_ValidateTags(yaffs_ExtendedTags *tags)
 {
-	return (tags->validity0 == 0xAAAAAAAA && tags->validity1 == 0x55555555);
+	return (tags->validMarker0 == 0xAAAAAAAA &&
+		tags->validMarker1 == 0x55555555);
 
 }

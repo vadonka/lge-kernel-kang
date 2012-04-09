@@ -10,7 +10,12 @@
 #ifndef _ASMARM_TLBFLUSH_H
 #define _ASMARM_TLBFLUSH_H
 
-#ifdef CONFIG_MMU
+
+#ifndef CONFIG_MMU
+
+#define tlb_flush(tlb)	((void) tlb)
+
+#else /* CONFIG_MMU */
 
 #include <asm/glue.h>
 
@@ -64,10 +69,6 @@
  */
 #undef _TLB
 #undef MULTI_TLB
-
-#ifdef CONFIG_SMP_ON_UP
-#define MULTI_TLB 1
-#endif
 
 #define v3_tlb_flags	(TLB_V3_FULL | TLB_V3_PAGE)
 
@@ -184,23 +185,17 @@
 # define v6wbi_always_flags	(-1UL)
 #endif
 
-#define v7wbi_tlb_flags_smp	(TLB_WB | TLB_DCLEAN | TLB_V7_IS_BTB | \
+#ifdef CONFIG_SMP
+#define v7wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_V7_IS_BTB | \
 			 TLB_V7_UIS_FULL | TLB_V7_UIS_PAGE | TLB_V7_UIS_ASID)
-#define v7wbi_tlb_flags_up	(TLB_WB | TLB_DCLEAN | TLB_BTB | \
+#else
+#define v7wbi_tlb_flags (TLB_WB | TLB_DCLEAN | TLB_BTB | \
 			 TLB_V6_U_FULL | TLB_V6_U_PAGE | TLB_V6_U_ASID)
+#endif
 
 #ifdef CONFIG_CPU_TLB_V7
-
-# ifdef CONFIG_SMP_ON_UP
-#  define v7wbi_possible_flags	(v7wbi_tlb_flags_smp | v7wbi_tlb_flags_up)
-#  define v7wbi_always_flags	(v7wbi_tlb_flags_smp & v7wbi_tlb_flags_up)
-# elif defined(CONFIG_SMP)
-#  define v7wbi_possible_flags	v7wbi_tlb_flags_smp
-#  define v7wbi_always_flags	v7wbi_tlb_flags_smp
-# else
-#  define v7wbi_possible_flags	v7wbi_tlb_flags_up
-#  define v7wbi_always_flags	v7wbi_tlb_flags_up
-# endif
+# define v7wbi_possible_flags	v7wbi_tlb_flags
+# define v7wbi_always_flags	v7wbi_tlb_flags
 # ifdef _TLB
 #  define MULTI_TLB 1
 # else
@@ -565,20 +560,11 @@ extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 #endif
 
 /*
- * If PG_dcache_clean is not set for the page, we need to ensure that any
+ * if PG_dcache_dirty is set for the page, we need to ensure that any
  * cache entries for the kernels virtual memory range are written
- * back to the page. On ARMv6 and later, the cache coherency is handled via
- * the set_pte_at() function.
+ * back to the page.
  */
-#if __LINUX_ARM_ARCH__ < 6
-extern void update_mmu_cache(struct vm_area_struct *vma, unsigned long addr,
-	pte_t *ptep);
-#else
-static inline void update_mmu_cache(struct vm_area_struct *vma,
-				    unsigned long addr, pte_t *ptep)
-{
-}
-#endif
+extern void update_mmu_cache(struct vm_area_struct *vma, unsigned long addr, pte_t pte);
 
 #endif
 

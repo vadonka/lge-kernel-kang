@@ -135,7 +135,9 @@ extern "C"
 #define TEGRA_DEVKIT_BCT_CARVEOUT_0_MEMORY_9        0x9UL //48 MB
 #define TEGRA_DEVKIT_BCT_CARVEOUT_0_MEMORY_A        0xaUL //64 MB
 #define TEGRA_DEVKIT_BCT_CARVEOUT_0_MEMORY_B        0xbUL //128 MB
+#if defined (CONFIG_MODEM_MDM)
 #define TEGRA_DEVKIT_BCT_CARVEOUT_0_MEMORY_C        0xcUL //256 MB
+#endif
 
 
 /// Total RAM

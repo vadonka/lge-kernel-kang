@@ -24,7 +24,6 @@
 #define __NVHOST_HWCTX_H
 
 #include <linux/string.h>
-#include <linux/slab.h>
 #include <linux/nvhost.h>
 #include <linux/nvmap.h>
 #include <linux/kref.h>

@@ -70,7 +70,6 @@
 #include <linux/delay.h>
 #include <linux/mutex.h>
 #include <linux/seq_file.h>
-#include <linux/slab.h>
 #include "jfs_incore.h"
 #include "jfs_filsys.h"
 #include "jfs_metapage.h"
@@ -1010,13 +1009,15 @@ static int lmLogSync(struct jfs_log * log, int hard_sync)
 		 * option 2 - shutdown file systems
 		 *	      associated with log ?
 		 * option 3 - extend log ?
+		 */
+		/*
 		 * option 4 - second chance
 		 *
 		 * mark log wrapped, and continue.
 		 * when all active transactions are completed,
-		 * mark log valid for recovery.
+		 * mark log vaild for recovery.
 		 * if crashed during invalid state, log state
-		 * implies invalid log, forcing fsck().
+		 * implies invald log, forcing fsck().
 		 */
 		/* mark log state log wrap in log superblock */
 		/* log->state = LOGWRAP; */
@@ -1120,11 +1121,14 @@ int lmLogOpen(struct super_block *sb)
 	 * file systems to log may have n-to-1 relationship;
 	 */
 
-	bdev = blkdev_get_by_dev(sbi->logdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL,
-				 log);
+	bdev = open_by_devnum(sbi->logdev, FMODE_READ|FMODE_WRITE);
 	if (IS_ERR(bdev)) {
-		rc = PTR_ERR(bdev);
+		rc = -PTR_ERR(bdev);
 		goto free;
+	}
+
+	if ((rc = bd_claim(bdev, log))) {
+		goto close;
 	}
 
 	log->bdev = bdev;
@@ -1134,7 +1138,7 @@ int lmLogOpen(struct super_block *sb)
 	 * initialize log:
 	 */
 	if ((rc = lmLogInit(log)))
-		goto close;
+		goto unclaim;
 
 	list_add(&log->journal_list, &jfs_external_logs);
 
@@ -1160,8 +1164,11 @@ journal_found:
 	list_del(&log->journal_list);
 	lbmLogShutdown(log);
 
+      unclaim:
+	bd_release(bdev);
+
       close:		/* close external log device */
-	blkdev_put(bdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
+	blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
 
       free:		/* free log descriptor */
 	mutex_unlock(&jfs_log_mutex);
@@ -1506,7 +1513,8 @@ int lmLogClose(struct super_block *sb)
 	bdev = log->bdev;
 	rc = lmLogShutdown(log);
 
-	blkdev_put(bdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
+	bd_release(bdev);
+	blkdev_put(bdev, FMODE_READ|FMODE_WRITE);
 
 	kfree(log);
 

@@ -1488,7 +1488,7 @@ static void __devinit winbond_check(int io, int key)
 
 	outb(key, io);
 	outb(key, io);     /* Write Magic Sequence to EFER, extended
-			      function enable register */
+			      funtion enable register */
 	outb(0x20, io);    /* Write EFIR, extended function index register */
 	devid = inb(io + 1);  /* Read EFDR, extended function data register */
 	outb(0x21, io);
@@ -1527,7 +1527,7 @@ static void __devinit winbond_check2(int io, int key)
 	x_oldid = inb(io + 2);
 
 	outb(key, io);     /* Write Magic Byte to EFER, extended
-			      function enable register */
+			      funtion enable register */
 	outb(0x20, io + 2);  /* Write EFIR, extended function index register */
 	devid = inb(io + 2);  /* Read EFDR, extended function data register */
 	outb(0x21, io + 1);
@@ -1569,7 +1569,7 @@ static void __devinit smsc_check(int io, int key)
 
 	outb(key, io);
 	outb(key, io);     /* Write Magic Sequence to EFER, extended
-			      function enable register */
+			      funtion enable register */
 	outb(0x0d, io);    /* Write EFIR, extended function index register */
 	oldid = inb(io + 1);  /* Read EFDR, extended function data register */
 	outb(0x0e, io);
@@ -1621,7 +1621,7 @@ static void __devinit detect_and_report_it87(void)
 	u8 origval, r;
 	if (verbose_probing)
 		printk(KERN_DEBUG "IT8705 Super-IO detection, now testing port 2E ...\n");
-	if (!request_muxed_region(0x2e, 2, __func__))
+	if (!request_region(0x2e, 2, __func__))
 		return;
 	origval = inb(0x2e);		/* Save original value */
 	outb(0x87, 0x2e);
@@ -2550,6 +2550,7 @@ static int __devinit sio_ite_8872_probe(struct pci_dev *pdev, int autoirq,
 					 const struct parport_pc_via_data *via)
 {
 	short inta_addr[6] = { 0x2A0, 0x2C0, 0x220, 0x240, 0x1E0 };
+	struct resource *base_res;
 	u32 ite8872set;
 	u32 ite8872_lpt, ite8872_lpthi;
 	u8 ite8872_irq, type;
@@ -2560,7 +2561,8 @@ static int __devinit sio_ite_8872_probe(struct pci_dev *pdev, int autoirq,
 
 	/* make sure which one chip */
 	for (i = 0; i < 5; i++) {
-		if (request_region(inta_addr[i], 32, "it887x")) {
+		base_res = request_region(inta_addr[i], 32, "it887x");
+		if (base_res) {
 			int test;
 			pci_write_config_dword(pdev, 0x60,
 						0xe5000000 | inta_addr[i]);
@@ -2569,7 +2571,7 @@ static int __devinit sio_ite_8872_probe(struct pci_dev *pdev, int autoirq,
 			test = inb(inta_addr[i]);
 			if (test != 0xff)
 				break;
-			release_region(inta_addr[i], 32);
+			release_region(inta_addr[i], 0x8);
 		}
 	}
 	if (i >= 5) {
@@ -2597,7 +2599,7 @@ static int __devinit sio_ite_8872_probe(struct pci_dev *pdev, int autoirq,
 		printk(KERN_INFO "parport_pc: ITE8873 found (1S)\n");
 		return 0;
 	case 0x8:
-		printk(KERN_INFO "parport_pc: ITE8874 found (2S)\n");
+		DPRINTK(KERN_DEBUG "parport_pc: ITE8874 found (2S)\n");
 		return 0;
 	default:
 		printk(KERN_INFO "parport_pc: unknown ITE887x\n");
@@ -2633,7 +2635,7 @@ static int __devinit sio_ite_8872_probe(struct pci_dev *pdev, int autoirq,
 	/*
 	 * Release the resource so that parport_pc_probe_port can get it.
 	 */
-	release_region(inta_addr[i], 32);
+	release_resource(base_res);
 	if (parport_pc_probe_port(ite8872_lpt, ite8872_lpthi,
 				   irq, PARPORT_DMA_NONE, &pdev->dev, 0)) {
 		printk(KERN_INFO
@@ -2906,7 +2908,6 @@ enum parport_pc_pci_cards {
 	netmos_9805,
 	netmos_9815,
 	netmos_9901,
-	netmos_9865,
 	quatech_sppxp100,
 };
 
@@ -2988,7 +2989,6 @@ static struct parport_pc_pci {
 	/* netmos_9805 */               { 1, { { 0, -1 }, } },
 	/* netmos_9815 */               { 2, { { 0, -1 }, { 2, -1 }, } },
 	/* netmos_9901 */               { 1, { { 0, -1 }, } },
-	/* netmos_9865 */               { 1, { { 0, -1 }, } },
 	/* quatech_sppxp100 */		{ 1, { { 0, 1 }, } },
 };
 
@@ -3092,10 +3092,6 @@ static const struct pci_device_id parport_pc_pci_tbl[] = {
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, netmos_9815 },
 	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9901,
 	  0xA000, 0x2000, 0, 0, netmos_9901 },
-	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9865,
-	  0xA000, 0x1000, 0, 0, netmos_9865 },
-	{ PCI_VENDOR_ID_NETMOS, PCI_DEVICE_ID_NETMOS_9865,
-	  0xA000, 0x2000, 0, 0, netmos_9865 },
 	/* Quatech SPPXP-100 Parallel port PCI ExpressCard */
 	{ PCI_VENDOR_ID_QUATECH, PCI_DEVICE_ID_QUATECH_SPPXP_100,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, quatech_sppxp100 },
@@ -3407,7 +3403,7 @@ static int __init parport_parse_param(const char *s, int *val,
 		*val = automatic;
 	else if (!strncmp(s, "none", 4))
 		*val = none;
-	else if (nofifo && !strncmp(s, "nofifo", 6))
+	else if (nofifo && !strncmp(s, "nofifo", 4))
 		*val = nofifo;
 	else {
 		char *ep;

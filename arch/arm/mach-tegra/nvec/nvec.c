@@ -240,8 +240,11 @@ NvEcPrivPingThread(void *args)
 	NvEcRequest req;
 	NvEcResponse resp;
 	NvEcPrivState *ec = (NvEcPrivState *)args;
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
+	//set_freezable_with_signal();
+	  set_freezable();
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
 
-	set_freezable();
 
 	for (;;) {
 	NvOsSemaphoreWait(ec->hPingSema);

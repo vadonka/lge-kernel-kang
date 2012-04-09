@@ -21,7 +21,6 @@
 /* This file included from pcm_native.c */
 
 #include <linux/compat.h>
-#include <linux/slab.h>
 
 static int snd_pcm_ioctl_delay_compat(struct snd_pcm_substream *substream,
 				      s32 __user *src)
@@ -342,7 +341,7 @@ static int snd_pcm_ioctl_xfern_compat(struct snd_pcm_substream *substream,
 			kfree(bufs);
 			return -EFAULT;
 		}
-		bufs[i] = compat_ptr(ptr);
+		bufs[ch] = compat_ptr(ptr);
 		bufptr++;
 	}
 	if (dir == SNDRV_PCM_STREAM_PLAYBACK)

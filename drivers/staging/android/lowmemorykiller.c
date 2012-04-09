@@ -36,7 +36,7 @@
 #include <linux/sched.h>
 #include <linux/notifier.h>
 
-static uint32_t lowmem_debug_level = 2;
+static uint32_t lowmem_debug_level = 1;
 static int lowmem_adj[6] = {
 	0,
 	1,
@@ -52,8 +52,7 @@ static size_t lowmem_minfree[6] = {
 };
 static int lowmem_minfree_size = 4;
 
-static struct task_struct *lowmem_deathpending;
-static unsigned long lowmem_deathpending_timeout;
+static struct task_struct *lowmem_deathpending[2];
 
 #define lowmem_print(level, x...)			\
 	do {						\
@@ -68,31 +67,40 @@ static struct notifier_block task_nb = {
 	.notifier_call	= task_notify_func,
 };
 
+//110219, gunwoo1.kim@lge.com, kill 2 processes at once [START]
 static int
 task_notify_func(struct notifier_block *self, unsigned long val, void *data)
 {
 	struct task_struct *task = data;
 
-	if (task == lowmem_deathpending)
-		lowmem_deathpending = NULL;
+	if (task == lowmem_deathpending[0])
+    {
+        lowmem_print(1, "#1 task_notify_func task(%s)(%p)\n", task->comm, task);
+		lowmem_deathpending[0] = NULL;
+    }
+    else if (task == lowmem_deathpending[1])
+    {
+        lowmem_print(1, "#2 task_notify_func task(%s)(%p)\n", task->comm, task);
+		lowmem_deathpending[1] = NULL;
+    }
 
 	return NOTIFY_OK;
 }
 
-static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
+static int lowmem_shrink(int nr_to_scan, gfp_t gfp_mask)
 {
 	struct task_struct *p;
-	struct task_struct *selected = NULL;
+	struct task_struct *selected[2] = { NULL, NULL };
 	int rem = 0;
 	int tasksize;
 	int i;
 	int min_adj = OOM_ADJUST_MAX + 1;
-	int selected_tasksize = 0;
-	int selected_oom_adj;
+	int selected_tasksize[2] = { 0, 0 };
 	int array_size = ARRAY_SIZE(lowmem_adj);
 	int other_free = global_page_state(NR_FREE_PAGES);
-	int other_file = global_page_state(NR_FILE_PAGES) -
-						global_page_state(NR_SHMEM);
+	int other_file = global_page_state(NR_FILE_PAGES);
+
+    // lowmem_print(1, "other_free[%d MB], other_file[%d MB]\n", (int)(other_free * 4 / 1024), (int)(other_file * 4 / 1024));
 
 	/*
 	 * If we already have a death outstanding, then
@@ -101,14 +109,22 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	 * this pass.
 	 *
 	 */
-	if (lowmem_deathpending &&
-	    time_before_eq(jiffies, lowmem_deathpending_timeout))
+	if (lowmem_deathpending[0] != NULL)
+    {
+        lowmem_print(1, "#1 lowmem_deathpending[0] (%s)(%p)\n", lowmem_deathpending[0]->comm, lowmem_deathpending[0]);
 		return 0;
+    }
+    else if (lowmem_deathpending[1] != NULL)//LGSI_MERGED_FROM_FROYO_MR
+    {
+        lowmem_print(1, "#2 lowmem_deathpending[1] (%s)(%p)\n", lowmem_deathpending[1]->comm, lowmem_deathpending[1]);
+		return 0;
+    }
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
 	if (lowmem_minfree_size < array_size)
 		array_size = lowmem_minfree_size;
+
 	for (i = 0; i < array_size; i++) {
 		if (other_free < lowmem_minfree[i] &&
 		    other_file < lowmem_minfree[i]) {
@@ -116,20 +132,15 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			break;
 		}
 	}
-	if (sc->nr_to_scan > 0)
-		lowmem_print(3, "lowmem_shrink %lu, %x, ofree %d %d, ma %d\n",
-			     sc->nr_to_scan, sc->gfp_mask, other_free, other_file,
-			     min_adj);
+
 	rem = global_page_state(NR_ACTIVE_ANON) +
 		global_page_state(NR_ACTIVE_FILE) +
 		global_page_state(NR_INACTIVE_ANON) +
 		global_page_state(NR_INACTIVE_FILE);
-	if (sc->nr_to_scan <= 0 || min_adj == OOM_ADJUST_MAX + 1) {
-		lowmem_print(5, "lowmem_shrink %lu, %x, return %d\n",
-			     sc->nr_to_scan, sc->gfp_mask, rem);
+
+	if (nr_to_scan <= 0 || min_adj == OOM_ADJUST_MAX + 1) {
 		return rem;
 	}
-	selected_oom_adj = min_adj;
 
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
@@ -140,46 +151,47 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		task_lock(p);
 		mm = p->mm;
 		sig = p->signal;
+
 		if (!mm || !sig) {
 			task_unlock(p);
 			continue;
 		}
+
 		oom_adj = sig->oom_adj;
 		if (oom_adj < min_adj) {
 			task_unlock(p);
 			continue;
 		}
+
 		tasksize = get_mm_rss(mm);
 		task_unlock(p);
+
 		if (tasksize <= 0)
 			continue;
-		if (selected) {
-			if (oom_adj < selected_oom_adj)
-				continue;
-			if (oom_adj == selected_oom_adj &&
-			    tasksize <= selected_tasksize)
-				continue;
-		}
-		selected = p;
-		selected_tasksize = tasksize;
-		selected_oom_adj = oom_adj;
-		lowmem_print(2, "select %d (%s), adj %d, size %d, to kill\n",
-			     p->pid, p->comm, oom_adj, tasksize);
-	}
-	if (selected) {
-		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
-			     selected->pid, selected->comm,
-			     selected_oom_adj, selected_tasksize);
-		lowmem_deathpending = selected;
-		lowmem_deathpending_timeout = jiffies + HZ;
-		force_sig(SIGKILL, selected);
-		rem -= selected_tasksize;
-	}
-	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
-		     sc->nr_to_scan, sc->gfp_mask, rem);
+
+        if (selected[0] == NULL)
+        {
+            selected[0] = p;    
+            selected_tasksize[0] = tasksize;
+        }
+        else if (selected[1] == NULL)
+        {
+            selected[1] = p;
+            selected_tasksize[1] = tasksize;
+            break;
+        }
+    }
+    for (i = 0; i < 2 && selected[i] != NULL; i++)
+    {
+        lowmem_deathpending[i] = selected[i];
+        lowmem_print(1, "lowmem_shrink send sigkill(%s)(%p), tasksize[%d]\n", selected[i]->comm, selected[i], selected_tasksize[i]); 
+        force_sig(SIGKILL, selected[i]);
+        rem -= selected_tasksize[i];
+    }
 	read_unlock(&tasklist_lock);
 	return rem;
 }
+//110219, gunwoo1.kim@lge.com, kill 2 processes at once [END]
 
 static struct shrinker lowmem_shrinker = {
 	.shrink = lowmem_shrink,

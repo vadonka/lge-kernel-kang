@@ -9,7 +9,6 @@
 
 #include <linux/serial.h>
 #include <linux/serial_reg.h>
-#include <linux/slab.h>
 
 #define MAX_MODEM_BUF	256
 #define WAKEUP_CHARS	(MAX_MODEM_BUF/2)
@@ -109,10 +108,11 @@ static void change_speed(struct IsdnCardState *cs, int baud)
 {
 	int	quot = 0, baud_base;
 	unsigned cval, fcr = 0;
+	int	bits;
 
 
 	/* byte size and parity */
-	cval = 0x03;
+	cval = 0x03; bits = 10;
 	/* Determine divisor based on baud rate */
 	baud_base = BASE_BAUD;
 	quot = baud_base / baud;

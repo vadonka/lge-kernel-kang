@@ -22,7 +22,6 @@
 #include <linux/kernel.h>
 #include <linux/kprobes.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/stop_machine.h>
 #include <linux/stringify.h>
 #include <asm/traps.h>
@@ -134,8 +133,7 @@ static void __kprobes singlestep(struct kprobe *p, struct pt_regs *regs,
 				 struct kprobe_ctlblk *kcb)
 {
 	regs->ARM_pc += 4;
-	if (p->ainsn.insn_check_cc(regs->ARM_cpsr))
-		p->ainsn.insn_handler(p, regs);
+	p->ainsn.insn_handler(p, regs);
 }
 
 /*
@@ -395,14 +393,6 @@ void __kprobes jprobe_return(void)
 		/*
 		 * Setup an empty pt_regs. Fill SP and PC fields as
 		 * they're needed by longjmp_break_handler.
-		 *
-		 * We allocate some slack between the original SP and start of
-		 * our fabricated regs. To be precise we want to have worst case
-		 * covered which is STMFD with all 16 regs so we allocate 2 *
-		 * sizeof(struct_pt_regs)).
-		 *
-		 * This is to prevent any simulated instruction from writing
-		 * over the regs when they are accessing the stack.
 		 */
 		"sub    sp, %0, %1		\n\t"
 		"ldr    r0, ="__stringify(JPROBE_MAGIC_ADDR)"\n\t"
@@ -420,7 +410,7 @@ void __kprobes jprobe_return(void)
 		"ldmia	sp, {r0 - pc}		\n\t"
 		:
 		: "r" (kcb->jprobe_saved_regs.ARM_sp),
-		  "I" (sizeof(struct pt_regs) * 2),
+		  "I" (sizeof(struct pt_regs)),
 		  "J" (offsetof(struct pt_regs, ARM_sp)),
 		  "J" (offsetof(struct pt_regs, ARM_pc)),
 		  "J" (offsetof(struct pt_regs, ARM_cpsr))

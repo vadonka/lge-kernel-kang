@@ -32,7 +32,6 @@
 #include <linux/firmware.h>
 #include <asm/byteorder.h>
 #include <linux/dma-mapping.h>
-#include <linux/slab.h>
 
 /* Compile Time Switches */
 /* start */
@@ -76,6 +75,8 @@
 
 #define FIFO_SIZE  4096
 #define FIFO_EXTRA_SPACE            1024
+
+#define MIN(x, y)  ((x) < (y) ? (x) : (y))
 
 #if BITS_PER_LONG == 64
 #    define H32_64(x)  (u32) ((u64)(x) >> 32)
@@ -269,6 +270,7 @@ struct bdx_priv {
 	u32 msg_enable;
 	int stats_flag;
 	struct bdx_stats hw_stats;
+	struct net_device_stats net_stats;
 	struct pci_dev *pdev;
 
 	struct pci_nic *nic;
@@ -333,7 +335,7 @@ struct txd_desc {
 	u32 va_lo;
 	u32 va_hi;
 	struct pbl pbl[0];	/* Fragments */
-} __packed;
+} __attribute__ ((packed));
 
 /* Register region size */
 #define BDX_REGS_SIZE	  0x1000
@@ -502,7 +504,7 @@ struct txd_desc {
 #define  GMAC_RX_FILTER_ACRC  0x0010	/* accept crc error */
 #define  GMAC_RX_FILTER_AM    0x0008	/* accept multicast */
 #define  GMAC_RX_FILTER_AB    0x0004	/* accept broadcast */
-#define  GMAC_RX_FILTER_PRM   0x0001	/* [0:1] promiscuous mode */
+#define  GMAC_RX_FILTER_PRM   0x0001	/* [0:1] promiscous mode */
 
 #define  MAX_FRAME_AB_VAL       0x3fff	/* 13:0 */
 
@@ -529,34 +531,28 @@ struct txd_desc {
 
 /* Debugging Macros */
 
-#define DBG2(fmt, args...)					\
-	pr_err("%s:%-5d: " fmt, __func__, __LINE__, ## args)
+#define ERR(fmt, args...) printk(KERN_ERR fmt, ## args)
+#define DBG2(fmt, args...)	\
+	printk(KERN_ERR  "%s:%-5d: " fmt, __func__, __LINE__, ## args)
 
 #define BDX_ASSERT(x) BUG_ON(x)
 
 #ifdef DEBUG
 
-#define ENTER						\
-do {							\
-	pr_err("%s:%-5d: ENTER\n", __func__, __LINE__); \
+#define ENTER          do { \
+	printk(KERN_ERR  "%s:%-5d: ENTER\n", __func__, __LINE__); \
 } while (0)
 
-#define RET(args...)					 \
-do {							 \
-	pr_err("%s:%-5d: RETURN\n", __func__, __LINE__); \
-	return args;					 \
-} while (0)
+#define RET(args...)   do { \
+	printk(KERN_ERR  "%s:%-5d: RETURN\n", __func__, __LINE__); \
+return args; } while (0)
 
-#define DBG(fmt, args...)					\
-	pr_err("%s:%-5d: " fmt, __func__, __LINE__, ## args)
+#define DBG(fmt, args...)	\
+	printk(KERN_ERR  "%s:%-5d: " fmt, __func__, __LINE__, ## args)
 #else
-#define ENTER do {  } while (0)
+#define ENTER         do {  } while (0)
 #define RET(args...)   return args
-#define DBG(fmt, args...)			\
-do {						\
-	if (0)					\
-		pr_err(fmt, ##args);		\
-} while (0)
+#define DBG(fmt, args...)   do {  } while (0)
 #endif
 
 #endif /* _BDX__H */

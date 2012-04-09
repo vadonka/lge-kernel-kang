@@ -12,7 +12,6 @@
 #include <linux/i2c-gpio.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/platform_device.h>
 
 #include <asm/gpio.h>
@@ -211,7 +210,7 @@ static int __init i2c_gpio_init(void)
 
 	return ret;
 }
-subsys_initcall(i2c_gpio_init);
+module_init(i2c_gpio_init);
 
 static void __exit i2c_gpio_exit(void)
 {
@@ -219,7 +218,7 @@ static void __exit i2c_gpio_exit(void)
 }
 module_exit(i2c_gpio_exit);
 
-MODULE_AUTHOR("Haavard Skinnemoen (Atmel)");
+MODULE_AUTHOR("Haavard Skinnemoen <hskinnemoen@atmel.com>");
 MODULE_DESCRIPTION("Platform-independent bitbanging I2C driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:i2c-gpio");

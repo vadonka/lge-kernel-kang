@@ -46,14 +46,14 @@ static inline int inet6_sk_ehashfn(const struct sock *sk)
 	const struct ipv6_pinfo *np = inet6_sk(sk);
 	const struct in6_addr *laddr = &np->rcv_saddr;
 	const struct in6_addr *faddr = &np->daddr;
-	const __u16 lport = inet->inet_num;
-	const __be16 fport = inet->inet_dport;
+	const __u16 lport = inet->num;
+	const __be16 fport = inet->dport;
 	struct net *net = sock_net(sk);
 
 	return inet6_ehashfn(net, laddr, lport, faddr, fport);
 }
 
-extern int __inet6_hash(struct sock *sk, struct inet_timewait_sock *twp);
+extern void __inet6_hash(struct sock *sk);
 
 /*
  * Sockets in TCP_CLOSE state are _always_ taken out of the hash, so

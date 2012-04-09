@@ -27,7 +27,6 @@
 #include <linux/ktime.h>
 #include <linux/init.h>
 #include <linux/connector.h>
-#include <linux/gfp.h>
 #include <asm/atomic.h>
 #include <asm/unaligned.h>
 
@@ -43,10 +42,9 @@ static DEFINE_PER_CPU(__u32, proc_event_counts) = { 0 };
 
 static inline void get_seq(__u32 *ts, int *cpu)
 {
-	preempt_disable();
-	*ts = __this_cpu_inc_return(proc_event_counts) -1;
+	*ts = get_cpu_var(proc_event_counts)++;
 	*cpu = smp_processor_id();
-	preempt_enable();
+	put_cpu_var(proc_event_counts);
 }
 
 void proc_fork_connector(struct task_struct *task)

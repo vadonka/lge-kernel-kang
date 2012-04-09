@@ -32,7 +32,7 @@ DECLARE_WAIT_QUEUE_HEAD(drm_wait_queue);
 unsigned long drm_diffTime;
 int drm_sign;
 
-DEFINE_SEMAPHORE(drm_mutex);
+DECLARE_MUTEX(drm_mutex);
 
 EXPORT_SYMBOL_GPL(drm_wait_queue);
 EXPORT_SYMBOL_GPL(drm_diffTime);
@@ -45,7 +45,7 @@ EXPORT_SYMBOL_GPL(drm_mutex);
 static long drm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int rv = 0;
-	drm_diffTime = 0;
+    drm_diffTime = 0;
 
 	switch (cmd) {
 	default:

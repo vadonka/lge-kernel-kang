@@ -58,7 +58,7 @@
 #define HOOK_USE_ADC 0
 #endif
 #endif
-//20101005  STAR_COUNTRY_KR Add [END_LGE_LAB1]
+//20101005 seki.park@lge.com STAR_COUNTRY_KR Add [END_LGE_LAB1]
 
 struct headset_switch_data	*headset_sw_data;
 static int headset_off = 0;
@@ -86,7 +86,7 @@ struct headset_switch_data {
 	struct work_struct work;
 	struct delayed_work delayed_work;
 	struct delayed_work hook_delayed_work;
-	struct input_dev *ip_dev;	//20100421  for headset driver [LGE]
+	struct input_dev *ip_dev;	//20100421 bergkamp.cho@lge.com for headset driver [LGE]
 	struct input_dev *ip_dev_wake;
 };
 //jongik2.kim 20100910 i2c_fix [start]
@@ -102,7 +102,7 @@ EXPORT_SYMBOL(get_headset_type);
 
 int type_detection_time = 700; 
 int remove_detection_time = 60; 
-#if !defined(STAR_COUNTRY_KR) //20101103  heaset detect time[LGE_LAB1]
+#if !defined(STAR_COUNTRY_KR) //20101103 seki.par@lge.com heaset detect time[LGE_LAB1]
 int hook_press_time = 100; 
 int hook_release_time = 20; 
 #else
@@ -110,7 +110,7 @@ int hook_press_time = 100;
 int hook_release_time = 20; 
 #endif
 
-//20101117, , gpio wakeup from LP1 [START]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [START]
 #include <linux/wakelock.h>
 extern bool core_lock_on;
 NvU32 headset_vdd_address = 0;
@@ -118,10 +118,20 @@ NvU32 headset_vdd_voltage = 0;
 NvOdmServicesPmuHandle headset_h_pmu;
 int suspend_status = 0;
 //static struct wake_lock hook_det_lock;
-//20101117, , gpio wakeup from LP1 [END]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [END]
+
+//P990_IFX_GB_PORTING_LGSI_START
+//FIDO - GB Porting [09/08/2011] - Start
+#if 1 //defined (STAR_OPERATOR_FIDO)
+static struct wake_lock headset_wake_lock;		//20110425 heejeong.seo@lge.com headset wake lock timeout
+#endif
+//FIDO - GB Porting [09/08/2011] - End
+//P990_IFX_GB_PORTING_LGSI_END
 
 
-extern void star_headsetdet_bias(int bias);	//20100421  for framwork function used in kernel ==> error [LGE]
+
+
+extern void star_headsetdet_bias(int bias);	//20100421 bergkamp.cho@lge.com for framwork function used in kernel ==> error [LGE]
 extern void star_Mic_bias(int bias);  //20110726 detecting headset when resuming
 #define HEADSET_GUID                NV_ODM_GUID('h','e','a','d','s','e','t','_')
 typedef struct HeadsetDeviceRec
@@ -130,7 +140,7 @@ typedef struct HeadsetDeviceRec
     NvOdmServicesGpioHandle hGpio;
     NvOdmGpioPinHandle h_Headset_Detection;
     NvOdmGpioPinHandle h_Hookkey_Detection; 
-#if defined(STAR_COUNTRY_KR)&& !defined(CONFIG_MACH_STAR_SKT_REV_A)//20101005  Gpio MicBias[LGE_LAB1]
+#if defined(STAR_COUNTRY_KR)&& !defined(CONFIG_MACH_STAR_SKT_REV_A)//20101005 seki.par@lge.com Gpio MicBias[LGE_LAB1]
     NvOdmGpioPinHandle h_Headset_MicBias; 
 #endif
     NvOdmServicesGpioIntrHandle hheadsetInterrupt;
@@ -140,21 +150,21 @@ typedef struct HeadsetDeviceRec
 } HeadsetDevice;
 static HeadsetDevice s_hHeadsetHandle;
 
-//20101005  Gpio MicBias[START_LGE_LAB1]
+//20101005 seki.par@lge.com Gpio MicBias[START_LGE_LAB1]
 #if defined(STAR_COUNTRY_KR)&& !defined(CONFIG_MACH_STAR_SKT_REV_A)
 void headset_Mic_Bias(int on)
 {
 	NvOdmGpioSetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_MicBias, on);
 }
 #endif
-//20101005  Gpio MicBias[END_LGE_LAB1]
+//20101005 seki.par@lge.com Gpio MicBias[END_LGE_LAB1]
 
 NvU32 headset_get_hook_adc_value(void)
 {
     NvU32 value =0;
     NvOdmServicesPmuHandle adc_pmu = NvOdmServicesPmuOpen();
         
-    value = NvOdmServicesPmuGetHookValue(adc_pmu);		//20100716  blocking for compile error [LGE]
+    value = NvOdmServicesPmuGetHookValue(adc_pmu);		//20100716 bergkamp.cho@lge.com blocking for compile error [LGE]
     
     NvOdmServicesPmuClose(adc_pmu);
 	return value;
@@ -185,7 +195,7 @@ NvU32 headset_get_hook_adc_average(int cnt)
 static void headset_det_work(struct work_struct *work)
 {
     if (headset_off) return;
-	NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, &headset_gpio_status);	//20100419  for nVidia headset driver [LGE]
+	NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, &headset_gpio_status);	//20100419 bergkamp.cho@lge.com for nVidia headset driver [LGE]
 	headset_status = headset_gpio_status;
 
 	lprintk(D_AUDIO, KERN_ERR "@@(Headset_det.c)@@ headset_det_work(), headset_status = %d\n",headset_status);
@@ -205,7 +215,7 @@ static void headset_det_work(struct work_struct *work)
 	}
 }
 
-//20101005  STAR_COUNTRY_KR Add [START_LGE_LAB1]
+//20101005 seki.park@lge.com STAR_COUNTRY_KR Add [START_LGE_LAB1]
 #if !defined(STAR_COUNTRY_KR)//Global
 static void type_det_work(struct work_struct *work)
 {
@@ -227,8 +237,15 @@ static void type_det_work(struct work_struct *work)
 	{
 	    star_headsetdet_bias(1);	
 	    #if HOOK_USE_ADC
-		hook_value = headset_get_hook_adc_value();	
 		
+//FIDO - GB Porting [09/08/2011] - Start
+#if defined (STAR_OPERATOR_FIDO)
+		hook_value = headset_get_hook_adc_average(1);
+#else
+		hook_value = headset_get_hook_adc_value();	
+#endif
+//FIDO - GB Porting [09/08/2011] - End
+	
         if(hook_value > 100)
 			headset_type = STAR_HEADSET;	
 		else
@@ -257,7 +274,7 @@ static void type_det_work(struct work_struct *work)
 
 	if(headset_type != STAR_HEADSET){
 		block_hook_int =1;
-		star_headsetdet_bias(0);	//20100419   for Headset MIC Bias  ==> framwork function used in kernel ==> error [LGE]
+		star_headsetdet_bias(0);	//20100419 bergkamp.cho@lge.com  for Headset MIC Bias  ==> framwork function used in kernel ==> error [LGE]
 	}
 	else{
         block_hook_int =0;
@@ -294,14 +311,14 @@ static void type_det_work(struct work_struct *work)
 #endif
 
 	#if HOOK_USE_ADC
-		hook_value = headset_get_hook_adc_value();
+		hook_value = headset_get_hook_adc_value();	
 
-		if(hook_value > 350) //20101127  detect adc 1200==>350[LGE_LAB1]
-			headset_type = STAR_HEADSET;
+		if(hook_value > 350) //20101127 seki.par@lge.com detect adc 1200==>350[LGE_LAB1]
+			headset_type = STAR_HEADSET;	
 		else
 			headset_type = STAR_HEADPHONE;
 	#else
-		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	// 20100419 for nVidia headset driver
+		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	//LGE_UPDATE_bergkamp.cho@lge.com 20100419 for nVidia headset driver
 		if(hookkey_gpio_status == 0){ 
 		   headset_type = STAR_HEADPHONE;
 			hook_value = 1111;
@@ -314,7 +331,7 @@ static void type_det_work(struct work_struct *work)
 	}
 	else if(headset_status == 0){
 		headset_type = STAR_NONE;
-        hook_status = HOOK_RELEASED;
+        hook_status = HOOK_RELEASED; 
 		input_report_key(headset_sw_data->ip_dev, KEY_HOOK, 0);
 		input_sync(headset_sw_data->ip_dev);
     }
@@ -323,7 +340,7 @@ static void type_det_work(struct work_struct *work)
 #if defined(CONFIG_MACH_STAR_SKT_REV_A)  
 	if(headset_type != STAR_HEADSET){
 		block_hook_int =1;
-		star_headsetdet_bias(0);	//20100419   for Headset MIC Bias  ==> framwork function used in kernel ==> error [LGE]
+		star_headsetdet_bias(0);	//20100419 bergkamp.cho@lge.com  for Headset MIC Bias  ==> framwork function used in kernel ==> error [LGE]
 	}
 	else{
         block_hook_int =0;
@@ -343,14 +360,14 @@ static void type_det_work(struct work_struct *work)
 	switch_set_state(&headset_sw_data->sdev, headset_type); 
 }
 #endif
-//20101005  STAR_COUNTRY_KR Add [END_LGE_LAB1]
+//20101005 seki.park@lge.com STAR_COUNTRY_KR Add [END_LGE_LAB1]
 static void hook_det_work(struct work_struct *work)
 {
     int hok_adc_value =0;
     if (headset_off) return;
     if(headset_type != STAR_HEADSET)
         return;
-
+	
     if(is_hook_test == false){
         hok_adc_value = 20;
     }
@@ -358,6 +375,7 @@ static void hook_det_work(struct work_struct *work)
         lprintk(D_AUDIO, KERN_ERR "##(hook_det)## IS FACTORYMODE\n");
         hok_adc_value = 65;
     }
+    
 	if(hook_status == HOOK_RELEASED){
 		#if HOOK_USE_ADC
         hookkey_gpio_status = headset_get_hook_adc_average(5);
@@ -369,7 +387,7 @@ static void hook_det_work(struct work_struct *work)
 			lprintk(D_AUDIO, KERN_ERR "##(hook_det_work)## HOOK PRESSED ADC %d\n", hookkey_gpio_status);
 		}
 		#else
-		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	// 20100419 for nVidia headset driver
+		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	//LGE_UPDATE_bergkamp.cho@lge.com 20100419 for nVidia headset driver
 		if(hookkey_gpio_status == 0){ 
 		    hook_status = HOOK_PRESSED; 
 		    input_report_key(headset_sw_data->ip_dev, KEY_HOOK, 1);
@@ -389,7 +407,7 @@ static void hook_det_work(struct work_struct *work)
 			lprintk(D_AUDIO, KERN_ERR "##(hook_det_work)## HOOK RELEASED ADC %d\n", hookkey_gpio_status);
 		}
 		#else
-		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	// 20100419 for nVidia headset driver
+		NvOdmGpioGetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, &hookkey_gpio_status);	//LGE_UPDATE_bergkamp.cho@lge.com 20100419 for nVidia headset driver
 		if(hookkey_gpio_status == 1){ 
 		    hook_status = HOOK_RELEASED; 
 		    input_report_key(headset_sw_data->ip_dev, KEY_HOOK, 0);
@@ -398,6 +416,7 @@ static void hook_det_work(struct work_struct *work)
 		}
 		#endif
 	}
+    
 }
 
 static void headset_int_handler(void *dev_id)
@@ -413,17 +432,27 @@ static void headset_int_handler(void *dev_id)
 	headset_status = headset_gpio_status;
 
 	if(headset_status == 0)
-	{
-		schedule_work(&headset_sw_data->work);
+   	{
+        schedule_work(&headset_sw_data->delayed_work);
 		  #if defined(STAR_COUNTRY_KR) && !defined(CONFIG_MACH_STAR_SKT_REV_A)  
 			headset_Mic_Bias(0);
 		  #endif
-	}
+   	}
 	else
 	{
 	    schedule_delayed_work(&headset_sw_data->delayed_work,	msecs_to_jiffies(type_detection_time));	
+//P990_IFX_GB_PORTING_LGSI_START
+#if !defined (STAR_OPERATOR_FIDO)
+	    wake_lock_timeout(&headset_wake_lock, msecs_to_jiffies(type_detection_time + 50));	 //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
+#endif
+//P990_IFX_GB_PORTING_LGSI_END
     }
-	NvOdmGpioInterruptDone(s_hHeadsetHandle.hheadsetInterrupt);	//20100420  for next interrupt (nVidia Interrupt Spec.) [LGE]
+	NvOdmGpioInterruptDone(s_hHeadsetHandle.hheadsetInterrupt);	//20100420 bergkamp.cho@lge.com for next interrupt (nVidia Interrupt Spec.) [LGE]
+//FIDO - GB Porting [09/08/2011] - Start
+#if defined (STAR_OPERATOR_FIDO)
+	wake_lock_timeout(&headset_wake_lock, msecs_to_jiffies(1500));		 //20110427 heejeong.seo@lge.com headset wake lock timeout
+#endif
+//FIDO - GB Porting [09/08/2011] - End
 }
 
 unsigned int hook_gpio =0;
@@ -449,11 +478,11 @@ static void headset_hook_int_handler(void *dev_id)
 	}
 	else{
 		//lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset_hook_int_handler()!!\n");
-		//20101125, , hookkey press is skipped When wakeup from LP1 [START]
+		//20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [START]
         if(suspend_status){
             schedule_work(&switch_data->hook_delayed_work);
         }else{
-        //20101125, , hookkey press is skipped When wakeup from LP1 [END]
+        //20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [END]
         
             if(hook_gpio){
                 schedule_delayed_work(&switch_data->hook_delayed_work,	msecs_to_jiffies(hook_release_time));
@@ -580,7 +609,7 @@ static int headsetdet_probe(struct platform_device *pdev)
                 pin[j] = pConnectivity->AddressList[i].Address;
                 j++;
                 break;
-            //20101117, , gpio wakeup from LP1 [START]
+            //20101117, cs77.ha@lge.com, gpio wakeup from LP1 [START]
             case NvOdmIoModule_Vdd:
                 {
                     NvOdmServicesPmuVddRailCapabilities vddrailcap;
@@ -591,7 +620,7 @@ static int headsetdet_probe(struct platform_device *pdev)
                     headset_vdd_voltage = vddrailcap.requestMilliVolts;
                 }
                 break;
-            //20101117, , gpio wakeup from LP1 [END]
+            //20101117, cs77.ha@lge.com, gpio wakeup from LP1 [END]
             default:
                 break;
         }
@@ -612,13 +641,13 @@ static int headsetdet_probe(struct platform_device *pdev)
 	switch_data->sdev.print_state = switch_gpio_print_state;
 
 
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_probe() => headset detection started..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_probe() => headset detection started..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
-    ret = switch_dev_register(&switch_data->sdev);	//20100421  Headset Detection by Headset Observer [LGE]
+    ret = switch_dev_register(&switch_data->sdev);	//20100421 bergkamp.cho@lge.com Headset Detection by Headset Observer [LGE]
 	if (ret < 0)
 		goto err_switch_dev_register;
 
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - switch device registered..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - switch device registered..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
 
 /*====================== nVidia GPIO Control(S) =======================*/
@@ -629,7 +658,7 @@ static int headsetdet_probe(struct platform_device *pdev)
         lprintk(D_AUDIO, "%s: NvOdmGpioOpen Error \n", __func__);
         goto err_open_gpio_fail;
     }
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioOpen() success..!! : s_hHeadsetHandle.hGpio = %d, port[0] = %d, pin[0] = %d\n", s_hHeadsetHandle.hGpio, port[0], pin[0]);	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioOpen() success..!! : s_hHeadsetHandle.hGpio = %d, port[0] = %d, pin[0] = %d\n", s_hHeadsetHandle.hGpio, port[0], pin[0]);	//20100421 bergkmap.cho@lge.com [LGE]
 
 
     s_hHeadsetHandle.h_Headset_Detection = NvOdmGpioAcquirePinHandle(s_hHeadsetHandle.hGpio, port[0], pin[0]);
@@ -638,11 +667,11 @@ static int headsetdet_probe(struct platform_device *pdev)
         lprintk(D_AUDIO, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto err_open_gpio_pin_acquire_fail;
     }
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioAcquirePinHandle() success..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioAcquirePinHandle() success..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
 
     NvOdmGpioConfig(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, NvOdmGpioPinMode_InputData/*NvOdmGpioPinMode_InputInterruptHigh*/);
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioConfig() success..!! - NvOdmGpioPinMode_InputData");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioConfig() success..!! - NvOdmGpioPinMode_InputData");	//20100421 bergkmap.cho@lge.com [LGE]
 
 
 
@@ -681,7 +710,7 @@ static int headsetdet_probe(struct platform_device *pdev)
     }
 
 	block_hook_int =1;
-//20101005  Gpio MicBias[START_LGE_LAB1]
+//20101005 seki.par@lge.com Gpio MicBias[START_LGE_LAB1]
 #if defined(STAR_COUNTRY_KR)&& !defined(CONFIG_MACH_STAR_SKT_REV_A)
     s_hHeadsetHandle.h_Headset_MicBias = NvOdmGpioAcquirePinHandle(s_hHeadsetHandle.hGpio, port[2], pin[2]);
     if (!s_hHeadsetHandle.h_Headset_MicBias)
@@ -689,16 +718,16 @@ static int headsetdet_probe(struct platform_device *pdev)
         lprintk(D_AUDIO, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto err_open_gpio_pin_acquire_fail;
     }
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset MicBias - NvOdmGpioAcquirePinHandle() success..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset MicBias - NvOdmGpioAcquirePinHandle() success..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
     NvOdmGpioConfig(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_MicBias, NvOdmGpioPinMode_Output);
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset MicBias- NvOdmGpioConfig() success..!! - NvOdmGpioPinMode_Output");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset MicBias- NvOdmGpioConfig() success..!! - NvOdmGpioPinMode_Output");	//20100421 bergkmap.cho@lge.com [LGE]
 #endif
-//20101005  Gpio MicBias[END_LGE_LAB1]
+//20101005 seki.par@lge.com Gpio MicBias[END_LGE_LAB1]
 
 	INIT_WORK(&switch_data->work, headset_det_work);
     INIT_DELAYED_WORK(&switch_data->delayed_work, type_det_work);
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - INIT_WORK() & INIT_DELAYED_WORK() success..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - INIT_WORK() & INIT_DELAYED_WORK() success..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
     if (NvOdmGpioInterruptRegister(s_hHeadsetHandle.hGpio, &s_hHeadsetHandle.hheadsetInterrupt,
         s_hHeadsetHandle.h_Headset_Detection, NvOdmGpioPinMode_InputInterruptAny/*NvOdmGpioPinMode_InputInterruptFallingEdge*//*NvOdmGpioPinMode_InputInterruptRisingEdge*/, headset_int_handler,
@@ -707,19 +736,30 @@ static int headsetdet_probe(struct platform_device *pdev)
         lprintk(D_AUDIO, KERN_ERR "%s: cannot register interrupt.\n", __func__);
         goto err_get_interrupt_handler;
     }
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioInterruptRegister() success..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - NvOdmGpioInterruptRegister() success..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
-    //20101125, , hookkey press is skipped When wakeup from LP1 [START]
+    //20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [START]
     //wake_lock_init(&hook_det_lock, WAKE_LOCK_SUSPEND, "hook_det_wake");
-    //20101125, , hookkey press is skipped When wakeup from LP1 [END]
+    //20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [END]
 
 /*====================== nVidia GPIO Control(E) =======================*/
 
 	/* Perform initial detection */
 	headset_sw_data = switch_data;
 
+//P990_IFX_GB_PORTING_LGSI_START
+//FIDO - GB Porting [09/08/2011] - Start
+#if 1 //defined (STAR_OPERATOR_FIDO)
+       wake_lock_init(&headset_wake_lock, WAKE_LOCK_SUSPEND, "headset_wlock");		 //20110425 heejeong.seo@lge.com headset wake lock timeout
+#endif
+//FIDO - GB Porting [09/08/2011] - End
+//P990_IFX_GB_PORTING_LGSI_END
+
+	
+
+	
 	//headset_det_work(&switch_data->work);
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - headset_det_work() first detection - success..!!\n"); //20100421  [LGE]	
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - headset_det_work() first detection - success..!!\n"); //20100421 bergkmap.cho@lge.com [LGE]	
 
 	err = device_create_file(&pdev->dev, &dev_attr_detect);
     err = device_create_file(&pdev->dev, &dev_attr_block_hook);
@@ -735,7 +775,7 @@ err_open_gpio_pin_acquire_fail:
 err_get_interrupt_handler:
     NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection);
 	
-    NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421  for Hookkey [LGE]
+    NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
     
 
 	return ret;
@@ -744,13 +784,13 @@ err_get_interrupt_handler:
 static void headset_shutdown(struct platform_device *pdev)
 {
 
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_shutdown() : headset detection ended..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_shutdown() : headset detection ended..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
 	struct headset_switch_data *switch_data = platform_get_drvdata(pdev);
 
-	//20101125, , hookkey press is skipped When wakeup from LP1 [START]
+	//20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [START]
 	//wake_lock_destroy(&hook_det_lock);
-	//20101125, , hookkey press is skipped When wakeup from LP1 [END]
+	//20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [END]
 
 	headset_off = 1;
 
@@ -781,14 +821,14 @@ static void headset_shutdown(struct platform_device *pdev)
 	NvOdmGpioSetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, 0);
 	NvOdmGpioConfig(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, NvOdmGpioPinMode_Output);
 
-	NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, s_hHeadsetHandle.hhookInterrupt);	//20100421  for Hookkey [LGE]
+	NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, s_hHeadsetHandle.hhookInterrupt);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
 	NvOdmGpioSetState(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, 0);
 	NvOdmGpioConfig(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, NvOdmGpioPinMode_Output);
 
 
 	NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection);
 
-	NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421  for Hookkey [LGE]
+	NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
 
 	NvOdmGpioClose(s_hHeadsetHandle.hGpio);
 	/*====================== nVidia GPIO Control(E) =======================*/
@@ -796,7 +836,7 @@ static void headset_shutdown(struct platform_device *pdev)
 #if 0
 	switch_dev_unregister(&headset_sw_data->sdev);
 
-	input_unregister_device(headset_sw_data->ip_dev);	//20100421  for Hookkey [LGE]
+	input_unregister_device(headset_sw_data->ip_dev);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
 
 	if(headset_sw_data) kfree(headset_sw_data);
 #endif
@@ -806,35 +846,44 @@ static void headset_shutdown(struct platform_device *pdev)
 static int headsetdet_remove(struct platform_device *pdev)
 {
 
-	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_remove() : headset detection ended..!!\n");	//20100421  [LGE]
+	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headsetdet_remove() : headset detection ended..!!\n");	//20100421 bergkmap.cho@lge.com [LGE]
 
     struct headset_switch_data *switch_data = platform_get_drvdata(pdev);
 
-    //20101125, , hookkey press is skipped When wakeup from LP1 [START]
+    //20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [START]
     //wake_lock_destroy(&hook_det_lock);
-    //20101125, , hookkey press is skipped When wakeup from LP1 [END]
+    //20101125, cs77.ha@lge.com, hookkey press is skipped When wakeup from LP1 [END]
 
     if (headset_h_pmu)
         NvOdmServicesPmuClose(headset_h_pmu);
 
 	cancel_work_sync(&switch_data->work);
 	cancel_delayed_work_sync(&switch_data->delayed_work);
-	
+//P990_IFX_GB_PORTING_LGSI_START
+//FIDO - GB Porting [09/08/2011] - Start
+#if 1 //defined (STAR_OPERATOR_FIDO)
+	 wake_lock_destroy(&headset_wake_lock);			//20110425 heejeong.seo@lge.com headset wake lock timeout
+#endif	
+//FIDO - GB Porting [09/08/2011] - End
+//P990_IFX_GB_PORTING_LGSI_END
+		
+		
+		
 /*====================== nVidia GPIO Control(S) =======================*/
     NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, s_hHeadsetHandle.hheadsetInterrupt);
    
-    NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, s_hHeadsetHandle.hhookInterrupt);	//20100421  for Hookkey [LGE]
+    NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection, s_hHeadsetHandle.hhookInterrupt);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
     
     NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection);
 	
-    NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421  for Hookkey [LGE]
+    NvOdmGpioReleasePinHandle(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Hookkey_Detection);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
     
     NvOdmGpioClose(s_hHeadsetHandle.hGpio);
 /*====================== nVidia GPIO Control(E) =======================*/
 
     switch_dev_unregister(&switch_data->sdev);
     
-	input_unregister_device(switch_data->ip_dev);	//20100421  for Hookkey [LGE]
+	input_unregister_device(switch_data->ip_dev);	//20100421 bergkamp.cho@lge.com for Hookkey [LGE]
 	
 	kfree(switch_data);
 
@@ -843,12 +892,12 @@ static int headsetdet_remove(struct platform_device *pdev)
 
 static int headset_suspend(struct platform_device *pdev, pm_message_t state)
 {
-//20101117, , gpio wakeup from LP1 [START]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [START]
     if(core_lock_on && headset_vdd_address){
         NvOdmServicesPmuSetVoltage(headset_h_pmu, headset_vdd_address, headset_vdd_voltage, NULL);
     }
     suspend_status = 1;
-//20101117, , gpio wakeup from LP1 [END]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [END]
     if(core_lock_on == 0){
     block_hook_int =1;
 	headset_type = STAR_NONE;
@@ -862,18 +911,17 @@ static int headset_suspend(struct platform_device *pdev, pm_message_t state)
 
 static int headset_resume(struct platform_device *pdev)
 {
-//20101117, , gpio wakeup from LP1 [START]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [START]
     if(core_lock_on && headset_vdd_address){
         NvOdmServicesPmuSetVoltage(headset_h_pmu, headset_vdd_address, NVODM_VOLTAGE_OFF, NULL);
     } 
     suspend_status = 0;
-//20101117, , gpio wakeup from LP1 [END]
+//20101117, cs77.ha@lge.com, gpio wakeup from LP1 [END]
 
-
-	// 20110726 detecting headset when resuming [START]
+	 //heejeong.seo@lge.com 20110726 detecting headset when resuming [START]
 	 star_Mic_bias(1);
 	 headset_det_work(&headset_sw_data->work);
-    // 20110726 detecting headset when resuming [END]
+	 //heejeong.seo@lge.com 20110726 detecting headset when resuming [END]
     
     if(core_lock_on){
         lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset_resume()!! wakeup form LP1 headset detect\n");
@@ -883,6 +931,12 @@ static int headset_resume(struct platform_device *pdev)
         input_report_key(headset_sw_data->ip_dev_wake, KEY_VOLUMEDOWN, 0);
 		input_sync(headset_sw_data->ip_dev_wake);
         
+//P990_IFX_GB_PORTING_LGSI_START
+#if !defined (STAR_OPERATOR_FIDO)
+	  cancel_delayed_work_sync(&headset_sw_data->delayed_work); //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
+#endif
+//P990_IFX_GB_PORTING_LGSI_END
+	  
         schedule_delayed_work(&headset_sw_data->delayed_work,	msecs_to_jiffies(300));	
     }
     
@@ -917,3 +971,5 @@ module_exit(headsetdet_exit);
 MODULE_AUTHOR("LG Electronics");
 MODULE_DESCRIPTION("Star Headset Detection Driver");
 MODULE_LICENSE("GPL");
+
+

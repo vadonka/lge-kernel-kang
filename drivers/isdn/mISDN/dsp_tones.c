@@ -8,7 +8,6 @@
  *
  */
 
-#include <linux/gfp.h>
 #include <linux/mISDNif.h>
 #include <linux/mISDNdsp.h>
 #include "core.h"
@@ -394,7 +393,7 @@ void dsp_tone_copy(struct dsp *dsp, u8 *data, int len)
 	while (len) {
 		/* find sample to start with */
 		while (42) {
-			/* wrap around */
+			/* warp arround */
 			if (!pat->seq[index]) {
 				count = 0;
 				index = 0;

@@ -43,7 +43,7 @@
 #include "pmu/max8907/max8907_supply_info_table.h"
 #include "tmon/adt7461/nvodm_tmon_adt7461.h"
 
-//20100426  For global definition
+//20100426 sk.hwang@lge.com For global definition
 //#include <star_global_definition.h>
 #include <star_hw_definition.h>
 #include <star_pinmux_definition.h>
@@ -62,29 +62,29 @@ static const NvOdmIoAddress s_lge_Tmon0Addresses[] =
 #endif
 
 #if defined(CONFIG_MACH_STAR)
-//20100413, , power off [START]
+//20100413, cs77.ha@lge.com, power off [START]
 static const NvOdmIoAddress s_lge_SocOdmAddresses[] =
 {
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_SOC, 0 },
 };
-//20100413, , power off [END]
+//20100413, cs77.ha@lge.com, power off [END]
 
-//20100703, , power reset [START]
+//20100703, cs77.ha@lge.com, power reset [START]
 static const NvOdmIoAddress s_lge_PowerResetAddresses[] =
 {
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_reset, 0 },
 };
-//20100703, , power reset [END]
+//20100703, cs77.ha@lge.com, power reset [END]
 #endif
 
-//20100413, , powerkey [START]
+//20100413, cs77.ha@lge.com, powerkey [START]
 #if defined(CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_PowerKeyAddresses[] =
 {
     { NvOdmIoModule_Gpio, 'v' - 'a' , 2, 0 },
 };
 #endif
-//20100413, , powerkey [END]
+//20100413, cs77.ha@lge.com, powerkey [END]
 
 static const NvOdmIoAddress s_lge_HdmiAddresses[] =
 {
@@ -125,13 +125,13 @@ static const NvOdmIoAddress s_lge_CoreAddresses[] =
 // CPU voltage rail
 static const NvOdmIoAddress s_lge_CpuAddresses[] = 
 {
-//20100725  add MAX8907C FEATURE [START]
+//20100725 taewan.kim@lge.com add MAX8907C FEATURE [START]
 #if defined(CONFIG_MACH_STAR)
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_EXT_DCDC_8_CPU, 0 },  /* VDD_CPU_PMU -> V1 */
 #else
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LX_V1, 0 },  /* VDD_CPU_PMU -> V1 */
 #endif
-//20100725  add MAX8907C FEATURE [END]
+//20100725 taewan.kim@lge.com add MAX8907C FEATURE [END]
 };
 #endif
 
@@ -338,16 +338,16 @@ static const NvOdmIoAddress s_lge_SdioAddresses[] =
     { NvOdmIoModule_Sdio, 0x3, 0x0, 0 }, // eMMC
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO12, 0 }, // 2.8V microSD(VDDIO_SDIO) 
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LX_V3, 0 }, // 1.8V eMMC VCCQ & microSD detect(VDDIO_NAND)
-    //20100727 it should be always on for (a03 deepsleep isseu) work around [START]
+    //20100727 cs77.ha@lge.com it should be always on for (a03 deepsleep isseu) work around [START]
     #if defined(CONFIG_MACH_STAR)
     //do nothing
     #else
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO5, 0 }, // eMMC 2.8V VCC
     #endif
-    //20100727 it should be always on for (a03 deepsleep isseu) work around [END]
+    //20100727 cs77.ha@lge.com it should be always on for (a03 deepsleep isseu) work around [END]
 };
 
-//Vibrator  for vibrator 
+//Vibrator sk.hwang@lge.com for vibrator 
 static const NvOdmIoAddress s_lge_VibAddresses[] =
 {
     { NvOdmIoModule_Vdd, 0x0, Max8907PmuSupply_LDO13, 0 }, // VCC_MOTOR_3V0
@@ -365,7 +365,7 @@ static const NvOdmIoAddress s_lge_AccelerometerAddresses[] =
     { NvOdmIoModule_Vdd,  0x00, Max8907PmuSupply_LDO8 , 0 },  /* LDO8 1.8V VCC_SENSOR_1V8*/
 };
 
-//Compass 
+//Compass sk.hwang@lge.com
 static const NvOdmIoAddress s_lge_CompassAddresses[] =
 {
     { NvOdmIoModule_I2c,  0x01, 0x0e, 0 }, /* I2C device address is 0x0F */
@@ -382,14 +382,20 @@ static const NvOdmIoAddress s_lge_GyroAddresses[] =
     { NvOdmIoModule_Vdd,  0x00, Max8907PmuSupply_LDO8 , 0 },  /* LDO8 1.8V VCC_SENSOR_1V8*/
 };
 
-//Proximity
+//Proximity sk.hwang@lge.com
 static const NvOdmIoAddress s_lge_ProximityAddresses[] =
 {
 	{ NvOdmIoModule_I2c,  0x01, 0x44, 0 }, /* I2C device address is 0x44 */
 #if defined (CONFIG_MACH_STAR_MDM_C)
 	{ NvOdmIoModule_Gpio, 'r' - 'a', 2, 0 }, 
-#else
+//P990_IFX_GB_PORTING_LGSI_START
+//Domain:- MACRO RENAMING	 
+#elif defined (CONFIG_MACH_STAR)
+//P990_IFX_GB_PORTING_LGSI_END
 	{ NvOdmIoModule_Gpio, 'w' - 'a', 2, 0 }, 
+#else
+#error PROXI_OUT PIN not assigned
+	{ NvOdmIoModule_Gpio, 'a' - 'a', 0, 0 }, 
 #endif
 	{ NvOdmIoModule_Vdd,  0x00, Max8907PmuSupply_LDO7 , 0 },  /* LDO8 1.8V VCC_SENSOR_1V8*/
 	{ NvOdmIoModule_Vdd,  0x00, Max8907PmuSupply_LDO8, 0 },   /* LDO7 3.0v VCC_SENSOR_3V0 */
@@ -410,7 +416,7 @@ static const NvOdmIoAddress s_lge_MainDisplayAddresses[] =
 {
     { NvOdmIoModule_Display, 0, 0, 0 },
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LX_V3, 0 },   /* VDDIO_LCD -> V3 */
-//20100725  add CPU Interface [START]
+//20100725 taewan.kim@lge.com add CPU Interface [START]
 #if defined(CONFIG_MACH_STAR)
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO3 , 0 },  // NVVDD_LDO3_1V8
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO14 , 0 },  // NVVDD_LDO14_2V8
@@ -418,7 +424,7 @@ static const NvOdmIoAddress s_lge_MainDisplayAddresses[] =
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO17 , 0 },  /* MIPI DSI 1.2V */
     { NvOdmIoModule_Gpio, (NvU32)('v' - 'a'), 7, 0 },
 #endif
-//20100725  add CPU Interface [END]
+//20100725 taewan.kim@lge.com add CPU Interface [END]
 };
 
 #if 0
@@ -441,7 +447,7 @@ static const NvOdmIoAddress s_lge_TouchPanelAddresses[] =
 #endif
 
 #if defined(CONFIG_MACH_STAR)
-// 20100527  Synaptics/Cypress Touch support [START]
+// 20100527 joseph.jung@lge.com Synaptics/Cypress Touch support [START]
 static const NvOdmIoAddress s_lge_SynapticsTouchAddresses[] = 
 {
 	{ NvOdmIoModule_I2c, 0x00, 0x20, 0 },						/* GEN1_I2C instance = 0x00, Touch IC I2C Address = 0x20 */
@@ -457,29 +463,30 @@ static const NvOdmIoAddress s_lge_CypressTouchAddresses[] =
 	{ NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO10, 0 },		// TOUCH_VCC_3V1
 	{ NvOdmIoModule_I2c_Pmu, 0x00, Max8907PmuSupply_LDO19, 0 },	// TOUCH_I2C_1V8
 };
-// 20100527  Synaptics/Cypress Touch support [END]
+// 20100527 joseph.jung@lge.com Synaptics/Cypress Touch support [END]
 #endif
 
-// 20100401  MUIC driver [START]
+// 20100401 taewan.kim@lge.com MUIC driver [START]
 #if defined (CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_MuicAddresses[] = 
 {
     { NvOdmIoModule_Gpio, 'u' - 'a', 0, 0 }, /* INT_N_MUIC */
     { NvOdmIoModule_Gpio, 'u' - 'a', 1, 0 }, /* AP20_UART_SW */
     { NvOdmIoModule_Gpio, 'u' - 'a', 2, 0 }, /* IFX_UART_SW   */
-#ifdef CONFIG_MACH_STAR_REV_F
+#if defined (CONFIG_MODEM_IFX)
     { NvOdmIoModule_Gpio, 'u' - 'a', 3, 0 }, /* USIF1_SW  */
 #endif
 #if defined(CONFIG_MACH_STAR)
     { NvOdmIoModule_Gpio, 'r' - 'a', 7, 0 }, /* MDM_USB_VBUS_EN  */
 #else
 #error MUIC PIN not assigned
+    { NvOdmIoModule_Gpio, 'u' - 'a', 3, 0 }, /* USIF1_SW  */
 #endif
 };
 #endif
-// 20100401  MUIC driver [END]
+// 20100401 taewan.kim@lge.com MUIC driver [END]
 
-//20100609, , Charger IC Driver [START]
+//20100609, jh.ahn@lge.com, Charger IC Driver [START]
 #if defined (CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_ChargerAddresses[] =
 {
@@ -488,7 +495,7 @@ static const NvOdmIoAddress s_lge_ChargerAddresses[] =
 	{ NvOdmIoModule_Gpio, 'q' - 'a', 2, 0 }, /* CHG_PGB_N */
 };
 #endif
-//20100609, , Charger IC Driver [END]
+//20100609, jh.ahn@lge.com, Charger IC Driver [END]
 
 static const NvOdmIoAddress s_lge_BackLightAddresses[] = 
 {
@@ -496,32 +503,32 @@ static const NvOdmIoAddress s_lge_BackLightAddresses[] =
     { NvOdmIoModule_Gpio, 'r' - 'a', 3, 0 }, /* GPIO Port R and Pin 3 */
 };
 
-//20100424, , RIL code from firenze [START]
+//20100424, bojung.ko@lge.com, RIL code from firenze [START]
 #if defined (CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_SpiAddresses[] = 
 {
-#if defined (CONFIG_MACH_STAR_REV_F)
-    { NvOdmIoModule_Gpio, 'o' - 'a', 5, 0 }, 
-    { NvOdmIoModule_Gpio, 'o' - 'a', 0, 0 }, 
-#else
-//20100729-1, , Crazy!!, it changed [START]
+#if defined (CONFIG_MODEM_MDM)
+//20100729-1, syblue.lee@lge.com, Crazy!!, it changed [START]
     { NvOdmIoModule_Gpio, 'u' - 'a', 6, 0},	//SRDY1 //{ NvOdmIoModule_Gpio, 'o' - 'a', 5},	//SRDY2 
     { NvOdmIoModule_Gpio, 'j' - 'a', 6, 0}, //MRDY1//{ NvOdmIoModule_Gpio, 'o' - 'a', 0}, //MRDY2
-//20100729, , Crazy!!, it changed [END]
+//20100729, syblue.lee@lge.com, Crazy!!, it changed [END]
+#elif defined (CONFIG_MODEM_IFX)
+	{ NvOdmIoModule_Gpio, 'o' - 'a', 5, 0 }, 
+    { NvOdmIoModule_Gpio, 'o' - 'a', 0, 0 },
 #endif
-//20100711-1, , Add spi controller 0 and chip select 0 [START]
+//20100711-1, syblue.lee@lge.com, Add spi controller 0 and chip select 0 [START]
     { NvOdmIoModule_Spi, AP20_SPI1,  0x0, 0 }, /* Spi Controller 0 and Chip Select 0 */
-//20100711, , Add spi controller 0 and chip select 0 [END]
-//20100809-1, , Add SPI2 for AP-CP IPC [START]
+//20100711, syblue.lee@lge.com, Add spi controller 0 and chip select 0 [END]
+//20100809-1, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [START]
 #ifdef CONFIG_DUAL_SPI
     { NvOdmIoModule_Gpio, 'o' - 'a', 5, 0},	//SRDY2 
     { NvOdmIoModule_Gpio, 'o' - 'a', 0, 0}, //MRDY2
     { NvOdmIoModule_Spi, AP20_SPI2,  0x0, 0}, /* Spi Controller 1 and Chip Select 0 */
 #endif
-//20100809, , Add SPI2 for AP-CP IPC [END]
+//20100809, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [END]
 };
 #endif
-//20100424, , RIL code from firenze [END]
+//20100424, bojung.ko@lge.com, RIL code from firenze [END]
 
 // Bluetooth
 static const NvOdmIoAddress s_lge_BluetoothAddresses[] =
@@ -529,9 +536,14 @@ static const NvOdmIoAddress s_lge_BluetoothAddresses[] =
     { NvOdmIoModule_Uart, 0x2,  0x0, 0 }, //Instance 2 means UART3.
 #if defined (CONFIG_MACH_STAR_MDM_C)
     { NvOdmIoModule_Gpio, 'q' - 'a', 4, 0 }, // bt_en
-#else
+//P990_IFX_GB_PORTING_LGSI_START
+//Domain:- MACRO RENAMING	
+#elif defined (CONFIG_MACH_STAR)
+//P990_IFX_GB_PORTING_LGSI_END
     { NvOdmIoModule_Gpio, 'z' - 'a', 2, 0 }, // bt_en
-#endif    
+#else
+#error BT_EN pin not assigned
+#endif
     { NvOdmIoModule_Gpio, 'c' - 'a', 7, 0 }, // bt_host_wakeup
     { NvOdmIoModule_Gpio, 'x' - 'a', 4, 0 }, // bt_wakeup
 };
@@ -542,26 +554,35 @@ static const NvOdmIoAddress s_lge_WlanAddresses[] =
     { NvOdmIoModule_Sdio, 0x0, 0x0, 0 },    // WLAN is on SD Bus
 #if defined (CONFIG_MACH_STAR_MDM_C)
     { NvOdmIoModule_Gpio, 'q' - 'a', 3, 0 }, // wlan_en
-#else
+//P990_IFX_GB_PORTING_LGSI_START
+//Domain:-MACRO RENAMING	
+#elif defined (CONFIG_MACH_STAR)
+//P990_IFX_GB_PORTING_LGSI_END
+#if defined (CONFIG_MODEM_MDM)
     { NvOdmIoModule_Gpio, 'w' - 'a', 1 }, // wlan_en
-#endif    
+#elif defined (CONFIG_MODEM_IFX)
+	{ NvOdmIoModule_Gpio, 'w' - 'a', 1, 0 }, // wlan_en
+#endif
+#else
+#error WLAN_EN pin not assigned
+#endif
     { NvOdmIoModule_Gpio, 's' - 'a', 0, 0 }, // wlan_host_wakeup
     { NvOdmIoModule_Gpio, 'g' - 'a', 2, 0 }, // wlan_wakeup
 };
 
 
-//20100421  [LGE_START]
+//20100421 bergkamp.cho@lge.com [LGE_START]
 #if defined (CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_HeadsetAddresses[] = 
 {
     { NvOdmIoModule_Gpio, 'g' - 'a', 3, 0 }, //Headset Detection
-    { NvOdmIoModule_Gpio, 'd' - 'a', 3, 0 }, //hook Detection //jongik2.kim 20100803 HOOK_DETECTION    
+    { NvOdmIoModule_Gpio, 'd' - 'a', 3, 0 }, //hook Detection //jongik2.kim 20100803 HOOK_DETECTION
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO12, 0 },	// hook detection power rail
 };
 #endif /* CONFIG_MACH_STAR */
-//20100421  [LGE_END]
+//20100421 bergkamp.cho@lge.com [LGE_END]
 
-//20100730  [LGE_START]
+//20100730 kyungsik.lee@lge.com [LGE_START]
 #if defined (CONFIG_MACH_STAR)
 static const NvOdmIoAddress s_lge_CPdeviceAddresses[] = 
 {
@@ -572,7 +593,7 @@ static const NvOdmIoAddress s_lge_CPdeviceAddresses[] =
 #endif /* CONFIG_SPI_MDM6600 */
 };
 #endif /* CONFIG_MACH_STAR */
-//20100730  [LGE_END]
+//20100730 kyungsik.lee@lge.com [LGE_END]
 
 
 typedef enum
@@ -623,7 +644,7 @@ static const NvOdmIoAddress s_lge_KeyPadAddresses[] =
     { NvOdmIoModule_Kbd, 0x01, NvOdmKbcGpioPin_KBCol1, 0 },    // Column 1
 };
 
-//LGE_UPDATE_S  2010-05-024 GPS UART & GPIO Setting
+//LGE_UPDATE_S neo.shin@lge.com 2010-05-024 GPS UART & GPIO Setting
 static const NvOdmIoAddress s_lge_GPSAddresses[] =
 {
     { NvOdmIoModule_Uart, 0x3,  0x0, 0 }, 		//Instance 3 means UART4.
@@ -631,18 +652,18 @@ static const NvOdmIoAddress s_lge_GPSAddresses[] =
     { NvOdmIoModule_Gpio, 'j' - 'a', 2, 0 }, 	// GPIO_PJ2 -poweron
     { NvOdmIoModule_Gpio, 'd' - 'a', 0, 0 }, 	// GPIO_PD0 -External LNA
 };
-//LGE_UPDATE_E  2010-05-024 GPS UART & GPIO Setting
+//LGE_UPDATE_E neo.shin@lge.com 2010-05-024 GPS UART & GPIO Setting
 
 
-//20100611, , Touch LED [START]
+//20100611, cs77.ha@lge.com, Touch LED [START]
 static const NvOdmIoAddress s_lge_TouchLEDAddresses[] = 
 {
 	{ NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_WHITE_LED, 0 },   //Touch LED
 };
-//20100611, , Touch LED [END]
+//20100611, cs77.ha@lge.com, Touch LED [END]
 
 
-//20100603, , star pmic [START]
+//20100603, cs77.ha@lge.com, star pmic [START]
 #ifdef CONFIG_STAR_PMIC
 static const NvOdmIoAddress s_lge_AllRailAddresses[] =
 {
@@ -668,5 +689,5 @@ static const NvOdmIoAddress s_lge_AllRailAddresses[] =
     { NvOdmIoModule_Vdd, 0x00, Max8907PmuSupply_LDO20, 0 },
 };
 #endif
-//20100603, , star pmic [END]
+//20100603, cs77.ha@lge.com, star pmic [END]
 

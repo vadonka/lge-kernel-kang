@@ -49,7 +49,6 @@
 #include <linux/namei.h>
 #include <linux/mm.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/mount.h>
 #include <linux/socket.h>
 #include <linux/mqueue.h>
@@ -65,6 +64,7 @@
 #include <linux/binfmts.h>
 #include <linux/highmem.h>
 #include <linux/syscalls.h>
+#include <linux/inotify.h>
 #include <linux/capability.h>
 #include <linux/fs_struct.h>
 
@@ -241,10 +241,6 @@ struct audit_context {
 			pid_t			pid;
 			struct audit_cap_data	cap;
 		} capset;
-		struct {
-			int			fd;
-			int			flags;
-		} mmap;
 	};
 	int fds[2];
 
@@ -254,6 +250,7 @@ struct audit_context {
 #endif
 };
 
+#define ACC_MODE(x) ("\004\002\006\006"[(x)&O_ACCMODE])
 static inline int open_arg(int flags, int mask)
 {
 	int n = ACC_MODE(flags);
@@ -443,24 +440,16 @@ static int match_tree_refs(struct audit_context *ctx, struct audit_tree *tree)
 
 /* Determine if any context name data matches a rule's watch data */
 /* Compare a task_struct with an audit_rule.  Return 1 on match, 0
- * otherwise.
- *
- * If task_creation is true, this is an explicit indication that we are
- * filtering a task rule at task creation time.  This and tsk == current are
- * the only situations where tsk->cred may be accessed without an rcu read lock.
- */
+ * otherwise. */
 static int audit_filter_rules(struct task_struct *tsk,
 			      struct audit_krule *rule,
 			      struct audit_context *ctx,
 			      struct audit_names *name,
-			      enum audit_state *state,
-			      bool task_creation)
+			      enum audit_state *state)
 {
-	const struct cred *cred;
+	const struct cred *cred = get_task_cred(tsk);
 	int i, j, need_sid = 1;
 	u32 sid;
-
-	cred = rcu_dereference_check(tsk->cred, tsk == current || task_creation);
 
 	for (i = 0; i < rule->field_count; i++) {
 		struct audit_field *f = &rule->fields[i];
@@ -560,8 +549,9 @@ static int audit_filter_rules(struct task_struct *tsk,
 			}
 			break;
 		case AUDIT_WATCH:
-			if (name)
-				result = audit_watch_compare(rule->watch, name->ino, name->dev);
+			if (name && audit_watch_inode(rule->watch) != (unsigned long)-1)
+				result = (name->dev == audit_watch_dev(rule->watch) &&
+					  name->ino == audit_watch_inode(rule->watch));
 			break;
 		case AUDIT_DIR:
 			if (ctx)
@@ -645,8 +635,10 @@ static int audit_filter_rules(struct task_struct *tsk,
 			break;
 		}
 
-		if (!result)
+		if (!result) {
+			put_cred(cred);
 			return 0;
+		}
 	}
 
 	if (ctx) {
@@ -662,6 +654,7 @@ static int audit_filter_rules(struct task_struct *tsk,
 	case AUDIT_NEVER:    *state = AUDIT_DISABLED;	    break;
 	case AUDIT_ALWAYS:   *state = AUDIT_RECORD_CONTEXT; break;
 	}
+	put_cred(cred);
 	return 1;
 }
 
@@ -676,8 +669,7 @@ static enum audit_state audit_filter_task(struct task_struct *tsk, char **key)
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(e, &audit_filter_list[AUDIT_FILTER_TASK], list) {
-		if (audit_filter_rules(tsk, &e->rule, NULL, NULL,
-				       &state, true)) {
+		if (audit_filter_rules(tsk, &e->rule, NULL, NULL, &state)) {
 			if (state == AUDIT_RECORD_CONTEXT)
 				*key = kstrdup(e->rule.filterkey, GFP_ATOMIC);
 			rcu_read_unlock();
@@ -711,7 +703,7 @@ static enum audit_state audit_filter_syscall(struct task_struct *tsk,
 		list_for_each_entry_rcu(e, list, list) {
 			if ((e->rule.mask[word] & bit) == bit &&
 			    audit_filter_rules(tsk, &e->rule, ctx, NULL,
-					       &state, false)) {
+					       &state)) {
 				rcu_read_unlock();
 				ctx->current_state = state;
 				return state;
@@ -749,8 +741,7 @@ void audit_filter_inodes(struct task_struct *tsk, struct audit_context *ctx)
 
 		list_for_each_entry_rcu(e, list, list) {
 			if ((e->rule.mask[word] & bit) == bit &&
-			    audit_filter_rules(tsk, &e->rule, ctx, n,
-				    	       &state, false)) {
+			    audit_filter_rules(tsk, &e->rule, ctx, n, &state)) {
 				rcu_read_unlock();
 				ctx->current_state = state;
 				return;
@@ -1018,7 +1009,7 @@ static int audit_log_pid_context(struct audit_context *context, pid_t pid,
 /*
  * to_send and len_sent accounting are very loose estimates.  We aren't
  * really worried about a hard cap to MAX_EXECVE_AUDIT_LEN so much as being
- * within about 500 bytes (next page boundary)
+ * within about 500 bytes (next page boundry)
  *
  * why snprintf?  an int is up to 12 digits long.  if we just assumed when
  * logging that a[%d]= was going to be 16 characters long we would be wasting
@@ -1315,10 +1306,6 @@ static void show_special(struct audit_context *context, int *call_panic)
 		audit_log_cap(ab, "cap_pi", &context->capset.cap.inheritable);
 		audit_log_cap(ab, "cap_pp", &context->capset.cap.permitted);
 		audit_log_cap(ab, "cap_pe", &context->capset.cap.effective);
-		break; }
-	case AUDIT_MMAP: {
-		audit_log_format(ab, "fd=%d flags=0x%x", context->mmap.fd,
-				 context->mmap.flags);
 		break; }
 	}
 	audit_log_end(ab);
@@ -1739,7 +1726,7 @@ static inline void handle_one(const struct inode *inode)
 	struct audit_tree_refs *p;
 	struct audit_chunk *chunk;
 	int count;
-	if (likely(hlist_empty(&inode->i_fsnotify_marks)))
+	if (likely(list_empty(&inode->inotify_watches)))
 		return;
 	context = current->audit_context;
 	p = context->trees;
@@ -1782,7 +1769,7 @@ retry:
 	seq = read_seqbegin(&rename_lock);
 	for(;;) {
 		struct inode *inode = d->d_inode;
-		if (inode && unlikely(!hlist_empty(&inode->i_fsnotify_marks))) {
+		if (inode && unlikely(!list_empty(&inode->inotify_watches))) {
 			struct audit_chunk *chunk;
 			chunk = audit_tree_lookup(inode);
 			if (chunk) {
@@ -1850,8 +1837,13 @@ void __audit_getname(const char *name)
 	context->names[context->name_count].ino  = (unsigned long)-1;
 	context->names[context->name_count].osid = 0;
 	++context->name_count;
-	if (!context->pwd.dentry)
-		get_fs_pwd(current->fs, &context->pwd);
+	if (!context->pwd.dentry) {
+		read_lock(&current->fs->lock);
+		context->pwd = current->fs->pwd;
+		path_get(&current->fs->pwd);
+		read_unlock(&current->fs->lock);
+	}
+
 }
 
 /* audit_putname - intercept a putname request
@@ -1902,7 +1894,7 @@ static int audit_inc_name_count(struct audit_context *context,
 {
 	if (context->name_count >= AUDIT_NAMES) {
 		if (inode)
-			printk(KERN_DEBUG "audit: name_count maxed, losing inode data: "
+			printk(KERN_DEBUG "name_count maxed, losing inode data: "
 			       "dev=%02x:%02x, inode=%lu\n",
 			       MAJOR(inode->i_sb->s_dev),
 			       MINOR(inode->i_sb->s_dev),
@@ -1997,6 +1989,7 @@ void __audit_inode(const char *name, const struct dentry *dentry)
 
 /**
  * audit_inode_child - collect inode info for created/removed objects
+ * @dname: inode's dentry name
  * @dentry: dentry being audited
  * @parent: inode of dentry parent
  *
@@ -2008,14 +2001,13 @@ void __audit_inode(const char *name, const struct dentry *dentry)
  * must be hooked prior, in order to capture the target inode during
  * unsuccessful attempts.
  */
-void __audit_inode_child(const struct dentry *dentry,
+void __audit_inode_child(const char *dname, const struct dentry *dentry,
 			 const struct inode *parent)
 {
 	int idx;
 	struct audit_context *context = current->audit_context;
 	const char *found_parent = NULL, *found_child = NULL;
 	const struct inode *inode = dentry->d_inode;
-	const char *dname = dentry->d_name.name;
 	int dirlen = 0;
 
 	if (!context->in_syscall)
@@ -2023,6 +2015,9 @@ void __audit_inode_child(const struct dentry *dentry,
 
 	if (inode)
 		handle_one(inode);
+	/* determine matching parent */
+	if (!dname)
+		goto add_names;
 
 	/* parent is more likely, look for it first */
 	for (idx = 0; idx < context->name_count; idx++) {
@@ -2489,14 +2484,6 @@ void __audit_log_capset(pid_t pid,
 	context->capset.cap.inheritable = new->cap_effective;
 	context->capset.cap.permitted   = new->cap_permitted;
 	context->type = AUDIT_CAPSET;
-}
-
-void __audit_mmap_fd(int fd, int flags)
-{
-	struct audit_context *context = current->audit_context;
-	context->mmap.fd = fd;
-	context->mmap.flags = flags;
-	context->type = AUDIT_MMAP;
 }
 
 /**

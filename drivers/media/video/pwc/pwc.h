@@ -32,9 +32,8 @@
 #include <linux/version.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
-#include <linux/slab.h>
 #include <asm/errno.h>
-#include <linux/videodev2.h>
+#include <linux/videodev.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ioctl.h>
 #ifdef CONFIG_USB_PWC_INPUT_EVDEV
@@ -49,7 +48,7 @@
 #define PWC_MINOR	0
 #define PWC_EXTRAMINOR	12
 #define PWC_VERSION_CODE KERNEL_VERSION(PWC_MAJOR,PWC_MINOR,PWC_EXTRAMINOR)
-#define PWC_VERSION	"10.0.14"
+#define PWC_VERSION 	"10.0.13"
 #define PWC_NAME 	"pwc"
 #define PFX		PWC_NAME ": "
 
@@ -162,9 +161,9 @@ struct pwc_imgbuf
 
 struct pwc_device
 {
-	struct video_device vdev;
+   struct video_device *vdev;
 
-   /* Pointer to our usb_device, may be NULL after unplug */
+   /* Pointer to our usb_device */
    struct usb_device *udev;
 
    int type;                    /* type of cam (645, 646, 675, 680, 690, 720, 730, 740, 750) */
@@ -180,7 +179,7 @@ struct pwc_device
    int vcinterface;		/* video control interface */
    int valternate;		/* alternate interface needed */
    int vframes, vsize;		/* frames-per-second & size (see PSZ_*) */
-   int pixfmt;			/* pixelformat: V4L2_PIX_FMT_YUV420 or raw: _PWC1, _PWC2 */
+   int vpalette;		/* palette: 420P, RAW or RGBBAYER */
    int vframe_count;		/* received frames */
    int vframes_dumped; 		/* counter for dumped frames */
    int vframes_error;		/* frames received in error */
@@ -275,6 +274,7 @@ extern int pwc_trace;
 extern int pwc_mbufs;
 
 /** functions in pwc-if.c */
+int pwc_try_video_mode(struct pwc_device *pdev, int width, int height, int new_fps, int new_compression, int new_snapshot);
 int pwc_handle_frame(struct pwc_device *pdev);
 void pwc_next_image(struct pwc_device *pdev);
 int pwc_isoc_init(struct pwc_device *pdev);
@@ -339,7 +339,8 @@ extern int pwc_camera_power(struct pwc_device *pdev, int power);
 /* Private ioctl()s; see pwc-ioctl.h */
 extern long pwc_ioctl(struct pwc_device *pdev, unsigned int cmd, void *arg);
 
-extern const struct v4l2_ioctl_ops pwc_ioctl_ops;
+/** Functions in pwc-v4l.c */
+extern long pwc_video_do_ioctl(struct file *file, unsigned int cmd, void *arg);
 
 /** pwc-uncompress.c */
 /* Expand frame to image, possibly including decompression. Uses read_frame and fill_image */

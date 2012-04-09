@@ -14,7 +14,6 @@
 #include <linux/irq.h>
 #include <linux/list.h>
 #include <linux/of.h>
-#include <linux/slab.h>
 
 #include <asm/processor.h>
 #include <asm/io.h>
@@ -381,7 +380,7 @@ static int __init pcibios_init(void)
 		if (pci_assign_all_buses)
 			hose->first_busno = next_busno;
 		hose->last_busno = 0xff;
-		pcibios_scan_phb(hose);
+		pcibios_scan_phb(hose, hose);
 		pci_bus_add_devices(hose->bus);
 		if (pci_assign_all_buses || next_busno <= hose->last_busno)
 			next_busno = hose->last_busno + pcibios_assign_bus_offset;

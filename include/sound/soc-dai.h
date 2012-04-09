@@ -30,7 +30,6 @@ struct snd_pcm_substream;
 #define SND_SOC_DAIFMT_DSP_A		3 /* L data MSB after FRM LRC */
 #define SND_SOC_DAIFMT_DSP_B		4 /* L data MSB during FRM LRC */
 #define SND_SOC_DAIFMT_AC97		5 /* AC97 */
-#define SND_SOC_DAIFMT_PDM		6 /* Pulse density modulation */
 
 /* left and right justified also known as MSB and LSB respectively */
 #define SND_SOC_DAIFMT_MSB		SND_SOC_DAIFMT_LEFT_J
@@ -89,17 +88,15 @@ struct snd_pcm_substream;
                                SNDRV_PCM_FMTBIT_S32_LE |\
                                SNDRV_PCM_FMTBIT_S32_BE)
 
-struct snd_soc_dai_driver;
+struct snd_soc_dai_ops;
 struct snd_soc_dai;
 struct snd_ac97_bus_ops;
 
 /* Digital Audio Interface registration */
-int snd_soc_register_dai(struct device *dev,
-		struct snd_soc_dai_driver *dai_drv);
-void snd_soc_unregister_dai(struct device *dev);
-int snd_soc_register_dais(struct device *dev,
-		struct snd_soc_dai_driver *dai_drv, size_t count);
-void snd_soc_unregister_dais(struct device *dev, size_t count);
+int snd_soc_register_dai(struct snd_soc_dai *dai);
+void snd_soc_unregister_dai(struct snd_soc_dai *dai);
+int snd_soc_register_dais(struct snd_soc_dai *dai, size_t count);
+void snd_soc_unregister_dais(struct snd_soc_dai *dai, size_t count);
 
 /* Digital Audio Interface clocking API.*/
 int snd_soc_dai_set_sysclk(struct snd_soc_dai *dai, int clk_id,
@@ -109,7 +106,7 @@ int snd_soc_dai_set_clkdiv(struct snd_soc_dai *dai,
 	int div_id, int div);
 
 int snd_soc_dai_set_pll(struct snd_soc_dai *dai,
-	int pll_id, int source, unsigned int freq_in, unsigned int freq_out);
+	int pll_id, unsigned int freq_in, unsigned int freq_out);
 
 /* Digital Audio interface formatting */
 int snd_soc_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt);
@@ -117,15 +114,21 @@ int snd_soc_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt);
 int snd_soc_dai_set_tdm_slot(struct snd_soc_dai *dai,
 	unsigned int tx_mask, unsigned int rx_mask, int slots, int slot_width);
 
-int snd_soc_dai_set_channel_map(struct snd_soc_dai *dai,
-	unsigned int tx_num, unsigned int *tx_slot,
-	unsigned int rx_num, unsigned int *rx_slot);
-
 int snd_soc_dai_set_tristate(struct snd_soc_dai *dai, int tristate);
 
 /* Digital Audio Interface mute */
 int snd_soc_dai_digital_mute(struct snd_soc_dai *dai, int mute);
 
+/*
+ * Digital Audio Interface.
+ *
+ * Describes the Digital Audio Interface in terms of its ALSA, DAI and AC97
+ * operations and capabilities. Codec and platform drivers will register this
+ * structure for every DAI they have.
+ *
+ * This structure covers the clocking, formating and ALSA operations for each
+ * interface.
+ */
 struct snd_soc_dai_ops {
 	/*
 	 * DAI clocking configuration, all optional.
@@ -133,8 +136,8 @@ struct snd_soc_dai_ops {
 	 */
 	int (*set_sysclk)(struct snd_soc_dai *dai,
 		int clk_id, unsigned int freq, int dir);
-	int (*set_pll)(struct snd_soc_dai *dai, int pll_id, int source,
-		unsigned int freq_in, unsigned int freq_out);
+	int (*set_pll)(struct snd_soc_dai *dai,
+		int pll_id, unsigned int freq_in, unsigned int freq_out);
 	int (*set_clkdiv)(struct snd_soc_dai *dai, int div_id, int div);
 
 	/*
@@ -145,9 +148,6 @@ struct snd_soc_dai_ops {
 	int (*set_tdm_slot)(struct snd_soc_dai *dai,
 		unsigned int tx_mask, unsigned int rx_mask,
 		int slots, int slot_width);
-	int (*set_channel_map)(struct snd_soc_dai *dai,
-		unsigned int tx_num, unsigned int *tx_slot,
-		unsigned int rx_num, unsigned int *rx_slot);
 	int (*set_tristate)(struct snd_soc_dai *dai, int tristate);
 
 	/*
@@ -172,43 +172,6 @@ struct snd_soc_dai_ops {
 		struct snd_soc_dai *);
 	int (*trigger)(struct snd_pcm_substream *, int,
 		struct snd_soc_dai *);
-	/*
-	 * For hardware based FIFO caused delay reporting.
-	 * Optional.
-	 */
-	snd_pcm_sframes_t (*delay)(struct snd_pcm_substream *,
-		struct snd_soc_dai *);
-};
-
-/*
- * Digital Audio Interface Driver.
- *
- * Describes the Digital Audio Interface in terms of its ALSA, DAI and AC97
- * operations and capabilities. Codec and platform drivers will register this
- * structure for every DAI they have.
- *
- * This structure covers the clocking, formating and ALSA operations for each
- * interface.
- */
-struct snd_soc_dai_driver {
-	/* DAI description */
-	const char *name;
-	unsigned int id;
-	int ac97_control;
-
-	/* DAI driver callbacks */
-	int (*probe)(struct snd_soc_dai *dai);
-	int (*remove)(struct snd_soc_dai *dai);
-	int (*suspend)(struct snd_soc_dai *dai);
-	int (*resume)(struct snd_soc_dai *dai);
-
-	/* ops */
-	const struct snd_soc_dai_ops *ops;
-
-	/* DAI capabilities */
-	struct snd_soc_pcm_stream capture;
-	struct snd_soc_pcm_stream playback;
-	unsigned int symmetric_rates:1;
 };
 
 /*
@@ -217,64 +180,44 @@ struct snd_soc_dai_driver {
  * Holds runtime data for a DAI.
  */
 struct snd_soc_dai {
-	const char *name;
-	int id;
+	/* DAI description */
+	char *name;
+	unsigned int id;
+	int ac97_control;
+
 	struct device *dev;
 	void *ac97_pdata;	/* platform_data for the ac97 codec */
 
-	/* driver ops */
-	struct snd_soc_dai_driver *driver;
+	/* DAI callbacks */
+	int (*probe)(struct platform_device *pdev,
+		     struct snd_soc_dai *dai);
+	void (*remove)(struct platform_device *pdev,
+		       struct snd_soc_dai *dai);
+	int (*suspend)(struct snd_soc_dai *dai);
+	int (*resume)(struct snd_soc_dai *dai);
+
+	/* ops */
+	struct snd_soc_dai_ops *ops;
+
+	/* DAI capabilities */
+	struct snd_soc_pcm_stream capture;
+	struct snd_soc_pcm_stream playback;
+	unsigned int symmetric_rates:1;
 
 	/* DAI runtime info */
-	unsigned int capture_active:1;		/* stream is in use */
-	unsigned int playback_active:1;		/* stream is in use */
-	unsigned int symmetric_rates:1;
 	struct snd_pcm_runtime *runtime;
+	struct snd_soc_codec *codec;
 	unsigned int active;
 	unsigned char pop_wait:1;
-	unsigned char probed:1;
+	void *dma_data;
 
-	/* DAI DMA data */
-	void *playback_dma_data;
-	void *capture_dma_data;
+	/* DAI private data */
+	void *private_data;
 
-	/* parent platform/codec */
-	union {
-		struct snd_soc_platform *platform;
-		struct snd_soc_codec *codec;
-	};
-	struct snd_soc_card *card;
+	/* parent platform */
+	struct snd_soc_platform *platform;
 
 	struct list_head list;
-	struct list_head card_list;
 };
-
-static inline void *snd_soc_dai_get_dma_data(const struct snd_soc_dai *dai,
-					     const struct snd_pcm_substream *ss)
-{
-	return (ss->stream == SNDRV_PCM_STREAM_PLAYBACK) ?
-		dai->playback_dma_data : dai->capture_dma_data;
-}
-
-static inline void snd_soc_dai_set_dma_data(struct snd_soc_dai *dai,
-					    const struct snd_pcm_substream *ss,
-					    void *data)
-{
-	if (ss->stream == SNDRV_PCM_STREAM_PLAYBACK)
-		dai->playback_dma_data = data;
-	else
-		dai->capture_dma_data = data;
-}
-
-static inline void snd_soc_dai_set_drvdata(struct snd_soc_dai *dai,
-		void *data)
-{
-	dev_set_drvdata(dai->dev, data);
-}
-
-static inline void *snd_soc_dai_get_drvdata(struct snd_soc_dai *dai)
-{
-	return dev_get_drvdata(dai->dev);
-}
 
 #endif

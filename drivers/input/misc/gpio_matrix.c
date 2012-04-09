@@ -18,7 +18,6 @@
 #include <linux/gpio_event.h>
 #include <linux/hrtimer.h>
 #include <linux/interrupt.h>
-#include <linux/slab.h>
 #include <linux/wakelock.h>
 
 struct gpio_kp {
@@ -31,7 +30,6 @@ struct gpio_kp {
 	unsigned int key_state_changed:1;
 	unsigned int last_key_state_changed:1;
 	unsigned int some_keys_pressed:2;
-	unsigned int disabled_irq:1;
 	unsigned long keys_pressed[0];
 };
 
@@ -130,14 +128,6 @@ static void report_key(struct gpio_kp *kp, int key_index, int out, int in)
 	}
 }
 
-static void report_sync(struct gpio_kp *kp)
-{
-	int i;
-
-	for (i = 0; i < kp->input_devs->count; i++)
-		input_sync(kp->input_devs->dev[i]);
-}
-
 static enum hrtimer_restart gpio_keypad_timer_func(struct hrtimer *timer)
 {
 	int out, in;
@@ -199,7 +189,6 @@ static enum hrtimer_restart gpio_keypad_timer_func(struct hrtimer *timer)
 		for (out = 0; out < mi->noutputs; out++)
 			for (in = 0; in < mi->ninputs; in++, key_index++)
 				report_key(kp, key_index, out, in);
-		report_sync(kp);
 	}
 	if (!kp->use_irq || kp->some_keys_pressed) {
 		hrtimer_start(timer, mi->poll_time, HRTIMER_MODE_REL);
@@ -226,12 +215,8 @@ static irqreturn_t gpio_keypad_irq_handler(int irq_in, void *dev_id)
 	struct gpio_event_matrix_info *mi = kp->keypad_info;
 	unsigned gpio_keypad_flags = mi->flags;
 
-	if (!kp->use_irq) {
-		/* ignore interrupt while registering the handler */
-		kp->disabled_irq = 1;
-		disable_irq_nosync(irq_in);
+	if (!kp->use_irq) /* ignore interrupt while registering the handler */
 		return IRQ_HANDLED;
-	}
 
 	for (i = 0; i < mi->ninputs; i++)
 		disable_irq_nosync(gpio_to_irq(mi->input_gpios[i]));
@@ -281,16 +266,12 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 				"irq %d\n", mi->input_gpios[i], irq);
 			goto err_request_irq_failed;
 		}
-		err = enable_irq_wake(irq);
+		err = set_irq_wake(irq, 1);
 		if (err) {
 			pr_err("gpiomatrix: set_irq_wake failed for input %d, "
 				"irq %d\n", mi->input_gpios[i], irq);
 		}
 		disable_irq(irq);
-		if (kp->disabled_irq) {
-			kp->disabled_irq = 0;
-			enable_irq(irq);
-		}
 	}
 	return 0;
 
@@ -354,17 +335,17 @@ int gpio_event_matrix_func(struct gpio_event_input_devs *input_devs,
 		}
 
 		for (i = 0; i < mi->noutputs; i++) {
+			if (gpio_cansleep(mi->output_gpios[i])) {
+				pr_err("gpiomatrix: unsupported output gpio %d,"
+					" can sleep\n", mi->output_gpios[i]);
+				err = -EINVAL;
+				goto err_request_output_gpio_failed;
+			}
 			err = gpio_request(mi->output_gpios[i], "gpio_kp_out");
 			if (err) {
 				pr_err("gpiomatrix: gpio_request failed for "
 					"output %d\n", mi->output_gpios[i]);
 				goto err_request_output_gpio_failed;
-			}
-			if (gpio_cansleep(mi->output_gpios[i])) {
-				pr_err("gpiomatrix: unsupported output gpio %d,"
-					" can sleep\n", mi->output_gpios[i]);
-				err = -EINVAL;
-				goto err_output_gpio_configure_failed;
 			}
 			if (mi->flags & GPIOKPF_DRIVE_INACTIVE)
 				err = gpio_direction_output(mi->output_gpios[i],

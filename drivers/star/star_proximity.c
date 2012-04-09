@@ -80,10 +80,6 @@ static bool proxi_enabled = false;
 static ProximityDevice s_proximity;
 static int reset_flag = 0;
 
-int star_proxi_get_status(void) {
-    return (proxi_enabled ? 1 : 0);
-}
-
 static NvBool star_proxi_write_reg(ProximityDevice* proximity, NvU8 reg, NvU8 val)
 {
     NvOdmI2cStatus Error;
@@ -285,7 +281,7 @@ static void star_proxi_workqueue_func(struct work_struct *work)
 	}
 }
 #else
-// LGE_CHANGE_S [] 2011-05-22, [P999_GB] : status update
+// LGE_CHANGE_S [dongjin73.kim@lge.com] 2011-05-22, [P999_GB] : status update
 static void star_proxi_workqueue_func(struct work_struct *work)
 {
 	NvU8	status;
@@ -304,7 +300,7 @@ static void star_proxi_workqueue_func(struct work_struct *work)
 		printk("proximity value(1) = %d\n", atomic_read(&proxi_status));
 	}
 }
-// LGE_CHANGE_E [] 2011-05-22, [P999_GB] : status update
+// LGE_CHANGE_E [dongjin73.kim@lge.com] 2011-05-22, [P999_GB] : status update
 #endif
 
 static void star_proxi_interrupt_handler(void *arg)
@@ -408,7 +404,7 @@ static ssize_t star_proxi_onoff_show(struct device *dev, struct device_attribute
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t star_proxi_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
     u32 val = 0;
     val = simple_strtoul(buf, NULL, 10);
@@ -450,7 +446,7 @@ static ssize_t star_proxi_delay_show(struct device *dev, struct device_attribute
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_delay_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t star_proxi_delay_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
     u32 val = 0;
 
@@ -470,7 +466,7 @@ static ssize_t star_proxi_wake_show(struct device *dev, struct device_attribute 
     return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_proxi_wake_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t star_proxi_wake_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
     u32 val = 0;
 
@@ -498,7 +494,7 @@ static const struct attribute_group star_proxi_group = {
     .attrs = star_proxi_attributes,
 };
 
-static int __devinit proximity_probe(struct platform_device *pdev)
+static int __init proximity_probe(struct platform_device *pdev)
 {
     int i, ret = 0;
     NvU32 I2cInstance = 0;
@@ -534,7 +530,7 @@ static int __devinit proximity_probe(struct platform_device *pdev)
 	#if defined(CONFIG_MACH_STAR_MDM_C)
 	port = 'r' - 'a';//'a' - 'a';
 	pin = 2;//0;
-	#elif defined (CONFIG_MACH_STAR_REV_F) || defined (CONFIG_MACH_STAR_TMUS)
+	#elif defined (CONFIG_MACH_STAR_TMUS_E)
 	port = 'w'-'a';
 	pin = 2;
 	#else
@@ -683,7 +679,7 @@ err_open_gpio_fail:
 #endif
 }
 
-static int __devexit proximity_remove(struct platform_device *pdev)
+static int proximity_remove(struct platform_device *pdev)
 {
     struct device *dev = &pdev->dev;
     star_proxi_disable(&s_proximity);
@@ -740,7 +736,7 @@ static int proximity_resume(struct platform_device *pdev)
 
 static struct platform_driver star_proximity_driver = {
         .probe   = proximity_probe,
-        .remove  = __devexit_p(proximity_remove),
+        .remove  = proximity_remove,
         //.suspend = proximity_suspend,
         //.resume = proximity_resume,
         .driver  = {

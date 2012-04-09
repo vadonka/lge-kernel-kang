@@ -3,13 +3,15 @@
 
 #include <linux/types.h>
 
-struct sockaddr_pkt {
+struct sockaddr_pkt
+{
 	unsigned short spkt_family;
 	unsigned char spkt_device[14];
 	__be16 spkt_protocol;
 };
 
-struct sockaddr_ll {
+struct sockaddr_ll
+{
 	unsigned short	sll_family;
 	__be16		sll_protocol;
 	int		sll_ifindex;
@@ -46,23 +48,21 @@ struct sockaddr_ll {
 #define PACKET_RESERVE			12
 #define PACKET_TX_RING			13
 #define PACKET_LOSS			14
-#define PACKET_VNET_HDR			15
-#define PACKET_TX_TIMESTAMP		16
-#define PACKET_TIMESTAMP		17
 
-struct tpacket_stats {
+struct tpacket_stats
+{
 	unsigned int	tp_packets;
 	unsigned int	tp_drops;
 };
 
-struct tpacket_auxdata {
+struct tpacket_auxdata
+{
 	__u32		tp_status;
 	__u32		tp_len;
 	__u32		tp_snaplen;
 	__u16		tp_mac;
 	__u16		tp_net;
 	__u16		tp_vlan_tci;
-	__u16		tp_padding;
 };
 
 /* Rx ring - header status */
@@ -71,7 +71,6 @@ struct tpacket_auxdata {
 #define TP_STATUS_COPY		0x2
 #define TP_STATUS_LOSING	0x4
 #define TP_STATUS_CSUMNOTREADY	0x8
-#define TP_STATUS_VLAN_VALID   0x10 /* auxdata has valid tp_vlan_tci */
 
 /* Tx ring - header status */
 #define TP_STATUS_AVAILABLE	0x0
@@ -79,7 +78,8 @@ struct tpacket_auxdata {
 #define TP_STATUS_SENDING	0x2
 #define TP_STATUS_WRONG_FORMAT	0x4
 
-struct tpacket_hdr {
+struct tpacket_hdr
+{
 	unsigned long	tp_status;
 	unsigned int	tp_len;
 	unsigned int	tp_snaplen;
@@ -93,7 +93,8 @@ struct tpacket_hdr {
 #define TPACKET_ALIGN(x)	(((x)+TPACKET_ALIGNMENT-1)&~(TPACKET_ALIGNMENT-1))
 #define TPACKET_HDRLEN		(TPACKET_ALIGN(sizeof(struct tpacket_hdr)) + sizeof(struct sockaddr_ll))
 
-struct tpacket2_hdr {
+struct tpacket2_hdr
+{
 	__u32		tp_status;
 	__u32		tp_len;
 	__u32		tp_snaplen;
@@ -102,12 +103,12 @@ struct tpacket2_hdr {
 	__u32		tp_sec;
 	__u32		tp_nsec;
 	__u16		tp_vlan_tci;
-	__u16		tp_padding;
 };
 
 #define TPACKET2_HDRLEN		(TPACKET_ALIGN(sizeof(struct tpacket2_hdr)) + sizeof(struct sockaddr_ll))
 
-enum tpacket_versions {
+enum tpacket_versions
+{
 	TPACKET_V1,
 	TPACKET_V2,
 };
@@ -125,14 +126,16 @@ enum tpacket_versions {
    - Pad to align to TPACKET_ALIGNMENT=16
  */
 
-struct tpacket_req {
+struct tpacket_req
+{
 	unsigned int	tp_block_size;	/* Minimal size of contiguous block */
 	unsigned int	tp_block_nr;	/* Number of blocks */
 	unsigned int	tp_frame_size;	/* Size of frame */
 	unsigned int	tp_frame_nr;	/* Total number of frames */
 };
 
-struct packet_mreq {
+struct packet_mreq
+{
 	int		mr_ifindex;
 	unsigned short	mr_type;
 	unsigned short	mr_alen;

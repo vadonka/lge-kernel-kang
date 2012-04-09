@@ -90,10 +90,10 @@ extern const struct cpumask *const cpu_active_mask;
 #define cpu_present(cpu)	cpumask_test_cpu((cpu), cpu_present_mask)
 #define cpu_active(cpu)		cpumask_test_cpu((cpu), cpu_active_mask)
 #else
-#define num_online_cpus()	1U
-#define num_possible_cpus()	1U
-#define num_present_cpus()	1U
-#define num_active_cpus()	1U
+#define num_online_cpus()	1
+#define num_possible_cpus()	1
+#define num_present_cpus()	1
+#define num_active_cpus()	1
 #define cpu_online(cpu)		((cpu) == 0)
 #define cpu_possible(cpu)	((cpu) == 0)
 #define cpu_present(cpu)	((cpu) == 0)
@@ -142,8 +142,6 @@ static inline unsigned int cpumask_any_but(const struct cpumask *mask,
 }
 
 #define for_each_cpu(cpu, mask)			\
-	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask)
-#define for_each_cpu_not(cpu, mask)		\
 	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask)
 #define for_each_cpu_and(cpu, mask, and)	\
 	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask, (void)and)
@@ -202,18 +200,6 @@ int cpumask_any_but(const struct cpumask *mask, unsigned int cpu);
 #define for_each_cpu(cpu, mask)				\
 	for ((cpu) = -1;				\
 		(cpu) = cpumask_next((cpu), (mask)),	\
-		(cpu) < nr_cpu_ids;)
-
-/**
- * for_each_cpu_not - iterate over every cpu in a complemented mask
- * @cpu: the (optionally unsigned) integer iterator
- * @mask: the cpumask pointer
- *
- * After the loop, cpu is >= nr_cpu_ids.
- */
-#define for_each_cpu_not(cpu, mask)				\
-	for ((cpu) = -1;					\
-		(cpu) = cpumask_next_zero((cpu), (mask)),	\
 		(cpu) < nr_cpu_ids;)
 
 /**
@@ -544,21 +530,6 @@ static inline int cpumask_parse_user(const char __user *buf, int len,
 				     struct cpumask *dstp)
 {
 	return bitmap_parse_user(buf, len, cpumask_bits(dstp), nr_cpumask_bits);
-}
-
-/**
- * cpumask_parselist_user - extract a cpumask from a user string
- * @buf: the buffer to extract from
- * @len: the length of the buffer
- * @dstp: the cpumask to set.
- *
- * Returns -errno, or 0 for success.
- */
-static inline int cpumask_parselist_user(const char __user *buf, int len,
-				     struct cpumask *dstp)
-{
-	return bitmap_parselist_user(buf, len, cpumask_bits(dstp),
-							nr_cpumask_bits);
 }
 
 /**

@@ -29,10 +29,11 @@
 #include <linux/delay.h>
 #include <linux/rtc.h>
 #include <linux/bcd.h>
-#include <linux/sched.h>
 #include <linux/platform_device.h>
 #include "nvodm_pmu.h"
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
 #include <linux/semaphore.h> //ljs
+/*LGSI_CHANGE_E*/
 
 /* Create a custom rtc structrue and move this to that structure */
 static NvOdmPmuDeviceHandle hPmu = NULL;
@@ -42,12 +43,12 @@ static int tegra_rtc_ioctl(struct device *dev, unsigned int cmd, unsigned long a
 {
 	return -ENOIOCTLCMD;
 }
-
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
 extern wait_queue_head_t drm_wait_queue;
 extern unsigned long drm_diffTime;
 extern int drm_sign;
 extern struct semaphore drm_mutex;
-
+/*LGSI_CHANGE_E*/
 
 static int tegra_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
@@ -67,36 +68,41 @@ static int tegra_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 static int tegra_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
-	NvU32 prevTime;	
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
+	unsigned long prevTime;
+/*LGSI_CHANGE_E*/
 	unsigned long now;
 	int ret;
 
 	if (hPmu == NULL)
 		return -1;
-
-	// read current time
-	if (hPmu==NULL || !NvOdmPmuReadRtc(hPmu, &prevTime)) {
-		printk("NvOdmPmuReadRtc failed\n");
-		return -1;
-	}
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
+        // read current time
+        if (hPmu==NULL || !NvOdmPmuReadRtc(hPmu, &prevTime)) {
+                printk("NvOdmPmuReadRtc failed\n");
+                return -1;
+        }
+/*LGSI_CHANGE_E*/
 
 	ret = rtc_tm_to_time(tm, &now);
 	if (ret != 0)
 		return -1;
 
-	down_interruptible(&drm_mutex);
-	if( now < prevTime )
-	{
-		drm_diffTime = prevTime - now;
-		drm_sign = 1;
-	}	
-	else
-	{
-		drm_diffTime = now - prevTime;
-		drm_sign = -1;
-	}
-	
-	wake_up_interruptible(&drm_wait_queue);
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
+        down_interruptible(&drm_mutex);
+        if( now < prevTime )
+        {
+                drm_diffTime = prevTime - now;
+                drm_sign = 1;
+        }
+        else
+        {
+                drm_diffTime = now - prevTime;
+                drm_sign = -1;
+        }
+
+        wake_up_interruptible(&drm_wait_queue);
+/*LGSI_CHANGE_E*/
 
 	if (!NvOdmPmuWriteRtc(hPmu, (NvU32)now)) {
 		printk("NvOdmPmuWriteRtc failed\n");
@@ -157,7 +163,7 @@ static int tegra_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *wkalrm)
 
 	pr_debug("alarm_sec = %u\n", alarm_sec);
 
-//20100928, , RTC alarm enable [START]
+//20100928, byoungwoo.yoon@lge.com, RTC alarm enable [START]
 #ifdef CONFIG_MACH_STAR
 	if(!NvOdmPmuWriteAlarm(hPmu, alarm_sec))
 		return -EINVAL;
@@ -165,7 +171,7 @@ static int tegra_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *wkalrm)
 	if(!NvOdmPmuWriteAlarm(hPmu, alarm_sec-now))
 		return -EINVAL;
 #endif
-//20100928, , RTC alarm enable [END]
+//20100928, byoungwoo.yoon@lge.com, RTC alarm enable [END]
 
 	return 0;
 }

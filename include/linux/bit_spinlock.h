@@ -1,10 +1,6 @@
 #ifndef __LINUX_BIT_SPINLOCK_H
 #define __LINUX_BIT_SPINLOCK_H
 
-#include <linux/kernel.h>
-#include <linux/preempt.h>
-#include <asm/atomic.h>
-
 /*
  *  bit-based spin_lock()
  *
@@ -23,11 +19,11 @@ static inline void bit_spin_lock(int bitnum, unsigned long *addr)
 	preempt_disable();
 #if defined(CONFIG_SMP) || defined(CONFIG_DEBUG_SPINLOCK)
 	while (unlikely(test_and_set_bit_lock(bitnum, addr))) {
-		preempt_enable();
-		do {
+		while (test_bit(bitnum, addr)) {
+			preempt_enable();
 			cpu_relax();
-		} while (test_bit(bitnum, addr));
-		preempt_disable();
+			preempt_disable();
+		}
 	}
 #endif
 	__acquire(bitlock);

@@ -1,4 +1,6 @@
 /*
+ *  fs/nfs4acl/acl.c
+ *
  *  Common NFSv4 ACL handling code.
  *
  *  Copyright (c) 2002, 2003 The Regents of the University of Michigan.
@@ -34,9 +36,16 @@
  *  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <linux/string.h>
 #include <linux/slab.h>
+#include <linux/list.h>
+#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/module.h>
 #include <linux/nfs_fs.h>
-#include "acl.h"
+#include <linux/posix_acl.h>
+#include <linux/nfs4.h>
+#include <linux/nfs4_acl.h>
 
 
 /* mode bit translations: */

@@ -19,7 +19,6 @@
 
 #ifdef __KERNEL__
 
-#include <asm/hw_breakpoint.h>
 #include <asm/ptrace.h>
 #include <asm/types.h>
 
@@ -29,10 +28,19 @@
 #define STACK_TOP_MAX	TASK_SIZE
 #endif
 
+union debug_insn {
+	u32	arm;
+	u16	thumb;
+};
+
+struct debug_entry {
+	u32			address;
+	union debug_insn	insn;
+};
+
 struct debug_info {
-#ifdef CONFIG_HAVE_HW_BREAKPOINT
-	struct perf_event	*hbp[ARM_MAX_HBP_SLOTS];
-#endif
+	int			nsaved;
+	struct debug_entry	bp[2];
 };
 
 struct thread_struct {
@@ -83,11 +91,7 @@ extern void release_thread(struct task_struct *);
 
 unsigned long get_wchan(struct task_struct *p);
 
-#if __LINUX_ARM_ARCH__ == 6 || defined(CONFIG_ARM_ERRATA_754327)
-#define cpu_relax()			smp_mb()
-#else
 #define cpu_relax()			barrier()
-#endif
 
 /*
  * Create a new kernel thread

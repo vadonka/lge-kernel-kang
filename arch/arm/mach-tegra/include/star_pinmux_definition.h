@@ -63,13 +63,13 @@
 #define STAR_NOT_USED5_UART			AP20PERINFO(AP20_UART5, AP20PERI_NOTUSED)
                                                 
 #define STAR_IPC_SPI				AP20PERINFO(AP20_SPI1, NvOdmSpiPinMap_Config1)
-//20100809-1, , Add SPI2 for AP-CP IPC [START]
+//20100809-1, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [START]
 #ifdef CONFIG_DUAL_SPI
 #define STAR_IPC2_SPI			AP20PERINFO(AP20_SPI2, NvOdmSpiPinMap_Config2)       
 #else
 #define STAR_NOT_USED2_SPI			AP20PERINFO(AP20_SPI2, AP20PERI_NOTUSED)       
 #endif
-//20100809, , Add SPI2 for AP-CP IPC [END]
+//20100809, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [END]
 #define STAR_NOT_USED3_SPI			AP20PERINFO(AP20_SPI3, AP20PERI_NOTUSED)  
 #define STAR_NOT_USED4_SPI			AP20PERINFO(AP20_SPI4, AP20PERI_NOTUSED)  
 #define STAR_NOT_USED5_SPI			AP20PERINFO(AP20_SPI5, AP20PERI_NOTUSED)  
@@ -138,5 +138,5 @@
 #define VCC_LDO20_0V                Max8907bPmuSupply_LDO20
 #else 
 #errorr STAR_HWREV not assigned!
-#endif
-#endif 
+#endif  
+#endif  

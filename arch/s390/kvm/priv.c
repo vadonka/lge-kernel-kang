@@ -12,7 +12,6 @@
  */
 
 #include <linux/kvm.h>
-#include <linux/gfp.h>
 #include <linux/errno.h>
 #include <asm/current.h>
 #include <asm/debug.h>
@@ -154,12 +153,12 @@ static int handle_chsc(struct kvm_vcpu *vcpu)
 
 static int handle_stfl(struct kvm_vcpu *vcpu)
 {
-	unsigned int facility_list;
+	unsigned int facility_list = stfl();
 	int rc;
 
 	vcpu->stat.instruction_stfl++;
 	/* only pass the facility bits, which we can handle */
-	facility_list = S390_lowcore.stfl_fac_list & 0xff00fff3;
+	facility_list &= 0xff00fff3;
 
 	rc = copy_to_guest(vcpu, offsetof(struct _lowcore, stfl_fac_list),
 			   &facility_list, sizeof(facility_list));
@@ -311,7 +310,7 @@ int kvm_s390_handle_b2(struct kvm_vcpu *vcpu)
 
 	/*
 	 * a lot of B2 instructions are priviledged. We first check for
-	 * the privileged ones, that we can handle in the kernel. If the
+	 * the priviledges ones, that we can handle in the kernel. If the
 	 * kernel can handle this instruction, we check for the problem
 	 * state bit and (a) handle the instruction or (b) send a code 2
 	 * program check.
@@ -324,5 +323,5 @@ int kvm_s390_handle_b2(struct kvm_vcpu *vcpu)
 		else
 			return handler(vcpu);
 	}
-	return -EOPNOTSUPP;
+	return -ENOTSUPP;
 }

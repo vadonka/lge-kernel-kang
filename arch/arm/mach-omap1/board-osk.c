@@ -33,11 +33,9 @@
 #include <linux/irq.h>
 #include <linux/i2c.h>
 #include <linux/leds.h>
-#include <linux/smc91x.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
-#include <linux/mtd/physmap.h>
 
 #include <linux/i2c/tps65010.h>
 
@@ -47,12 +45,12 @@
 #include <asm/mach-types.h>
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <asm/mach/flash.h>
 
-#include <plat/flash.h>
-#include <plat/usb.h>
-#include <plat/mux.h>
-#include <plat/tc.h>
-#include <plat/common.h>
+#include <mach/usb.h>
+#include <mach/mux.h>
+#include <mach/tc.h>
+#include <mach/common.h>
 
 /* At OMAP5912 OSK the Ethernet is directly connected to CS1 */
 #define OMAP_OSK_ETHR_START		0x04800300
@@ -95,9 +93,9 @@ static struct mtd_partition osk_partitions[] = {
 	}
 };
 
-static struct physmap_flash_data osk_flash_data = {
+static struct flash_platform_data osk_flash_data = {
+	.map_name	= "cfi_probe",
 	.width		= 2,
-	.set_vpp	= omap1_set_vpp,
 	.parts		= osk_partitions,
 	.nr_parts	= ARRAY_SIZE(osk_partitions),
 };
@@ -108,19 +106,13 @@ static struct resource osk_flash_resource = {
 };
 
 static struct platform_device osk5912_flash_device = {
-	.name		= "physmap-flash",
+	.name		= "omapflash",
 	.id		= 0,
 	.dev		= {
 		.platform_data	= &osk_flash_data,
 	},
 	.num_resources	= 1,
 	.resource	= &osk_flash_resource,
-};
-
-static struct smc91x_platdata osk5912_smc91x_info = {
-	.flags	= SMC91X_USE_16BIT | SMC91X_NOWAIT,
-	.leda	= RPC_LED_100_10,
-	.ledb	= RPC_LED_TX_RX,
 };
 
 static struct resource osk5912_smc91x_resources[] = {
@@ -139,9 +131,6 @@ static struct resource osk5912_smc91x_resources[] = {
 static struct platform_device osk5912_smc91x_device = {
 	.name		= "smc91x",
 	.id		= -1,
-	.dev	= {
-		.platform_data	= &osk5912_smc91x_info,
-	},
 	.num_resources	= ARRAY_SIZE(osk5912_smc91x_resources),
 	.resource	= osk5912_smc91x_resources,
 };
@@ -276,13 +265,16 @@ static void __init osk_init_cf(void)
 		return;
 	}
 	/* the CF I/O IRQ is really active-low */
-	irq_set_irq_type(gpio_to_irq(62), IRQ_TYPE_EDGE_FALLING);
+	set_irq_type(gpio_to_irq(62), IRQ_TYPE_EDGE_FALLING);
 }
 
 static void __init osk_init_irq(void)
 {
 	omap1_init_common_hw();
 	omap_init_irq();
+	omap_gpio_init();
+	osk_init_smc91x();
+	osk_init_cf();
 }
 
 static struct omap_usb_config osk_usb_config __initdata = {
@@ -320,7 +312,7 @@ static struct omap_board_config_kernel osk_config[] __initdata = {
 #include <linux/spi/spi.h>
 #include <linux/spi/ads7846.h>
 
-#include <plat/keypad.h>
+#include <mach/keypad.h>
 
 static struct at24_platform_data at24c04 = {
 	.byte_len	= SZ_4K / 8,
@@ -338,28 +330,25 @@ static struct i2c_board_info __initdata mistral_i2c_board_info[] = {
 	 */
 };
 
-static const unsigned int osk_keymap[] = {
+static const int osk_keymap[] = {
 	/* KEY(col, row, code) */
 	KEY(0, 0, KEY_F1),		/* SW4 */
-	KEY(3, 0, KEY_UP),		/* (sw2/up) */
+	KEY(0, 3, KEY_UP),		/* (sw2/up) */
 	KEY(1, 1, KEY_LEFTCTRL),	/* SW5 */
-	KEY(2, 1, KEY_LEFT),		/* (sw2/left) */
-	KEY(0, 2, KEY_SPACE),		/* SW3 */
-	KEY(1, 2, KEY_ESC),		/* SW6 */
+	KEY(1, 2, KEY_LEFT),		/* (sw2/left) */
+	KEY(2, 0, KEY_SPACE),		/* SW3 */
+	KEY(2, 1, KEY_ESC),		/* SW6 */
 	KEY(2, 2, KEY_DOWN),		/* (sw2/down) */
-	KEY(2, 3, KEY_ENTER),		/* (sw2/select) */
+	KEY(3, 2, KEY_ENTER),		/* (sw2/select) */
 	KEY(3, 3, KEY_RIGHT),		/* (sw2/right) */
-};
-
-static const struct matrix_keymap_data osk_keymap_data = {
-	.keymap		= osk_keymap,
-	.keymap_size	= ARRAY_SIZE(osk_keymap),
+	0
 };
 
 static struct omap_kp_platform_data osk_kp_data = {
 	.rows		= 8,
 	.cols		= 8,
-	.keymap_data	= &osk_keymap_data,
+	.keymap		= (int *) osk_keymap,
+	.keymapsize	= ARRAY_SIZE(osk_keymap),
 	.delay		= 9,
 };
 
@@ -482,7 +471,7 @@ static void __init osk_mistral_init(void)
 	omap_cfg_reg(P20_1610_GPIO4);	/* PENIRQ */
 	gpio_request(4, "ts_int");
 	gpio_direction_input(4);
-	irq_set_irq_type(gpio_to_irq(4), IRQ_TYPE_EDGE_FALLING);
+	set_irq_type(gpio_to_irq(4), IRQ_TYPE_EDGE_FALLING);
 
 	spi_register_board_info(mistral_boardinfo,
 			ARRAY_SIZE(mistral_boardinfo));
@@ -500,7 +489,7 @@ static void __init osk_mistral_init(void)
 		int irq = gpio_to_irq(OMAP_MPUIO(2));
 
 		gpio_direction_input(OMAP_MPUIO(2));
-		irq_set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
+		set_irq_type(irq, IRQ_TYPE_EDGE_RISING);
 #ifdef	CONFIG_PM
 		/* share the IRQ in case someone wants to use the
 		 * button for more than wakeup from system sleep.
@@ -541,9 +530,6 @@ static void __init osk_init(void)
 {
 	u32 l;
 
-	osk_init_smc91x();
-	osk_init_cf();
-
 	/* Workaround for wrong CS3 (NOR flash) timing
 	 * There are some U-Boot versions out there which configure
 	 * wrong CS3 memory timings. This mainly leads to CRC
@@ -563,7 +549,7 @@ static void __init osk_init(void)
 	l |= (3 << 1);
 	omap_writel(l, USB_TRANSCEIVER_CTRL);
 
-	omap1_usb_init(&osk_usb_config);
+	omap_usb_init(&osk_usb_config);
 
 	/* irq for tps65010 chip */
 	/* bootloader effectively does:  omap_cfg_reg(U19_1610_MPUIO1); */
@@ -583,9 +569,10 @@ static void __init osk_map_io(void)
 
 MACHINE_START(OMAP_OSK, "TI-OSK")
 	/* Maintainer: Dirk Behme <dirk.behme@de.bosch.com> */
+	.phys_io	= 0xfff00000,
+	.io_pg_offst	= ((0xfef00000) >> 18) & 0xfffc,
 	.boot_params	= 0x10000100,
 	.map_io		= osk_map_io,
-	.reserve	= omap_reserve,
 	.init_irq	= osk_init_irq,
 	.init_machine	= osk_init,
 	.timer		= &omap_timer,

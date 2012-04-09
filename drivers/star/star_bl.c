@@ -56,18 +56,7 @@
 #include "aat2870.h"
 #include "star_bl.h"
 #include "star_gpioi2c.h"
-// 20110808  GPIO Sleep status GPIO patch from P999
-#define AP_SUSPEND_STATUS
 
-#ifdef AP_SUSPEND_STATUS
-typedef struct ModemCheckRec
-{
-    NvOdmServicesGpioHandle gpioHandle;
-    NvOdmGpioPinHandle  pinHandle;
-} ModemCheck;
-
-static ModemCheck s_modemCheck;
-#endif
 
 /*
  * Debug
@@ -118,10 +107,10 @@ static int debug_enable_flag = 0x01;
 #define BL_POWER_STATE_ON 0x01
 #define BL_POWER_STATE_OFF 0x00
 
-// 101103 , Minimum Brightness level for HW Dimming
+// 101103 kyungsik.lee@lge.com, Minimum Brightness level for HW Dimming
 #define LCD_LED_DIM 1
-// 101017  added some variables to adjust backlight brightness
-// 101103 , Define parameters from global variables
+// 101017 sk.jang@lge.com added some variables to adjust backlight brightness
+// 101103 kyungsik.lee@lge.com, Define parameters from global variables
 #define BRIGHTNESS_MIN 30
 #define NUMERATOR1 6
 #define NUMERATOR2 14
@@ -188,7 +177,7 @@ static struct aat2870_drvdata_t *drvdata;
 //static spinlock_t intensity_lock; //km.lee
 
 
-static NvU8 BACKLIGHT_DEFAULT = 0x0B; //101017,  set the value to the current consumption '9.9mA'
+static NvU8 BACKLIGHT_DEFAULT = 0x0B; //101017, sk.jang@lge.com set the value to the current consumption '9.9mA'
 
 
 NvBool IsReadThreadStart = NV_TRUE;
@@ -263,54 +252,32 @@ static struct aat2870_ctl_tbl_t aat2870bl_normal_tbl[] = {
 #endif
 };
 
-//#define ORIGINAL_ALC_VALUES
-
 /* Set to ALC mode HW-high gain mode*/
 static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
-/* ALC table 0~15 20101218 tunning ver. */
-#if ORIGINAL_ALC_VALUES
-    {0x12,0x19},  /* ALS current setting 5.6mA */
-    {0x13,0x20},  /* ALS current setting 7.2mA */
-    {0x14,0x21},  /* ALS current setting 7.4mA */
-    {0x15,0x23},  /* ALS current setting 7.9mA */
-    {0x16,0x24},  /* ALS current setting 8.1mA */
-    {0x17,0x25},  /* ALS current setting 8.3mA */
-    {0x18,0x27},  /* ALS current setting 9.0mA */
-    {0x19,0x28},  /* ALS current setting 9.5mA */
-    {0x1A,0x29},  /* ALS current setting 10.1mA */
-    {0x1B,0x2A},  /* ALS current setting 10.8mA */
-    {0x1C,0x2F},  /* ALS current setting 11.5mA */
-    {0x1D,0x30},  /* ALS current setting 12.2mA */
-    {0x1E,0x32},  /* ALS current setting 12.8mA */
-    {0x1F,0x35},  /* ALS current setting 13.5mA */
-    {0x20,0x36},  /* ALS current setting 14.2mA */
-    {0x21,0x37},  /* ALS current setting 14.6mA */
-#else
-	//Fajarep values from swiftextreme kernel
-    {0x12,0x0A},  /* ALS current setting 2.64mA  - 0 lux */
-    {0x13,0x0C},  /* ALS current setting 3.08mA  - 50 lux*/
-    {0x14,0x0D},  /* ALS current setting 3.3mA   - 100 lux */
-    {0x15,0x08},  /* ALS current setting 3.52mA  - 130 lux */
-    {0x16,0x09},  /* ALS current setting 3.74mA  - 160 lux */
-    {0x17,0x10},  /* ALS current setting 3.96mA  - 200 lux */
-    {0x18,0x11},  /* ALS current setting 4.18mA  - 250 lux */
-    {0x19,0x12},  /* ALS current setting 4.62mA  - 300 lux */
-    {0x1A,0x14},  /* ALS current setting 4.84mA  - 400 lux */
-    {0x1B,0x15},  /* ALS current setting 5.06mA  - 500 lux */
-    {0x1C,0x16},  /* ALS current setting 5.28mA  - 650 lux */
-    {0x1D,0x17},  /* ALS current setting 5.5mA   - 800 lux */
-    {0x1E,0x18},  /* ALS current setting 5.72mA  - 1000 lux */
-    {0x1F,0x1E},  /* ALS current setting 7.04mA  - 1400 lux */
-    {0x20,0x23},  /* ALS current setting 8.14mA  - 2000 lux */
-    {0x21,0x35},  /* ALS current setting 12.38mA - 3000 lux */
-#endif
+    /* ALC table 0~15 20101218 tunning ver. */
+    {0x12,0x19},  /* ALS current setting 5.63mA */
+    {0x13,0x20},  /* ALS current setting 7.20mA */
+    {0x14,0x21},  /* ALS current setting 7.43mA */
+    {0x15,0x23},  /* ALS current setting 7.88mA */
+    {0x16,0x24},  /* ALS current setting 8.10mA */
+    {0x17,0x25},  /* ALS current setting 8.33mA */
+    {0x18,0x27},  /* ALS current setting 8.78mA */
+    {0x19,0x28},  /* ALS current setting 9.0mA */
+    {0x1A,0x29},  /* ALS current setting 9.23mA */
+    {0x1B,0x2A},  /* ALS current setting 9.45mA */
+    {0x1C,0x2F},  /* ALS current setting 10.58mA */
+    {0x1D,0x30},  /* ALS current setting 10.80mA */
+    {0x1E,0x32},  /* ALS current setting 11.25mA */
+    {0x1F,0x35},  /* ALS current setting 11.93mA */
+    {0x20,0x36},  /* ALS current setting 12.15mA */
+    {0x21,0x37},  /* ALS current setting 12.38mA */
 
-    {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k,
+    { 0x0E, 0x73 },  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k,
                                    * GAIN=low, GM=man gain, ALS_EN=on */
-    {0x0F,0x01},  /* SBIAS=3.0V, SBIAS=on */
-    {0x10,0x90},  /* pwm inactive, auto polling, 1sec, +0% */
-    {0x00,0xFF},  /* Channel Enable : ALL */
-    {0xFF,0xFE}   /* end or command */
+    { 0x0F, 0x01 },  /* SBIAS=3.0V, SBIAS=on */
+    { 0x10, 0x90 },  /* pwm inactive, auto polling, 1sec, +0% */
+    { 0x00, 0xFF },  /* Channel Enable : ALL */
+    { 0xFF, 0xFE }   /* end or command */
 };
 
 
@@ -629,7 +596,7 @@ star_bl_brightness_linearized(int intensity, int *level)
     int last_intensity; 
 
 
-	//101017,  Set the Backlight Brightness to be linearized.[START] 
+	//101017, sk.jang@lge.com Set the Backlight Brightness to be linearized.[START] 
 	if (intensity < BRIGHTNESS_MIN) {
 		
 		//Too low for intensity value
@@ -650,7 +617,7 @@ star_bl_brightness_linearized(int intensity, int *level)
 		//Too High for intensity value
 		ret = -EINVAL; 
 	}
-	//101017,  Set the Backlight Brightness to be linearized.[END]
+	//101017, sk.jang@lge.com Set the Backlight Brightness to be linearized.[END]
 
 	return ret;
 }  
@@ -667,12 +634,9 @@ star_bl_store_intensity(struct device *dev, struct device_attribute *attr, const
 	if (!count)
 		return -EINVAL;
 
-	if (strnlen(current->comm,11) == 11 && !strncmp(current->comm,"nvrm_daemon",11))
-		return count;
-
 	sscanf(buf, "%d", &intensity);//level range: 0 to 22 from aat2870 ds
 
-	//101103, , Replaced with function.
+	//101103, kyungsik.lee@lge.com, Replaced with function.
 	if (star_bl_brightness_linearized(intensity, &level)) {
 
 		printk("[BL] Invalid Intensity value: %d\n", intensity);
@@ -965,7 +929,7 @@ star_bl_store_onoff(struct device *dev, struct device_attribute *attr, const cha
 	return count;
 }
 
-//20110202, , force off [START]
+//20110202, cs77.ha@lge.com, force off [START]
 static void star_aat2870_reset(void);
 
 static ssize_t
@@ -997,7 +961,7 @@ star_bl_store_foff(struct device *dev, struct device_attribute *attr, const char
 	return count;
 }
 
-//20110419  LGD panel ver. info [START]
+//20110419 km.lee@lge.com LGD panel ver. info [START]
 static ssize_t
 star_show_panel_info(struct device *dev, struct device_attribute *attr, char *buf )
 {
@@ -1035,12 +999,12 @@ star_show_panel_info(struct device *dev, struct device_attribute *attr, char *bu
 }
 
 static ssize_t
-star_store_panel_info(struct device *dev, struct device_attribute *attr, const char *buf, size_t count )
+star_store_panel_info(struct device *dev, struct device_attribute *attr, char *buf, size_t count )
 {
 	return 0;
 }
-//20110419  LGD panel ver. info [END]
-//20110202, , force off [END]
+//20110419 km.lee@lge.com LGD panel ver. info [END]
+//20110202, cs77.ha@lge.com, force off [END]
 
 static DEVICE_ATTR(intensity, 0666, star_bl_show_intensity, star_bl_store_intensity);
 static DEVICE_ATTR(alc_level, 0444, star_bl_show_alc_level, NULL);
@@ -1048,12 +1012,12 @@ static DEVICE_ATTR(alc, 0664, star_bl_show_alc, star_bl_store_alc);
 static DEVICE_ATTR(onoff, 0666, star_bl_show_onoff, star_bl_store_onoff);
 static DEVICE_ATTR(hwdim, 0666, star_bl_show_hwdim, star_bl_store_hwdim);
 static DEVICE_ATTR(lsensor_onoff, 0666, star_bl_show_lsensor_onoff, star_bl_store_lsensor_onoff);
-//20110419  LGD panel ver. info
+//20110419 km.lee@lge.com LGD panel ver. info
 static DEVICE_ATTR(panel_info, 0666, star_show_panel_info, star_store_panel_info);
 //static DEVICE_ATTR(alc_reg, 0666, alc_reg_show, alc_reg_store);
-//20110202, , force off [START]
+//20110202, cs77.ha@lge.com, force off [START]
 static DEVICE_ATTR(foff, 0666, star_bl_show_onoff, star_bl_store_foff);
-//20110202, , force off [END]
+//20110202, cs77.ha@lge.com, force off [END]
 
 
 static struct attribute *star_bl_attributes[] = {
@@ -1062,12 +1026,12 @@ static struct attribute *star_bl_attributes[] = {
 	&dev_attr_alc.attr,
 	&dev_attr_onoff.attr,
 	&dev_attr_hwdim.attr,
-	&dev_attr_lsensor_onoff.attr,
-//20110419  LGD panel ver. info
+	&dev_attr_lsensor_onoff.attr,	
+//20110419 km.lee@lge.com LGD panel ver. info
 	&dev_attr_panel_info,
-    //20110202, , force off [START]
+    //20110202, cs77.ha@lge.com, force off [START]
 	&dev_attr_foff.attr,
-    //20110202, , force off [END]
+    //20110202, cs77.ha@lge.com, force off [END]
 	NULL,
 };
 
@@ -1118,9 +1082,6 @@ static void star_aat2870_early_suspend(struct early_suspend *es)
 {
 	static struct aat2870_drvdata_t *drv;
 	
-#ifdef AP_SUSPEND_STATUS
-    NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 0);
-#endif
 	drv = drvdata;
 
 	if (drv->status == BL_POWER_STATE_ON) {
@@ -1142,9 +1103,6 @@ static void star_aat2870_late_resume(struct early_suspend *es)
 {
 	static struct aat2870_drvdata_t *drv;
 	
-#ifdef AP_SUSPEND_STATUS
-    NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 1);
-#endif
 	drv = drvdata;
 
 	if (drv->status == BL_POWER_STATE_OFF) {
@@ -1174,9 +1132,7 @@ static int star_aat2870_probe(struct platform_device *pdev)
 	int retval = 0;
 	struct device *dev = &pdev->dev;
 	struct aat2870_drvdata_t *drv;
-#ifdef AP_SUSPEND_STATUS
-    NvU32 pin, port;
-#endif
+
 
 	drv = kzalloc(sizeof(struct aat2870_drvdata_t), GFP_KERNEL);
 	if (drv == NULL) {
@@ -1258,40 +1214,8 @@ static int star_aat2870_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&drv->delayed_work_bl, star_bl_work_func);
 	//schedule_delayed_work(&drvdata->delayed_work_bl, 100);
    
-#ifdef AP_SUSPEND_STATUS
-    //GPIO configuration
-    s_modemCheck.gpioHandle = NvOdmGpioOpen();
-    if (!s_modemCheck.gpioHandle)
-    {
-        printk(KERN_ERR "[star modem_chk] NvOdmGpioOpen Error \n");
-        goto err_open_modem_chk_gpio_fail;
-    }
-#if defined(CONFIG_MACH_STAR_REV_F)
-    port = 'r'-'a';
-    pin = 0;
-#elif defined(CONFIG_MACH_STAR_TMUS)
-    port = 'h'-'a';
-    pin = 2;
-#endif 
-    s_modemCheck.pinHandle = NvOdmGpioAcquirePinHandle(s_modemCheck.gpioHandle, 
-                                                    port, pin);
-    if (!s_modemCheck.pinHandle)
-    {
-        printk(KERN_ERR "[star modem_chk] NvOdmGpioAcquirePinHandle Error\n");
-        goto err_modem_chk_gpio_pin_acquire_fail;
-    }
-    NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 1);
-    NvOdmGpioConfig(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 
-                    NvOdmGpioPinMode_Output);
-#endif
-   
     return 0;
 
-#ifdef AP_SUSPEND_STATUS
-err_modem_chk_gpio_pin_acquire_fail:
-    NvOdmGpioClose(s_modemCheck.gpioHandle); 
-err_open_modem_chk_gpio_fail:
-#endif
 
 err_input_device:
 

@@ -46,7 +46,6 @@
 
 /* Global pointer to shared data; NULL means no measured launch. */
 struct tboot *tboot __read_mostly;
-EXPORT_SYMBOL(tboot);
 
 /* timeout for APs (in secs) to enter wait-for-SIPI state during shutdown */
 #define AP_WAIT_TIMEOUT		1
@@ -110,6 +109,7 @@ static struct mm_struct tboot_mm = {
 	.mmap_sem       = __RWSEM_INITIALIZER(init_mm.mmap_sem),
 	.page_table_lock =  __SPIN_LOCK_UNLOCKED(init_mm.page_table_lock),
 	.mmlist         = LIST_HEAD_INIT(init_mm.mmlist),
+	.cpu_vm_mask    = CPU_MASK_ALL,
 };
 
 static inline void switch_to_tboot_pt(void)
@@ -132,7 +132,7 @@ static int map_tboot_page(unsigned long vaddr, unsigned long pfn,
 	pmd = pmd_alloc(&tboot_mm, pud, vaddr);
 	if (!pmd)
 		return -1;
-	pte = pte_alloc_map(&tboot_mm, NULL, pmd, vaddr);
+	pte = pte_alloc_map(&tboot_mm, pmd, vaddr);
 	if (!pte)
 		return -1;
 	set_pte_at(&tboot_mm, vaddr, pte, pfn_pte(pfn, prot));
@@ -175,9 +175,6 @@ static void add_mac_region(phys_addr_t start, unsigned long size)
 	struct tboot_mac_region *mr;
 	phys_addr_t end = start + size;
 
-	if (tboot->num_mac_regions >= MAX_TB_MAC_REGIONS)
-		panic("tboot: Too many MAC regions\n");
-
 	if (start && size) {
 		mr = &tboot->mac_regions[tboot->num_mac_regions++];
 		mr->start = round_down(start, PAGE_SIZE);
@@ -187,17 +184,18 @@ static void add_mac_region(phys_addr_t start, unsigned long size)
 
 static int tboot_setup_sleep(void)
 {
-	int i;
-
 	tboot->num_mac_regions = 0;
 
-	for (i = 0; i < e820.nr_map; i++) {
-		if ((e820.map[i].type != E820_RAM)
-		 && (e820.map[i].type != E820_RESERVED_KERN))
-			continue;
+	/* S3 resume code */
+	add_mac_region(acpi_wakeup_address, WAKEUP_SIZE);
 
-		add_mac_region(e820.map[i].addr, e820.map[i].size);
-	}
+#ifdef CONFIG_X86_TRAMPOLINE
+	/* AP trampoline code */
+	add_mac_region(virt_to_phys(trampoline_base), TRAMPOLINE_SIZE);
+#endif
+
+	/* kernel code + data + bss */
+	add_mac_region(virt_to_phys(_text), _end - _text);
 
 	tboot->acpi_sinfo.kernel_s3_resume_vector = acpi_wakeup_address;
 

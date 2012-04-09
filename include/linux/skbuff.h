@@ -122,26 +122,15 @@ struct sk_buff_head {
 
 struct sk_buff;
 
-/* To allow 64K frame to be packed as single skb without frag_list. Since
- * GRO uses frags we allocate at least 16 regardless of page size.
- */
-#if (65536/PAGE_SIZE + 2) < 16
-#define MAX_SKB_FRAGS 16UL
-#else
+/* To allow 64K frame to be packed as single skb without frag_list */
 #define MAX_SKB_FRAGS (65536/PAGE_SIZE + 2)
-#endif
 
 typedef struct skb_frag_struct skb_frag_t;
 
 struct skb_frag_struct {
 	struct page *page;
-#if (BITS_PER_LONG > 32) || (PAGE_SIZE >= 65536)
 	__u32 page_offset;
 	__u32 size;
-#else
-	__u16 page_offset;
-	__u16 size;
-#endif
 };
 
 #define HAVE_HW_TIME_STAMP
@@ -174,45 +163,50 @@ struct skb_shared_hwtstamps {
 	ktime_t	syststamp;
 };
 
-/* Definitions for tx_flags in struct skb_shared_info */
-enum {
-	/* generate hardware time stamp */
-	SKBTX_HW_TSTAMP = 1 << 0,
-
-	/* generate software time stamp */
-	SKBTX_SW_TSTAMP = 1 << 1,
-
-	/* device driver is going to provide hardware time stamp */
-	SKBTX_IN_PROGRESS = 1 << 2,
-
-	/* ensure the originating sk reference is available on driver level */
-	SKBTX_DRV_NEEDS_SK_REF = 1 << 3,
+/**
+ * struct skb_shared_tx - instructions for time stamping of outgoing packets
+ * @hardware:		generate hardware time stamp
+ * @software:		generate software time stamp
+ * @in_progress:	device driver is going to provide
+ *			hardware time stamp
+ * @flags:		all shared_tx flags
+ *
+ * These flags are attached to packets as part of the
+ * &skb_shared_info. Use skb_tx() to get a pointer.
+ */
+union skb_shared_tx {
+	struct {
+		__u8	hardware:1,
+			software:1,
+			in_progress:1;
+	};
+	__u8 flags;
 };
 
 /* This data is invariant across clones and lives at
  * the end of the header data, ie. at skb->end.
  */
 struct skb_shared_info {
+	atomic_t	dataref;
 	unsigned short	nr_frags;
 	unsigned short	gso_size;
+#ifdef CONFIG_HAS_DMA
+	dma_addr_t	dma_head;
+#endif
 	/* Warning: this field is not always filled in (UFO)! */
 	unsigned short	gso_segs;
 	unsigned short  gso_type;
 	__be32          ip6_frag_id;
-	__u8		tx_flags;
+	union skb_shared_tx tx_flags;
 	struct sk_buff	*frag_list;
 	struct skb_shared_hwtstamps hwtstamps;
-
-	/*
-	 * Warning : all fields before dataref are cleared in __alloc_skb()
-	 */
-	atomic_t	dataref;
-
+	skb_frag_t	frags[MAX_SKB_FRAGS];
+#ifdef CONFIG_HAS_DMA
+	dma_addr_t	dma_maps[MAX_SKB_FRAGS];
+#endif
 	/* Intermediate layers must ensure that destructor_arg
 	 * remains valid until skb destructor */
 	void *		destructor_arg;
-	/* must be last field, see pskb_expand_head() */
-	skb_frag_t	frags[MAX_SKB_FRAGS];
 };
 
 /* We divide dataref into two halves.  The higher 16 bits hold references
@@ -261,11 +255,6 @@ typedef unsigned int sk_buff_data_t;
 typedef unsigned char *sk_buff_data_t;
 #endif
 
-#if defined(CONFIG_NF_DEFRAG_IPV4) || defined(CONFIG_NF_DEFRAG_IPV4_MODULE) || \
-    defined(CONFIG_NF_DEFRAG_IPV6) || defined(CONFIG_NF_DEFRAG_IPV6_MODULE)
-#define NET_SKBUFF_NF_DEFRAG_NEEDED 1
-#endif
-
 /** 
  *	struct sk_buff - socket buffer
  *	@next: Next buffer in list
@@ -276,7 +265,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@transport_header: Transport layer header
  *	@network_header: Network layer header
  *	@mac_header: Link layer header
- *	@_skb_refdst: destination entry (with norefcount bit)
+ *	@_skb_dst: destination entry
  *	@sp: the security path, used for xfrm
  *	@cb: Control buffer. Free for use by every layer. Put private vars here
  *	@len: Length of actual data
@@ -310,8 +299,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@nfctinfo: Relationship of this skb to the connection
  *	@nfct_reasm: netfilter conntrack re-assembly pointer
  *	@nf_bridge: Saved data about a bridged frame - see br_netfilter.c
- *	@skb_iif: ifindex of device we arrived on
- *	@rxhash: the packet hash computed on receive
+ *	@iif: ifindex of device we arrived on
  *	@queue_mapping: Queue mapping for multiqueue devices
  *	@tc_index: Traffic control index
  *	@tc_verd: traffic control verdict
@@ -327,23 +315,22 @@ struct sk_buff {
 	struct sk_buff		*next;
 	struct sk_buff		*prev;
 
-	ktime_t			tstamp;
-
 	struct sock		*sk;
+	ktime_t			tstamp;
 	struct net_device	*dev;
 
+	unsigned long		_skb_dst;
+#ifdef CONFIG_XFRM
+	struct	sec_path	*sp;
+#endif
 	/*
 	 * This is the control buffer. It is free to use for every
 	 * layer. Please put your private variables there. If you
 	 * want to keep them across layers you have to do a skb_clone()
 	 * first. This is owned by whoever has the skb queued ATM.
 	 */
-	char			cb[48] __aligned(8);
+	char			cb[48];
 
-	unsigned long		_skb_refdst;
-#ifdef CONFIG_XFRM
-	struct	sec_path	*sp;
-#endif
 	unsigned int		len,
 				data_len;
 	__u16			mac_len,
@@ -367,21 +354,19 @@ struct sk_buff {
 				ipvs_property:1,
 				peeked:1,
 				nf_trace:1;
+	__be16			protocol:16;
 	kmemcheck_bitfield_end(flags1);
-	__be16			protocol;
 
 	void			(*destructor)(struct sk_buff *skb);
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	struct nf_conntrack	*nfct;
-#endif
-#ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
 	struct sk_buff		*nfct_reasm;
 #endif
 #ifdef CONFIG_BRIDGE_NETFILTER
 	struct nf_bridge_info	*nf_bridge;
 #endif
 
-	int			skb_iif;
+	int			iif;
 #ifdef CONFIG_NET_SCHED
 	__u16			tc_index;	/* traffic control index */
 #ifdef CONFIG_NET_CLS_ACT
@@ -389,17 +374,14 @@ struct sk_buff {
 #endif
 #endif
 
-	__u32			rxhash;
-
-	__u16			queue_mapping;
 	kmemcheck_bitfield_begin(flags2);
+	__u16			queue_mapping:16;
 #ifdef CONFIG_IPV6_NDISC_NODETYPE
 	__u8			ndisc_nodetype:2;
 #endif
-	__u8			ooo_okay:1;
 	kmemcheck_bitfield_end(flags2);
 
-	/* 0/13 bit hole */
+	/* 0/14 bit hole */
 
 #ifdef CONFIG_NET_DMA
 	dma_cookie_t		dma_cookie;
@@ -407,10 +389,8 @@ struct sk_buff {
 #ifdef CONFIG_NETWORK_SECMARK
 	__u32			secmark;
 #endif
-	union {
-		__u32		mark;
-		__u32		dropcount;
-	};
+
+	__u32			mark;
 
 	__u16			vlan_tci;
 
@@ -434,52 +414,22 @@ struct sk_buff {
 
 #include <asm/system.h>
 
-/*
- * skb might have a dst pointer attached, refcounted or not.
- * _skb_refdst low order bit is set if refcount was _not_ taken
- */
-#define SKB_DST_NOREF	1UL
-#define SKB_DST_PTRMASK	~(SKB_DST_NOREF)
+#ifdef CONFIG_HAS_DMA
+#include <linux/dma-mapping.h>
+extern int skb_dma_map(struct device *dev, struct sk_buff *skb,
+		       enum dma_data_direction dir);
+extern void skb_dma_unmap(struct device *dev, struct sk_buff *skb,
+			  enum dma_data_direction dir);
+#endif
 
-/**
- * skb_dst - returns skb dst_entry
- * @skb: buffer
- *
- * Returns skb dst_entry, regardless of reference taken or not.
- */
 static inline struct dst_entry *skb_dst(const struct sk_buff *skb)
 {
-	/* If refdst was not refcounted, check we still are in a 
-	 * rcu_read_lock section
-	 */
-	WARN_ON((skb->_skb_refdst & SKB_DST_NOREF) &&
-		!rcu_read_lock_held() &&
-		!rcu_read_lock_bh_held());
-	return (struct dst_entry *)(skb->_skb_refdst & SKB_DST_PTRMASK);
+	return (struct dst_entry *)skb->_skb_dst;
 }
 
-/**
- * skb_dst_set - sets skb dst
- * @skb: buffer
- * @dst: dst entry
- *
- * Sets skb dst, assuming a reference was taken on dst and should
- * be released by skb_dst_drop()
- */
 static inline void skb_dst_set(struct sk_buff *skb, struct dst_entry *dst)
 {
-	skb->_skb_refdst = (unsigned long)dst;
-}
-
-extern void skb_dst_set_noref(struct sk_buff *skb, struct dst_entry *dst);
-
-/**
- * skb_dst_is_noref - Test if skb dst isn't refcounted
- * @skb: buffer
- */
-static inline bool skb_dst_is_noref(const struct sk_buff *skb)
-{
-	return (skb->_skb_refdst & SKB_DST_NOREF) && skb_dst(skb);
+	skb->_skb_dst = (unsigned long)dst;
 }
 
 static inline struct rtable *skb_rtable(const struct sk_buff *skb)
@@ -495,16 +445,16 @@ extern struct sk_buff *__alloc_skb(unsigned int size,
 static inline struct sk_buff *alloc_skb(unsigned int size,
 					gfp_t priority)
 {
-	return __alloc_skb(size, priority, 0, NUMA_NO_NODE);
+	return __alloc_skb(size, priority, 0, -1);
 }
 
 static inline struct sk_buff *alloc_skb_fclone(unsigned int size,
 					       gfp_t priority)
 {
-	return __alloc_skb(size, priority, 1, NUMA_NO_NODE);
+	return __alloc_skb(size, priority, 1, -1);
 }
 
-extern bool skb_recycle_check(struct sk_buff *skb, int skb_size);
+extern int skb_recycle_check(struct sk_buff *skb, int skb_size);
 
 extern struct sk_buff *skb_morph(struct sk_buff *dst, struct sk_buff *src);
 extern struct sk_buff *skb_clone(struct sk_buff *skb,
@@ -528,13 +478,19 @@ extern int	       skb_cow_data(struct sk_buff *skb, int tailbits,
 				    struct sk_buff **trailer);
 extern int	       skb_pad(struct sk_buff *skb, int pad);
 #define dev_kfree_skb(a)	consume_skb(a)
+#define dev_consume_skb(a)	kfree_skb_clean(a)
+extern void	      skb_over_panic(struct sk_buff *skb, int len,
+				     void *here);
+extern void	      skb_under_panic(struct sk_buff *skb, int len,
+				      void *here);
 
 extern int skb_append_datato_frags(struct sock *sk, struct sk_buff *skb,
 			int getfrag(void *from, char *to, int offset,
 			int len,int odd, struct sk_buff *skb),
 			void *from, int length);
 
-struct skb_seq_state {
+struct skb_seq_state
+{
 	__u32		lower_offset;
 	__u32		upper_offset;
 	__u32		frag_idx;
@@ -555,15 +511,6 @@ extern unsigned int   skb_find_text(struct sk_buff *skb, unsigned int from,
 				    unsigned int to, struct ts_config *config,
 				    struct ts_state *state);
 
-extern __u32 __skb_get_rxhash(struct sk_buff *skb);
-static inline __u32 skb_get_rxhash(struct sk_buff *skb)
-{
-	if (!skb->rxhash)
-		skb->rxhash = __skb_get_rxhash(skb);
-
-	return skb->rxhash;
-}
-
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
 static inline unsigned char *skb_end_pointer(const struct sk_buff *skb)
 {
@@ -582,6 +529,11 @@ static inline unsigned char *skb_end_pointer(const struct sk_buff *skb)
 static inline struct skb_shared_hwtstamps *skb_hwtstamps(struct sk_buff *skb)
 {
 	return &skb_shinfo(skb)->hwtstamps;
+}
+
+static inline union skb_shared_tx *skb_tx(struct sk_buff *skb)
+{
+	return &skb_shinfo(skb)->tx_flags;
 }
 
 /**
@@ -605,7 +557,7 @@ static inline int skb_queue_empty(const struct sk_buff_head *list)
 static inline bool skb_queue_is_last(const struct sk_buff_head *list,
 				     const struct sk_buff *skb)
 {
-	return skb->next == (struct sk_buff *)list;
+	return (skb->next == (struct sk_buff *) list);
 }
 
 /**
@@ -618,7 +570,7 @@ static inline bool skb_queue_is_last(const struct sk_buff_head *list,
 static inline bool skb_queue_is_first(const struct sk_buff_head *list,
 				      const struct sk_buff *skb)
 {
-	return skb->prev == (struct sk_buff *)list;
+	return (skb->prev == (struct sk_buff *) list);
 }
 
 /**
@@ -793,7 +745,7 @@ static inline struct sk_buff *skb_unshare(struct sk_buff *skb,
 }
 
 /**
- *	skb_peek - peek at the head of an &sk_buff_head
+ *	skb_peek
  *	@list_: list to peek at
  *
  *	Peek an &sk_buff. Unlike most other operations you _MUST_
@@ -814,7 +766,7 @@ static inline struct sk_buff *skb_peek(struct sk_buff_head *list_)
 }
 
 /**
- *	skb_peek_tail - peek at the tail of an &sk_buff_head
+ *	skb_peek_tail
  *	@list_: list to peek at
  *
  *	Peek an &sk_buff. Unlike most other operations you _MUST_
@@ -1124,7 +1076,7 @@ extern void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page,
 			    int off, int size);
 
 #define SKB_PAGE_ASSERT(skb) 	BUG_ON(skb_shinfo(skb)->nr_frags)
-#define SKB_FRAG_ASSERT(skb) 	BUG_ON(skb_has_frag_list(skb))
+#define SKB_FRAG_ASSERT(skb) 	BUG_ON(skb_has_frags(skb))
 #define SKB_LINEAR_ASSERT(skb)  BUG_ON(skb_is_nonlinear(skb))
 
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
@@ -1190,11 +1142,6 @@ static inline unsigned char *__skb_pull(struct sk_buff *skb, unsigned int len)
 	return skb->data += len;
 }
 
-static inline unsigned char *skb_pull_inline(struct sk_buff *skb, unsigned int len)
-{
-	return unlikely(len > skb->len) ? NULL : __skb_pull(skb, len);
-}
-
 extern unsigned char *__pskb_pull_tail(struct sk_buff *skb, int delta);
 
 static inline unsigned char *__pskb_pull(struct sk_buff *skb, unsigned int len)
@@ -1254,11 +1201,6 @@ static inline void skb_reserve(struct sk_buff *skb, int len)
 {
 	skb->data += len;
 	skb->tail += len;
-}
-
-static inline void skb_reset_mac_len(struct sk_buff *skb)
-{
-	skb->mac_len = skb->network_header - skb->mac_header;
 }
 
 #ifdef NET_SKBUFF_DATA_USES_OFFSET
@@ -1370,21 +1312,6 @@ static inline void skb_set_mac_header(struct sk_buff *skb, const int offset)
 }
 #endif /* NET_SKBUFF_DATA_USES_OFFSET */
 
-static inline void skb_mac_header_rebuild(struct sk_buff *skb)
-{
-	if (skb_mac_header_was_set(skb)) {
-		const unsigned char *old_mac = skb_mac_header(skb);
-
-		skb_set_mac_header(skb, -skb->mac_len);
-		memmove(skb_mac_header(skb), old_mac, skb->mac_len);
-	}
-}
-
-static inline int skb_checksum_start_offset(const struct sk_buff *skb)
-{
-	return skb->csum_start - skb_headroom(skb);
-}
-
 static inline int skb_transport_offset(const struct sk_buff *skb)
 {
 	return skb_transport_header(skb) - skb->data;
@@ -1398,11 +1325,6 @@ static inline u32 skb_network_header_len(const struct sk_buff *skb)
 static inline int skb_network_offset(const struct sk_buff *skb)
 {
 	return skb_network_header(skb) - skb->data;
-}
-
-static inline int pskb_network_may_pull(struct sk_buff *skb, unsigned int len)
-{
-	return pskb_may_pull(skb, skb_network_offset(skb) + len);
 }
 
 /*
@@ -1443,21 +1365,16 @@ static inline int pskb_network_may_pull(struct sk_buff *skb, unsigned int len)
  *
  * Various parts of the networking layer expect at least 32 bytes of
  * headroom, you should not reduce this.
- *
- * Using max(32, L1_CACHE_BYTES) makes sense (especially with RPS)
- * to reduce average number of cache lines per packet.
- * get_rps_cpus() for example only access one 64 bytes aligned block :
- * NET_IP_ALIGN(2) + ethernet_header(14) + IP_header(20/40) + ports(8)
  */
 #ifndef NET_SKB_PAD
-#define NET_SKB_PAD	max(32, L1_CACHE_BYTES)
+#define NET_SKB_PAD	32
 #endif
 
 extern int ___pskb_trim(struct sk_buff *skb, unsigned int len);
 
 static inline void __skb_trim(struct sk_buff *skb, unsigned int len)
 {
-	if (unlikely(skb_is_nonlinear(skb))) {
+	if (unlikely(skb->data_len)) {
 		WARN_ON(1);
 		return;
 	}
@@ -1572,35 +1489,13 @@ static inline struct sk_buff *netdev_alloc_skb(struct net_device *dev,
 	return __netdev_alloc_skb(dev, length, GFP_ATOMIC);
 }
 
-static inline struct sk_buff *netdev_alloc_skb_ip_align(struct net_device *dev,
-		unsigned int length)
-{
-	struct sk_buff *skb = netdev_alloc_skb(dev, length + NET_IP_ALIGN);
-
-	if (NET_IP_ALIGN && skb)
-		skb_reserve(skb, NET_IP_ALIGN);
-	return skb;
-}
-
-/**
- *	__netdev_alloc_page - allocate a page for ps-rx on a specific device
- *	@dev: network device to receive on
- *	@gfp_mask: alloc_pages_node mask
- *
- * 	Allocate a new page. dev currently unused.
- *
- * 	%NULL is returned if there is no free memory.
- */
-static inline struct page *__netdev_alloc_page(struct net_device *dev, gfp_t gfp_mask)
-{
-	return alloc_pages_node(NUMA_NO_NODE, gfp_mask, 0);
-}
+extern struct page *__netdev_alloc_page(struct net_device *dev, gfp_t gfp_mask);
 
 /**
  *	netdev_alloc_page - allocate a page for ps-rx on a specific device
  *	@dev: network device to receive on
  *
- * 	Allocate a new page. dev currently unused.
+ * 	Allocate a new page node local to the specified device.
  *
  * 	%NULL is returned if there is no free memory.
  */
@@ -1797,7 +1692,7 @@ static inline int pskb_trim_rcsum(struct sk_buff *skb, unsigned int len)
 
 #define skb_queue_walk(queue, skb) \
 		for (skb = (queue)->next;					\
-		     skb != (struct sk_buff *)(queue);				\
+		     prefetch(skb->next), (skb != (struct sk_buff *)(queue));	\
 		     skb = skb->next)
 
 #define skb_queue_walk_safe(queue, skb, tmp)					\
@@ -1806,7 +1701,7 @@ static inline int pskb_trim_rcsum(struct sk_buff *skb, unsigned int len)
 		     skb = tmp, tmp = skb->next)
 
 #define skb_queue_walk_from(queue, skb)						\
-		for (; skb != (struct sk_buff *)(queue);			\
+		for (; prefetch(skb->next), (skb != (struct sk_buff *)(queue));	\
 		     skb = skb->next)
 
 #define skb_queue_walk_from_safe(queue, skb, tmp)				\
@@ -1816,20 +1711,11 @@ static inline int pskb_trim_rcsum(struct sk_buff *skb, unsigned int len)
 
 #define skb_queue_reverse_walk(queue, skb) \
 		for (skb = (queue)->prev;					\
-		     skb != (struct sk_buff *)(queue);				\
+		     prefetch(skb->prev), (skb != (struct sk_buff *)(queue));	\
 		     skb = skb->prev)
 
-#define skb_queue_reverse_walk_safe(queue, skb, tmp)				\
-		for (skb = (queue)->prev, tmp = skb->prev;			\
-		     skb != (struct sk_buff *)(queue);				\
-		     skb = tmp, tmp = skb->prev)
 
-#define skb_queue_reverse_walk_from_safe(queue, skb, tmp)			\
-		for (tmp = skb->prev;						\
-		     skb != (struct sk_buff *)(queue);				\
-		     skb = tmp, tmp = skb->prev)
-
-static inline bool skb_has_frag_list(const struct sk_buff *skb)
+static inline bool skb_has_frags(const struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->frag_list != NULL;
 }
@@ -1895,7 +1781,7 @@ extern void	       skb_split(struct sk_buff *skb,
 extern int	       skb_shift(struct sk_buff *tgt, struct sk_buff *skb,
 				 int shiftlen);
 
-extern struct sk_buff *skb_segment(struct sk_buff *skb, u32 features);
+extern struct sk_buff *skb_segment(struct sk_buff *skb, int features);
 
 static inline void *skb_header_pointer(const struct sk_buff *skb, int offset,
 				       int len, void *buffer)
@@ -1983,41 +1869,6 @@ static inline ktime_t net_invalid_timestamp(void)
 	return ktime_set(0, 0);
 }
 
-extern void skb_timestamping_init(void);
-
-#ifdef CONFIG_NETWORK_PHY_TIMESTAMPING
-
-extern void skb_clone_tx_timestamp(struct sk_buff *skb);
-extern bool skb_defer_rx_timestamp(struct sk_buff *skb);
-
-#else /* CONFIG_NETWORK_PHY_TIMESTAMPING */
-
-static inline void skb_clone_tx_timestamp(struct sk_buff *skb)
-{
-}
-
-static inline bool skb_defer_rx_timestamp(struct sk_buff *skb)
-{
-	return false;
-}
-
-#endif /* !CONFIG_NETWORK_PHY_TIMESTAMPING */
-
-/**
- * skb_complete_tx_timestamp() - deliver cloned skb with tx timestamps
- *
- * PHY drivers may accept clones of transmitted packets for
- * timestamping via their phy_driver.txtstamp method. These drivers
- * must call this function to return the skb back to the stack, with
- * or without a timestamp.
- *
- * @skb: clone of the the original outgoing packet
- * @hwtstamps: hardware time stamps, may be NULL if not available
- *
- */
-void skb_complete_tx_timestamp(struct sk_buff *skb,
-			       struct skb_shared_hwtstamps *hwtstamps);
-
 /**
  * skb_tstamp_tx - queue clone of skb with send time stamps
  * @orig_skb:	the original outgoing packet
@@ -2031,28 +1882,6 @@ void skb_complete_tx_timestamp(struct sk_buff *skb,
  */
 extern void skb_tstamp_tx(struct sk_buff *orig_skb,
 			struct skb_shared_hwtstamps *hwtstamps);
-
-static inline void sw_tx_timestamp(struct sk_buff *skb)
-{
-	if (skb_shinfo(skb)->tx_flags & SKBTX_SW_TSTAMP &&
-	    !(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS))
-		skb_tstamp_tx(skb, NULL);
-}
-
-/**
- * skb_tx_timestamp() - Driver hook for transmit timestamping
- *
- * Ethernet MAC Drivers should call this function in their hard_xmit()
- * function as soon as possible after giving the sk_buff to the MAC
- * hardware, but before freeing the sk_buff.
- *
- * @skb: A socket buffer.
- */
-static inline void skb_tx_timestamp(struct sk_buff *skb)
-{
-	skb_clone_tx_timestamp(skb);
-	sw_tx_timestamp(skb);
-}
 
 extern __sum16 __skb_checksum_complete_head(struct sk_buff *skb, int len);
 extern __sum16 __skb_checksum_complete(struct sk_buff *skb);
@@ -2096,8 +1925,6 @@ static inline void nf_conntrack_get(struct nf_conntrack *nfct)
 	if (nfct)
 		atomic_inc(&nfct->use);
 }
-#endif
-#ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
 static inline void nf_conntrack_get_reasm(struct sk_buff *skb)
 {
 	if (skb)
@@ -2126,8 +1953,6 @@ static inline void nf_reset(struct sk_buff *skb)
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(skb->nfct);
 	skb->nfct = NULL;
-#endif
-#ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
 	nf_conntrack_put_reasm(skb->nfct_reasm);
 	skb->nfct_reasm = NULL;
 #endif
@@ -2144,8 +1969,6 @@ static inline void __nf_copy(struct sk_buff *dst, const struct sk_buff *src)
 	dst->nfct = src->nfct;
 	nf_conntrack_get(src->nfct);
 	dst->nfctinfo = src->nfctinfo;
-#endif
-#ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
 	dst->nfct_reasm = src->nfct_reasm;
 	nf_conntrack_get_reasm(src->nfct_reasm);
 #endif
@@ -2159,8 +1982,6 @@ static inline void nf_copy(struct sk_buff *dst, const struct sk_buff *src)
 {
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	nf_conntrack_put(dst->nfct);
-#endif
-#ifdef NET_SKBUFF_NF_DEFRAG_NEEDED
 	nf_conntrack_put_reasm(dst->nfct_reasm);
 #endif
 #ifdef CONFIG_BRIDGE_NETFILTER
@@ -2214,12 +2035,11 @@ static inline u16 skb_get_rx_queue(const struct sk_buff *skb)
 
 static inline bool skb_rx_queue_recorded(const struct sk_buff *skb)
 {
-	return skb->queue_mapping != 0;
+	return (skb->queue_mapping != 0);
 }
 
-extern u16 __skb_tx_hash(const struct net_device *dev,
-			 const struct sk_buff *skb,
-			 unsigned int num_tx_queues);
+extern u16 skb_tx_hash(const struct net_device *dev,
+		       const struct sk_buff *skb);
 
 #ifdef CONFIG_XFRM
 static inline struct sec_path *skb_sec_path(struct sk_buff *skb)
@@ -2250,8 +2070,7 @@ static inline bool skb_warn_if_lro(const struct sk_buff *skb)
 	/* LRO sets gso_size but not gso_type, whereas if GSO is really
 	 * wanted then gso_type will be set. */
 	struct skb_shared_info *shinfo = skb_shinfo(skb);
-	if (skb_is_nonlinear(skb) && shinfo->gso_size != 0 &&
-	    unlikely(shinfo->gso_type == 0)) {
+	if (shinfo->gso_size != 0 && unlikely(shinfo->gso_type == 0)) {
 		__skb_warn_lro_forwarding(skb);
 		return true;
 	}
@@ -2263,21 +2082,6 @@ static inline void skb_forward_csum(struct sk_buff *skb)
 	/* Unfortunately we don't support this one.  Any brave souls? */
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		skb->ip_summed = CHECKSUM_NONE;
-}
-
-/**
- * skb_checksum_none_assert - make sure skb ip_summed is CHECKSUM_NONE
- * @skb: skb to check
- *
- * fresh skbs have their ip_summed set to CHECKSUM_NONE.
- * Instead of forcing ip_summed to CHECKSUM_NONE, we can
- * use this helper, to document places where we make this assertion.
- */
-static inline void skb_checksum_none_assert(struct sk_buff *skb)
-{
-#ifdef DEBUG
-	BUG_ON(skb->ip_summed != CHECKSUM_NONE);
-#endif
 }
 
 bool skb_partial_csum_set(struct sk_buff *skb, u16 start, u16 off);

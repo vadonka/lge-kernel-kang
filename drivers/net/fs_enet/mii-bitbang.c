@@ -150,7 +150,8 @@ static int __devinit fs_mii_bitbang_init(struct mii_bus *bus,
 	return 0;
 }
 
-static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
+static int __devinit fs_enet_mdio_probe(struct of_device *ofdev,
+                                        const struct of_device_id *match)
 {
 	struct mii_bus *new_bus;
 	struct bb_info *bitbang;
@@ -168,7 +169,7 @@ static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
 
 	new_bus->name = "CPM2 Bitbanged MII",
 
-	ret = fs_mii_bitbang_init(new_bus, ofdev->dev.of_node);
+	ret = fs_mii_bitbang_init(new_bus, ofdev->node);
 	if (ret)
 		goto out_free_bus;
 
@@ -180,7 +181,7 @@ static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
 	new_bus->parent = &ofdev->dev;
 	dev_set_drvdata(&ofdev->dev, new_bus);
 
-	ret = of_mdiobus_register(new_bus, ofdev->dev.of_node);
+	ret = of_mdiobus_register(new_bus, ofdev->node);
 	if (ret)
 		goto out_free_irqs;
 
@@ -199,7 +200,7 @@ out:
 	return ret;
 }
 
-static int fs_enet_mdio_remove(struct platform_device *ofdev)
+static int fs_enet_mdio_remove(struct of_device *ofdev)
 {
 	struct mii_bus *bus = dev_get_drvdata(&ofdev->dev);
 	struct bb_info *bitbang = bus->priv;
@@ -222,24 +223,21 @@ static struct of_device_id fs_enet_mdio_bb_match[] = {
 };
 MODULE_DEVICE_TABLE(of, fs_enet_mdio_bb_match);
 
-static struct platform_driver fs_enet_bb_mdio_driver = {
-	.driver = {
-		.name = "fsl-bb-mdio",
-		.owner = THIS_MODULE,
-		.of_match_table = fs_enet_mdio_bb_match,
-	},
+static struct of_platform_driver fs_enet_bb_mdio_driver = {
+	.name = "fsl-bb-mdio",
+	.match_table = fs_enet_mdio_bb_match,
 	.probe = fs_enet_mdio_probe,
 	.remove = fs_enet_mdio_remove,
 };
 
 static int fs_enet_mdio_bb_init(void)
 {
-	return platform_driver_register(&fs_enet_bb_mdio_driver);
+	return of_register_platform_driver(&fs_enet_bb_mdio_driver);
 }
 
 static void fs_enet_mdio_bb_exit(void)
 {
-	platform_driver_unregister(&fs_enet_bb_mdio_driver);
+	of_unregister_platform_driver(&fs_enet_bb_mdio_driver);
 }
 
 module_init(fs_enet_mdio_bb_init);

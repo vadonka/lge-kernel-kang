@@ -13,7 +13,6 @@
 #include <linux/ctype.h>
 #include <linux/err.h>
 #include <linux/fb.h>
-#include <linux/slab.h>
 
 #if defined(CONFIG_FB) || (defined(CONFIG_FB_MODULE) && \
 			   defined(CONFIG_LCD_CLASS_DEVICE_MODULE))
@@ -102,7 +101,7 @@ static ssize_t lcd_store_power(struct device *dev,
 	int power = simple_strtoul(buf, &endp, 0);
 	size_t size = endp - buf;
 
-	if (isspace(*endp))
+	if (*endp && isspace(*endp))
 		size++;
 	if (size != count)
 		return -EINVAL;
@@ -141,7 +140,7 @@ static ssize_t lcd_store_contrast(struct device *dev,
 	int contrast = simple_strtoul(buf, &endp, 0);
 	size_t size = endp - buf;
 
-	if (isspace(*endp))
+	if (*endp && isspace(*endp))
 		size++;
 	if (size != count)
 		return -EINVAL;

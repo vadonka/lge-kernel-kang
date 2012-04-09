@@ -54,9 +54,8 @@
 #include <linux/capability.h>
 #include <linux/module.h>
 #include <linux/if_arp.h>
+#include <linux/smp_lock.h>
 #include <linux/termios.h>	/* For TIOCOUTQ/INQ */
-#include <linux/compat.h>
-#include <linux/slab.h>
 #include <net/datalink.h>
 #include <net/psnap.h>
 #include <net/sock.h>
@@ -781,7 +780,7 @@ static int atif_ioctl(int cmd, void __user *arg)
 						atrtr_create(&rtdef, dev);
 					}
 			}
-			dev_mc_add_global(dev, aarp_mcast);
+			dev_mc_add(dev, aarp_mcast, 6, 1);
 			return 0;
 
 		case SIOCGIFADDR:
@@ -923,8 +922,13 @@ static unsigned long atalk_sum_partial(const unsigned char *data,
 {
 	/* This ought to be unwrapped neatly. I'll trust gcc for now */
 	while (len--) {
-		sum += *data++;
-		sum = rol16(sum, 1);
+		sum += *data;
+		sum <<= 1;
+		if (sum & 0x10000) {
+			sum++;
+			sum &= 0xffff;
+		}
+		data++;
 	}
 	return sum;
 }
@@ -1017,13 +1021,12 @@ static struct proto ddp_proto = {
  * Create a socket. Initialise the socket, blank the addresses
  * set the state.
  */
-static int atalk_create(struct net *net, struct socket *sock, int protocol,
-			int kern)
+static int atalk_create(struct net *net, struct socket *sock, int protocol)
 {
 	struct sock *sk;
 	int rc = -ESOCKTNOSUPPORT;
 
-	if (!net_eq(net, &init_net))
+	if (net != &init_net)
 		return -EAFNOSUPPORT;
 
 	/*
@@ -1052,15 +1055,9 @@ static int atalk_release(struct socket *sock)
 	struct sock *sk = sock->sk;
 
 	if (sk) {
-		sock_hold(sk);
-		lock_sock(sk);
-
 		sock_orphan(sk);
 		sock->sk = NULL;
 		atalk_destroy_socket(sk);
-
-		release_sock(sk);
-		sock_put(sk);
 	}
 	return 0;
 }
@@ -1137,7 +1134,6 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	struct sockaddr_at *addr = (struct sockaddr_at *)uaddr;
 	struct sock *sk = sock->sk;
 	struct atalk_sock *at = at_sk(sk);
-	int err;
 
 	if (!sock_flag(sk, SOCK_ZAPPED) ||
 	    addr_len != sizeof(struct sockaddr_at))
@@ -1146,44 +1142,37 @@ static int atalk_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (addr->sat_family != AF_APPLETALK)
 		return -EAFNOSUPPORT;
 
-	lock_sock(sk);
 	if (addr->sat_addr.s_net == htons(ATADDR_ANYNET)) {
 		struct atalk_addr *ap = atalk_find_primary();
 
-		err = -EADDRNOTAVAIL;
 		if (!ap)
-			goto out;
+			return -EADDRNOTAVAIL;
 
 		at->src_net  = addr->sat_addr.s_net = ap->s_net;
 		at->src_node = addr->sat_addr.s_node= ap->s_node;
 	} else {
-		err = -EADDRNOTAVAIL;
 		if (!atalk_find_interface(addr->sat_addr.s_net,
 					  addr->sat_addr.s_node))
-			goto out;
+			return -EADDRNOTAVAIL;
 
 		at->src_net  = addr->sat_addr.s_net;
 		at->src_node = addr->sat_addr.s_node;
 	}
 
 	if (addr->sat_port == ATADDR_ANYPORT) {
-		err = atalk_pick_and_bind_port(sk, addr);
+		int n = atalk_pick_and_bind_port(sk, addr);
 
-		if (err < 0)
-			goto out;
+		if (n < 0)
+			return n;
 	} else {
 		at->src_port = addr->sat_port;
 
-		err = -EADDRINUSE;
 		if (atalk_find_or_insert_socket(sk, addr))
-			goto out;
+			return -EADDRINUSE;
 	}
 
 	sock_reset_flag(sk, SOCK_ZAPPED);
-	err = 0;
-out:
-	release_sock(sk);
-	return err;
+	return 0;
 }
 
 /* Set the address we talk to */
@@ -1193,7 +1182,6 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *sk = sock->sk;
 	struct atalk_sock *at = at_sk(sk);
 	struct sockaddr_at *addr;
-	int err;
 
 	sk->sk_state   = TCP_CLOSE;
 	sock->state = SS_UNCONNECTED;
@@ -1218,15 +1206,12 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 #endif
 	}
 
-	lock_sock(sk);
-	err = -EBUSY;
 	if (sock_flag(sk, SOCK_ZAPPED))
 		if (atalk_autobind(sk) < 0)
-			goto out;
+			return -EBUSY;
 
-	err = -ENETUNREACH;
 	if (!atrtr_get_dev(&addr->sat_addr))
-		goto out;
+		return -ENETUNREACH;
 
 	at->dest_port = addr->sat_port;
 	at->dest_net  = addr->sat_addr.s_net;
@@ -1234,10 +1219,7 @@ static int atalk_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	sock->state  = SS_CONNECTED;
 	sk->sk_state = TCP_ESTABLISHED;
-	err = 0;
-out:
-	release_sock(sk);
-	return err;
+	return 0;
 }
 
 /*
@@ -1250,21 +1232,17 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 	struct sockaddr_at sat;
 	struct sock *sk = sock->sk;
 	struct atalk_sock *at = at_sk(sk);
-	int err;
 
-	lock_sock(sk);
-	err = -ENOBUFS;
 	if (sock_flag(sk, SOCK_ZAPPED))
 		if (atalk_autobind(sk) < 0)
-			goto out;
+			return -ENOBUFS;
 
 	*uaddr_len = sizeof(struct sockaddr_at);
 	memset(&sat.sat_zero, 0, sizeof(sat.sat_zero));
 
 	if (peer) {
-		err = -ENOTCONN;
 		if (sk->sk_state != TCP_ESTABLISHED)
-			goto out;
+			return -ENOTCONN;
 
 		sat.sat_addr.s_net  = at->dest_net;
 		sat.sat_addr.s_node = at->dest_node;
@@ -1275,13 +1253,9 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 		sat.sat_port	    = at->src_port;
 	}
 
-	err = 0;
 	sat.sat_family = AF_APPLETALK;
 	memcpy(uaddr, &sat, sizeof(sat));
-
-out:
-	release_sock(sk);
-	return err;
+	return 0;
 }
 
 #if defined(CONFIG_IPDDP) || defined(CONFIG_IPDDP_MODULE)
@@ -1589,28 +1563,23 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 	if (len > DDP_MAXSZ)
 		return -EMSGSIZE;
 
-	lock_sock(sk);
 	if (usat) {
-		err = -EBUSY;
 		if (sock_flag(sk, SOCK_ZAPPED))
 			if (atalk_autobind(sk) < 0)
-				goto out;
+				return -EBUSY;
 
-		err = -EINVAL;
 		if (msg->msg_namelen < sizeof(*usat) ||
 		    usat->sat_family != AF_APPLETALK)
-			goto out;
+			return -EINVAL;
 
-		err = -EPERM;
 		/* netatalk didn't implement this check */
 		if (usat->sat_addr.s_node == ATADDR_BCAST &&
 		    !sock_flag(sk, SOCK_BROADCAST)) {
-			goto out;
+			return -EPERM;
 		}
 	} else {
-		err = -ENOTCONN;
 		if (sk->sk_state != TCP_ESTABLISHED)
-			goto out;
+			return -ENOTCONN;
 		usat = &local_satalk;
 		usat->sat_family      = AF_APPLETALK;
 		usat->sat_port	      = at->dest_port;
@@ -1634,9 +1603,8 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 
 		rt = atrtr_find(&at_hint);
 	}
-	err = ENETUNREACH;
 	if (!rt)
-		goto out;
+		return -ENETUNREACH;
 
 	dev = rt->dev;
 
@@ -1644,11 +1612,9 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 			sk, size, dev->name);
 
 	size += dev->hard_header_len;
-	release_sock(sk);
 	skb = sock_alloc_send_skb(sk, size, (flags & MSG_DONTWAIT), &err);
-	lock_sock(sk);
 	if (!skb)
-		goto out;
+		return err;
 
 	skb->sk = sk;
 	skb_reserve(skb, ddp_dl->header_length);
@@ -1671,8 +1637,7 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 	err = memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len);
 	if (err) {
 		kfree_skb(skb);
-		err = -EFAULT;
-		goto out;
+		return -EFAULT;
 	}
 
 	if (sk->sk_no_check == 1)
@@ -1711,8 +1676,7 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 			rt = atrtr_find(&at_lo);
 			if (!rt) {
 				kfree_skb(skb);
-				err = -ENETUNREACH;
-				goto out;
+				return -ENETUNREACH;
 			}
 			dev = rt->dev;
 			skb->dev = dev;
@@ -1732,9 +1696,7 @@ static int atalk_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 	}
 	SOCK_DEBUG(sk, "SK %p: Done write (%Zd).\n", sk, len);
 
-out:
-	release_sock(sk);
-	return err ? : len;
+	return len;
 }
 
 static int atalk_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
@@ -1746,14 +1708,10 @@ static int atalk_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 	int copied = 0;
 	int offset = 0;
 	int err = 0;
-	struct sk_buff *skb;
-
-	skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT,
+	struct sk_buff *skb = skb_recv_datagram(sk, flags & ~MSG_DONTWAIT,
 						flags & MSG_DONTWAIT, &err);
-	lock_sock(sk);
-
 	if (!skb)
-		goto out;
+		return err;
 
 	/* FIXME: use skb->cb to be able to use shared skbs */
 	ddp = ddp_hdr(skb);
@@ -1781,9 +1739,6 @@ static int atalk_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr 
 	}
 
 	skb_free_datagram(sk, skb);	/* Free the datagram. */
-
-out:
-	release_sock(sk);
 	return err ? : copied;
 }
 
@@ -1855,26 +1810,24 @@ static int atalk_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 static int atalk_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	/*
-	 * SIOCATALKDIFADDR is a SIOCPROTOPRIVATE ioctl number, so we
-	 * cannot handle it in common code. The data we access if ifreq
-	 * here is compatible, so we can simply call the native
-	 * handler.
+	 * All Appletalk ioctls except SIOCATALKDIFADDR are standard.  And
+	 * SIOCATALKDIFADDR is handled by upper layer as well, so there is
+	 * nothing to do.  Eventually SIOCATALKDIFADDR should be moved
+	 * here so there is no generic SIOCPROTOPRIVATE translation in the
+	 * system.
 	 */
-	if (cmd == SIOCATALKDIFADDR)
-		return atalk_ioctl(sock, cmd, (unsigned long)compat_ptr(arg));
-
 	return -ENOIOCTLCMD;
 }
 #endif
 
 
-static const struct net_proto_family atalk_family_ops = {
+static struct net_proto_family atalk_family_ops = {
 	.family		= PF_APPLETALK,
 	.create		= atalk_create,
 	.owner		= THIS_MODULE,
 };
 
-static const struct proto_ops atalk_dgram_ops = {
+static const struct proto_ops SOCKOPS_WRAPPED(atalk_dgram_ops) = {
 	.family		= PF_APPLETALK,
 	.owner		= THIS_MODULE,
 	.release	= atalk_release,
@@ -1897,6 +1850,8 @@ static const struct proto_ops atalk_dgram_ops = {
 	.mmap		= sock_no_mmap,
 	.sendpage	= sock_no_sendpage,
 };
+
+SOCKOPS_WRAP(atalk_dgram, PF_APPLETALK);
 
 static struct notifier_block ddp_notifier = {
 	.notifier_call	= ddp_device_event,

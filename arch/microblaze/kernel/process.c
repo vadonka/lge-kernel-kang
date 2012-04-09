@@ -15,8 +15,6 @@
 #include <linux/bitops.h>
 #include <asm/system.h>
 #include <asm/pgalloc.h>
-#include <asm/uaccess.h> /* for USER_DS macros */
-#include <asm/cacheflush.h>
 
 void show_regs(struct pt_regs *regs)
 {
@@ -75,13 +73,7 @@ __setup("hlt", hlt_setup);
 
 void default_idle(void)
 {
-	if (likely(hlt_counter)) {
-		local_irq_disable();
-		stop_critical_timings();
-		cpu_relax();
-		start_critical_timings();
-		local_irq_enable();
-	} else {
+	if (!hlt_counter) {
 		clear_thread_flag(TIF_POLLING_NRFLAG);
 		smp_mb__after_clear_bit();
 		local_irq_disable();
@@ -89,7 +81,9 @@ void default_idle(void)
 			cpu_sleep();
 		local_irq_enable();
 		set_thread_flag(TIF_POLLING_NRFLAG);
-	}
+	} else
+		while (!need_resched())
+			cpu_relax();
 }
 
 void cpu_idle(void)
@@ -159,7 +153,7 @@ int copy_thread(unsigned long clone_flags, unsigned long usp,
 	}
 
 	/* FIXME STATE_SAVE_PT_OFFSET; */
-	ti->cpu_context.r1  = (unsigned long)childregs;
+	ti->cpu_context.r1  = (unsigned long)childregs - STATE_SAVE_ARG_SPACE;
 	/* we should consider the fact that childregs is a copy of the parent
 	 * regs which were saved immediately after entering the kernel state
 	 * before enabling VM. This MSR will be restored in switch_to and

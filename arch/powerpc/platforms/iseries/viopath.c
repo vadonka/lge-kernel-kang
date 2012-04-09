@@ -29,7 +29,6 @@
  */
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/vmalloc.h>
 #include <linux/string.h>
@@ -117,7 +116,7 @@ static int proc_viopath_show(struct seq_file *m, void *v)
 	u16 vlanMap;
 	dma_addr_t handle;
 	HvLpEvent_Rc hvrc;
-	DECLARE_COMPLETION_ONSTACK(done);
+	DECLARE_COMPLETION(done);
 	struct device_node *node;
 	const char *sysid;
 
@@ -396,7 +395,7 @@ static void vio_handleEvent(struct HvLpEvent *event)
 			viopathStatus[remoteLp].mTargetInst)) {
 			printk(VIOPATH_KERN_WARN
 			       "message from invalid partition. "
-			       "int msg rcvd, source inst (%d) doesn't match (%d)\n",
+			       "int msg rcvd, source inst (%d) doesnt match (%d)\n",
 			       viopathStatus[remoteLp].mTargetInst,
 			       event->xSourceInstanceId);
 			return;
@@ -407,7 +406,7 @@ static void vio_handleEvent(struct HvLpEvent *event)
 			viopathStatus[remoteLp].mSourceInst)) {
 			printk(VIOPATH_KERN_WARN
 			       "message from invalid partition. "
-			       "int msg rcvd, target inst (%d) doesn't match (%d)\n",
+			       "int msg rcvd, target inst (%d) doesnt match (%d)\n",
 			       viopathStatus[remoteLp].mSourceInst,
 			       event->xTargetInstanceId);
 			return;
@@ -418,7 +417,7 @@ static void vio_handleEvent(struct HvLpEvent *event)
 		    viopathStatus[remoteLp].mSourceInst) {
 			printk(VIOPATH_KERN_WARN
 			       "message from invalid partition. "
-			       "ack msg rcvd, source inst (%d) doesn't match (%d)\n",
+			       "ack msg rcvd, source inst (%d) doesnt match (%d)\n",
 			       viopathStatus[remoteLp].mSourceInst,
 			       event->xSourceInstanceId);
 			return;
@@ -428,7 +427,7 @@ static void vio_handleEvent(struct HvLpEvent *event)
 		    viopathStatus[remoteLp].mTargetInst) {
 			printk(VIOPATH_KERN_WARN
 			       "message from invalid partition. "
-			       "viopath: ack msg rcvd, target inst (%d) doesn't match (%d)\n",
+			       "viopath: ack msg rcvd, target inst (%d) doesnt match (%d)\n",
 			       viopathStatus[remoteLp].mTargetInst,
 			       event->xTargetInstanceId);
 			return;

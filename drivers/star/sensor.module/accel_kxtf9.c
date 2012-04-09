@@ -264,7 +264,7 @@ int open_def_odm_accl(void)
 		return err;
 	}
 
-	//
+	//sk.hwang@lge.com
 #if defined(CONFIG_MACH_STAR)
 	NvOdmAccelSetSampleRate(accel_dev->hOdmAcr, 800);
 #endif

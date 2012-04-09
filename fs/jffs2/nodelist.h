@@ -24,6 +24,7 @@
 #ifdef __ECOS
 #include "os-ecos.h"
 #else
+#include <linux/mtd/compatmac.h> /* For compatibility with older kernels */
 #include "os-linux.h"
 #endif
 
@@ -199,8 +200,7 @@ struct jffs2_inode_cache {
 #define RAWNODE_CLASS_XATTR_DATUM	1
 #define RAWNODE_CLASS_XATTR_REF		2
 
-#define INOCACHE_HASHSIZE_MIN 128
-#define INOCACHE_HASHSIZE_MAX 1024
+#define INOCACHE_HASHSIZE 128
 
 #define write_ofs(c) ((c)->nextblock->offset + (c)->sector_size - (c)->nextblock->free_size)
 
@@ -312,11 +312,11 @@ static inline int jffs2_blocks_use_vmalloc(struct jffs2_sb_info *c)
 static inline int jffs2_encode_dev(union jffs2_device_node *jdev, dev_t rdev)
 {
 	if (old_valid_dev(rdev)) {
-		jdev->old_id = cpu_to_je16(old_encode_dev(rdev));
-		return sizeof(jdev->old_id);
+		jdev->old = cpu_to_je16(old_encode_dev(rdev));
+		return sizeof(jdev->old);
 	} else {
-		jdev->new_id = cpu_to_je32(new_encode_dev(rdev));
-		return sizeof(jdev->new_id);
+		jdev->new = cpu_to_je32(new_encode_dev(rdev));
+		return sizeof(jdev->new);
 	}
 }
 
@@ -401,7 +401,7 @@ int jffs2_write_inode_range(struct jffs2_sb_info *c, struct jffs2_inode_info *f,
 			    struct jffs2_raw_inode *ri, unsigned char *buf,
 			    uint32_t offset, uint32_t writelen, uint32_t *retlen);
 int jffs2_do_create(struct jffs2_sb_info *c, struct jffs2_inode_info *dir_f, struct jffs2_inode_info *f,
-		    struct jffs2_raw_inode *ri, const struct qstr *qstr);
+		    struct jffs2_raw_inode *ri, const char *name, int namelen);
 int jffs2_do_unlink(struct jffs2_sb_info *c, struct jffs2_inode_info *dir_f, const char *name,
 		    int namelen, struct jffs2_inode_info *dead_f, uint32_t time);
 int jffs2_do_link(struct jffs2_sb_info *c, struct jffs2_inode_info *dir_f, uint32_t ino,
@@ -464,7 +464,7 @@ int jffs2_scan_dirty_space(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb
 int jffs2_do_mount_fs(struct jffs2_sb_info *c);
 
 /* erase.c */
-int jffs2_erase_pending_blocks(struct jffs2_sb_info *c, int count);
+void jffs2_erase_pending_blocks(struct jffs2_sb_info *c, int count);
 void jffs2_free_jeb_node_refs(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb);
 
 #ifdef CONFIG_JFFS2_FS_WRITEBUFFER

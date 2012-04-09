@@ -1,19 +1,7 @@
 /*
- * Copyright © 2003-2010 David Woodhouse <dwmw2@infradead.org>
+ * (C) 2003 David Woodhouse <dwmw2@infradead.org>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Interface to Linux block layer for MTD 'translation layers'.
  *
  */
 
@@ -21,8 +9,6 @@
 #define __MTD_TRANS_H__
 
 #include <linux/mutex.h>
-#include <linux/kref.h>
-#include <linux/sysfs.h>
 
 struct hd_geometry;
 struct mtd_info;
@@ -36,18 +22,12 @@ struct mtd_blktrans_dev {
 	struct mtd_info *mtd;
 	struct mutex lock;
 	int devnum;
-	bool bg_stop;
 	unsigned long size;
 	int readonly;
-	int open;
-	struct kref ref;
-	struct gendisk *disk;
-	struct attribute_group *disk_attributes;
-	struct task_struct *thread;
-	struct request_queue *rq;
-	spinlock_t queue_lock;
-	void *priv;
+	void *blkcore_priv; /* gendisk in 2.5, devfs_handle in 2.4 */
 };
+
+struct blkcore_priv; /* Differs for 2.4 and 2.5 kernels; private */
 
 struct mtd_blktrans_ops {
 	char *name;
@@ -63,7 +43,6 @@ struct mtd_blktrans_ops {
 		     unsigned long block, char *buffer);
 	int (*discard)(struct mtd_blktrans_dev *dev,
 		       unsigned long block, unsigned nr_blocks);
-	void (*background)(struct mtd_blktrans_dev *dev);
 
 	/* Block layer ioctls */
 	int (*getgeo)(struct mtd_blktrans_dev *dev, struct hd_geometry *geo);
@@ -81,13 +60,14 @@ struct mtd_blktrans_ops {
 	struct list_head devs;
 	struct list_head list;
 	struct module *owner;
+
+	struct mtd_blkcore_priv *blkcore_priv;
 };
 
 extern int register_mtd_blktrans(struct mtd_blktrans_ops *tr);
 extern int deregister_mtd_blktrans(struct mtd_blktrans_ops *tr);
 extern int add_mtd_blktrans_dev(struct mtd_blktrans_dev *dev);
 extern int del_mtd_blktrans_dev(struct mtd_blktrans_dev *dev);
-extern int mtd_blktrans_cease_background(struct mtd_blktrans_dev *dev);
 
 
 #endif /* __MTD_TRANS_H__ */

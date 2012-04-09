@@ -18,7 +18,6 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/ctype.h>
-#include <linux/string.h>
 #include <linux/sysctl.h>
 #include <asm/uaccess.h>
 #include <linux/module.h>
@@ -174,7 +173,6 @@ static const struct file_operations debug_file_ops = {
 	.write   = debug_input,
 	.open    = debug_open,
 	.release = debug_close,
-	.llseek  = no_llseek,
 };
 
 static struct dentry *debug_debugfs_root_entry;
@@ -656,7 +654,6 @@ found:
 	p_info->act_entry_offset = 0;
 	file->private_data = p_info;
 	debug_info_get(debug_info);
-	nonseekable_open(inode, file);
 out:
 	mutex_unlock(&debug_mutex);
 	return rc;
@@ -896,30 +893,35 @@ s390dbf_procactive(ctl_table *table, int write,
 
 static struct ctl_table s390dbf_table[] = {
 	{
+		.ctl_name       = CTL_S390DBF_STOPPABLE,
 		.procname       = "debug_stoppable",
 		.data		= &debug_stoppable,
 		.maxlen		= sizeof(int),
 		.mode           = S_IRUGO | S_IWUSR,
-		.proc_handler   = proc_dointvec,
+		.proc_handler   = &proc_dointvec,
+		.strategy	= &sysctl_intvec,
 	},
 	 {
+		.ctl_name       = CTL_S390DBF_ACTIVE,
 		.procname       = "debug_active",
 		.data		= &debug_active,
 		.maxlen		= sizeof(int),
 		.mode           = S_IRUGO | S_IWUSR,
-		.proc_handler   = s390dbf_procactive,
+		.proc_handler   = &s390dbf_procactive,
+		.strategy	= &sysctl_intvec,
 	},
-	{ }
+	{ .ctl_name = 0 }
 };
 
 static struct ctl_table s390dbf_dir_table[] = {
 	{
+		.ctl_name       = CTL_S390DBF,
 		.procname       = "s390dbf",
 		.maxlen         = 0,
 		.mode           = S_IRUGO | S_IXUGO,
 		.child          = s390dbf_table,
 	},
-	{ }
+	{ .ctl_name = 0 }
 };
 
 static struct ctl_table_header *s390dbf_sysctl_header;
@@ -1181,7 +1183,7 @@ debug_get_uint(char *buf)
 {
 	int rc;
 
-	buf = skip_spaces(buf);
+	for(; isspace(*buf); buf++);
 	rc = simple_strtoul(buf, &buf, 10);
 	if(*buf){
 		rc = -EINVAL;

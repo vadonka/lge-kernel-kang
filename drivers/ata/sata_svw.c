@@ -224,7 +224,7 @@ static void k2_bmdma_setup_mmio(struct ata_queued_cmd *qc)
 
 	/* load PRD table addr. */
 	mb();	/* make sure PRD table writes are visible to controller */
-	writel(ap->bmdma_prd_dma, mmio + ATA_DMA_TABLE_OFS);
+	writel(ap->prd_dma, mmio + ATA_DMA_TABLE_OFS);
 
 	/* specify data direction, triple-check start bit is clear */
 	dmactl = readb(mmio + ATA_DMA_CMD);
@@ -359,7 +359,8 @@ static struct ata_port_operations k2_sata_ops = {
 static const struct ata_port_info k2_port_info[] = {
 	/* chip_svw4 */
 	{
-		.flags		= ATA_FLAG_SATA | K2_FLAG_NO_ATAPI_DMA,
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO | K2_FLAG_NO_ATAPI_DMA,
 		.pio_mask	= ATA_PIO4,
 		.mwdma_mask	= ATA_MWDMA2,
 		.udma_mask	= ATA_UDMA6,
@@ -367,7 +368,8 @@ static const struct ata_port_info k2_port_info[] = {
 	},
 	/* chip_svw8 */
 	{
-		.flags		= ATA_FLAG_SATA | K2_FLAG_NO_ATAPI_DMA |
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO | K2_FLAG_NO_ATAPI_DMA |
 				  K2_FLAG_SATA_8_PORTS,
 		.pio_mask	= ATA_PIO4,
 		.mwdma_mask	= ATA_MWDMA2,
@@ -376,7 +378,8 @@ static const struct ata_port_info k2_port_info[] = {
 	},
 	/* chip_svw42 */
 	{
-		.flags		= ATA_FLAG_SATA | K2_FLAG_BAR_POS_3,
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO | K2_FLAG_BAR_POS_3,
 		.pio_mask	= ATA_PIO4,
 		.mwdma_mask	= ATA_MWDMA2,
 		.udma_mask	= ATA_UDMA6,
@@ -384,7 +387,8 @@ static const struct ata_port_info k2_port_info[] = {
 	},
 	/* chip_svw43 */
 	{
-		.flags		= ATA_FLAG_SATA,
+		.flags		= ATA_FLAG_SATA | ATA_FLAG_NO_LEGACY |
+				  ATA_FLAG_MMIO,
 		.pio_mask	= ATA_PIO4,
 		.mwdma_mask	= ATA_MWDMA2,
 		.udma_mask	= ATA_UDMA6,
@@ -498,7 +502,7 @@ static int k2_sata_init_one(struct pci_dev *pdev, const struct pci_device_id *en
 	writel(0x0, mmio_base + K2_SATA_SIM_OFFSET);
 
 	pci_set_master(pdev);
-	return ata_host_activate(host, pdev->irq, ata_bmdma_interrupt,
+	return ata_host_activate(host, pdev->irq, ata_sff_interrupt,
 				 IRQF_SHARED, &k2_sata_sht);
 }
 

@@ -20,7 +20,6 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-#include <linux/slab.h>
 #include <scsi/scsi.h>
 #include <scsi/scsi_eh.h>
 #include <scsi/scsi_dh.h>
@@ -273,7 +272,7 @@ static struct request *get_req(struct scsi_device *sdev, int cmd,
 	int len = 0;
 
 	rq = blk_get_request(sdev->request_queue,
-			(cmd != INQUIRY) ? WRITE : READ, GFP_NOIO);
+			(cmd == MODE_SELECT) ? WRITE : READ, GFP_NOIO);
 	if (!rq) {
 		sdev_printk(KERN_INFO, sdev, "get_req: blk_get_request failed");
 		return NULL;
@@ -285,17 +284,16 @@ static struct request *get_req(struct scsi_device *sdev, int cmd,
 	switch (cmd) {
 	case MODE_SELECT:
 		len = sizeof(short_trespass);
+		rq->cmd_flags |= REQ_RW;
 		rq->cmd[1] = 0x10;
-		rq->cmd[4] = len;
 		break;
 	case MODE_SELECT_10:
 		len = sizeof(long_trespass);
+		rq->cmd_flags |= REQ_RW;
 		rq->cmd[1] = 0x10;
-		rq->cmd[8] = len;
 		break;
 	case INQUIRY:
 		len = CLARIION_BUFFER_SIZE;
-		rq->cmd[4] = len;
 		memset(buffer, 0, len);
 		break;
 	default:
@@ -303,6 +301,7 @@ static struct request *get_req(struct scsi_device *sdev, int cmd,
 		break;
 	}
 
+	rq->cmd[4] = len;
 	rq->cmd_type = REQ_TYPE_BLOCK_PC;
 	rq->cmd_flags |= REQ_FAILFAST_DEV | REQ_FAILFAST_TRANSPORT |
 			 REQ_FAILFAST_DRIVER;
@@ -529,8 +528,7 @@ retry:
 	return err;
 }
 
-static int clariion_activate(struct scsi_device *sdev,
-				activate_complete fn, void *data)
+static int clariion_activate(struct scsi_device *sdev)
 {
 	struct clariion_dh_data *csdev = get_clariion_data(sdev);
 	int result;
@@ -561,9 +559,7 @@ done:
 		    csdev->port, lun_state[csdev->lun_state],
 		    csdev->default_sp + 'A');
 
-	if (fn)
-		fn(data, result);
-	return 0;
+	return result;
 }
 /*
  * params - parameters in the following format
@@ -650,7 +646,7 @@ static int clariion_bus_attach(struct scsi_device *sdev)
 	unsigned long flags;
 	int err;
 
-	scsi_dh_data = kzalloc(sizeof(*scsi_dh_data)
+	scsi_dh_data = kzalloc(sizeof(struct scsi_device_handler *)
 			       + sizeof(*h) , GFP_KERNEL);
 	if (!scsi_dh_data) {
 		sdev_printk(KERN_ERR, sdev, "%s: Attach failed\n",

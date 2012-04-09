@@ -2,27 +2,13 @@
 
 menu "LGE STAR device driver"
 
-config USE_DS_BATTERY_DRIVER
-	bool "Star Battery Driver Select"
-	default n
-	depends on MACH_STAR
-	help
-	 Select Battery Driver type
-
 config STAR_BATTERY_CHARGER
 	bool "Star Battery & Charger Driver"
 	default y
 	depends on MACH_STAR
 	help
 	 Support for Battery & Charger Driver.
-
-config STAR_BATTERY_UNIT_UV
-	bool "Battery Voltage unit in uV"
-	default y
-	depends on MACH_STAR
-	help
-	 Battery unit in uV
-
+	 
 config STAR_MUIC
 	bool "Star Muic MAXIM Driver"
 	default y
@@ -61,7 +47,7 @@ config RINETWORK_DRIVER
 config LOGGER
 	bool "High-speed in-kernel logging driver"
 	default y
-	depends on !ANDROID_LOGGER
+	depends on !ANDROID_LOGGER	
 
 source "drivers/star/sensor/Kconfig"
 source "drivers/star/sensor.module/Kconfig"
@@ -72,20 +58,6 @@ config STAR_POWERKEY
     depends on MACH_STAR
     help
       Powerkey driver
-
-config STAR_VIBRATOR
-    bool "Star Vibrator Driver"
-    default y
-    depends on MACH_STAR
-    help
-      Vibrator driver
-
-config STAR_HOMEKEY
-    bool "Star Homekey Driver"
-    default n
-    depends on MACH_STAR
-    help
-      Homekey driver
 
 config STAR_TOUCH_LED
     bool "Star TouchLED Driver"
@@ -107,12 +79,6 @@ config STAR_WM8994_TEST
 	help
 	 Support for wm8994 driver.
 
-config STAR_WM8994_VOODOO
-	bool "Star wm8994 Voodoo Sound"
-	default y
-	help
-	 Support for wm8994 driver.
-
 config STAR_ERS_TEST
 	bool "Star ERS Test Driver"
 	default y
@@ -123,7 +89,7 @@ config STAR_FOTA
 	bool "Star FOTA Test Driver"
 	default y
 	help
-	 FOTA Test Driver
+	 FOTA Test Driver	
 
 config STAR_CPWATCHER
 	bool "Star CP Status Watcher Driver"
@@ -158,5 +124,5 @@ config STAR_BD_ADDRESS
 	default y
 	help
 	  LGE added: It supports Bluetooth address Read / Write functionality on user mode.	  
-
+            
 endmenu

@@ -11,7 +11,6 @@
  */
 
 #include <linux/err.h>
-#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/device.h>
 #include <linux/scatterlist.h>
@@ -19,8 +18,8 @@
 #include <asm/cacheflush.h>
 #include <asm/mach/map.h>
 
-#include <plat/iommu.h>
-#include <plat/iovmm.h>
+#include <mach/iommu.h>
+#include <mach/iovmm.h>
 
 #include "iopgtable.h"
 
@@ -87,43 +86,35 @@ static size_t sgtable_len(const struct sg_table *sgt)
 }
 #define sgtable_ok(x)	(!!sgtable_len(x))
 
-static unsigned max_alignment(u32 addr)
-{
-	int i;
-	unsigned pagesize[] = { SZ_16M, SZ_1M, SZ_64K, SZ_4K, };
-	for (i = 0; i < ARRAY_SIZE(pagesize) && addr & (pagesize[i] - 1); i++)
-		;
-	return (i < ARRAY_SIZE(pagesize)) ? pagesize[i] : 0;
-}
-
 /*
  * calculate the optimal number sg elements from total bytes based on
  * iommu superpages
  */
-static unsigned sgtable_nents(size_t bytes, u32 da, u32 pa)
+static unsigned int sgtable_nents(size_t bytes)
 {
-	unsigned nr_entries = 0, ent_sz;
+	int i;
+	unsigned int nr_entries;
+	const unsigned long pagesize[] = { SZ_16M, SZ_1M, SZ_64K, SZ_4K, };
 
 	if (!IS_ALIGNED(bytes, PAGE_SIZE)) {
 		pr_err("%s: wrong size %08x\n", __func__, bytes);
 		return 0;
 	}
 
-	while (bytes) {
-		ent_sz = max_alignment(da | pa);
-		ent_sz = min_t(unsigned, ent_sz, iopgsz_max(bytes));
-		nr_entries++;
-		da += ent_sz;
-		pa += ent_sz;
-		bytes -= ent_sz;
+	nr_entries = 0;
+	for (i = 0; i < ARRAY_SIZE(pagesize); i++) {
+		if (bytes >= pagesize[i]) {
+			nr_entries += (bytes / pagesize[i]);
+			bytes %= pagesize[i];
+		}
 	}
+	BUG_ON(bytes);
 
 	return nr_entries;
 }
 
 /* allocate and initialize sg_table header(a kind of 'superblock') */
-static struct sg_table *sgtable_alloc(const size_t bytes, u32 flags,
-							u32 da, u32 pa)
+static struct sg_table *sgtable_alloc(const size_t bytes, u32 flags)
 {
 	unsigned int nr_entries;
 	int err;
@@ -135,8 +126,9 @@ static struct sg_table *sgtable_alloc(const size_t bytes, u32 flags,
 	if (!IS_ALIGNED(bytes, PAGE_SIZE))
 		return ERR_PTR(-EINVAL);
 
-	if (flags & IOVMF_LINEAR) {
-		nr_entries = sgtable_nents(bytes, da, pa);
+	/* FIXME: IOVMF_DA_FIXED should support 'superpages' */
+	if ((flags & IOVMF_LINEAR) && (flags & IOVMF_DA_ANON)) {
+		nr_entries = sgtable_nents(bytes);
 		if (!nr_entries)
 			return ERR_PTR(-EINVAL);
 	} else
@@ -147,10 +139,8 @@ static struct sg_table *sgtable_alloc(const size_t bytes, u32 flags,
 		return ERR_PTR(-ENOMEM);
 
 	err = sg_alloc_table(sgt, nr_entries, GFP_KERNEL);
-	if (err) {
-		kfree(sgt);
+	if (err)
 		return ERR_PTR(err);
-	}
 
 	pr_debug("%s: sgt:%p(%d entries)\n", __func__, sgt, nr_entries);
 
@@ -271,24 +261,22 @@ static struct iovm_struct *alloc_iovm_area(struct iommu *obj, u32 da,
 					   size_t bytes, u32 flags)
 {
 	struct iovm_struct *new, *tmp;
-	u32 start, prev_end, alignment;
+	u32 start, prev_end, alignement;
 
 	if (!obj || !bytes)
 		return ERR_PTR(-EINVAL);
 
 	start = da;
-	alignment = PAGE_SIZE;
+	alignement = PAGE_SIZE;
 
-	if (~flags & IOVMF_DA_FIXED) {
-		/* Don't map address 0 */
-		start = obj->da_start ? obj->da_start : alignment;
-
+	if (flags & IOVMF_DA_ANON) {
+		/*
+		 * Reserve the first page for NULL
+		 */
+		start = PAGE_SIZE;
 		if (flags & IOVMF_LINEAR)
-			alignment = iopgsz_max(bytes);
-		start = roundup(start, alignment);
-	} else if (start < obj->da_start || start > obj->da_end ||
-					obj->da_end - start < bytes) {
-		return ERR_PTR(-EINVAL);
+			alignement = iopgsz_max(bytes);
+		start = roundup(start, alignement);
 	}
 
 	tmp = NULL;
@@ -298,19 +286,16 @@ static struct iovm_struct *alloc_iovm_area(struct iommu *obj, u32 da,
 	prev_end = 0;
 	list_for_each_entry(tmp, &obj->mmap, list) {
 
-		if (prev_end > start)
-			break;
-
-		if (tmp->da_start > start && (tmp->da_start - start) >= bytes)
+		if ((prev_end <= start) && (start + bytes < tmp->da_start))
 			goto found;
 
-		if (tmp->da_end >= start && ~flags & IOVMF_DA_FIXED)
-			start = roundup(tmp->da_end + 1, alignment);
+		if (flags & IOVMF_DA_ANON)
+			start = roundup(tmp->da_end, alignement);
 
 		prev_end = tmp->da_end;
 	}
 
-	if ((start >= prev_end) && (obj->da_end - start >= bytes))
+	if ((start >= prev_end) && (ULONG_MAX - start >= bytes))
 		goto found;
 
 	dev_dbg(obj->dev, "%s: no space to fit %08x(%x) flags: %08x\n",
@@ -407,6 +392,7 @@ static void sgtable_fill_vmalloc(struct sg_table *sgt, void *_va)
 	}
 
 	va_end = _va + PAGE_SIZE * i;
+	flush_cache_vmap((unsigned long)_va, (unsigned long)va_end);
 }
 
 static inline void sgtable_drain_vmalloc(struct sg_table *sgt)
@@ -418,8 +404,7 @@ static inline void sgtable_drain_vmalloc(struct sg_table *sgt)
 	BUG_ON(!sgt);
 }
 
-static void sgtable_fill_kmalloc(struct sg_table *sgt, u32 pa, u32 da,
-								size_t len)
+static void sgtable_fill_kmalloc(struct sg_table *sgt, u32 pa, size_t len)
 {
 	unsigned int i;
 	struct scatterlist *sg;
@@ -428,10 +413,9 @@ static void sgtable_fill_kmalloc(struct sg_table *sgt, u32 pa, u32 da,
 	va = phys_to_virt(pa);
 
 	for_each_sg(sgt->sgl, sg, sgt->nents, i) {
-		unsigned bytes;
+		size_t bytes;
 
-		bytes = max_alignment(da | pa);
-		bytes = min_t(unsigned, bytes, iopgsz_max(len));
+		bytes = iopgsz_max(len);
 
 		BUG_ON(!iopgsz_ok(bytes));
 
@@ -440,10 +424,11 @@ static void sgtable_fill_kmalloc(struct sg_table *sgt, u32 pa, u32 da,
 		 * 'pa' is cotinuous(linear).
 		 */
 		pa += bytes;
-		da += bytes;
 		len -= bytes;
 	}
 	BUG_ON(len);
+
+	clean_dcache_area(va, len);
 }
 
 static inline void sgtable_drain_kmalloc(struct sg_table *sgt)
@@ -464,7 +449,7 @@ static int map_iovm_area(struct iommu *obj, struct iovm_struct *new,
 	struct scatterlist *sg;
 	u32 da = new->da_start;
 
-	if (!obj || !sgt)
+	if (!obj || !new || !sgt)
 		return -EINVAL;
 
 	BUG_ON(!sgtable_ok(sgt));
@@ -632,7 +617,7 @@ u32 iommu_vmap(struct iommu *obj, u32 da, const struct sg_table *sgt,
 		 u32 flags)
 {
 	size_t bytes;
-	void *va = NULL;
+	void *va;
 
 	if (!obj || !obj->dev || !sgt)
 		return -EINVAL;
@@ -642,14 +627,14 @@ u32 iommu_vmap(struct iommu *obj, u32 da, const struct sg_table *sgt,
 		return -EINVAL;
 	bytes = PAGE_ALIGN(bytes);
 
-	if (flags & IOVMF_MMIO) {
-		va = vmap_sg(sgt);
-		if (IS_ERR(va))
-			return PTR_ERR(va);
-	}
+	va = vmap_sg(sgt);
+	if (IS_ERR(va))
+		return PTR_ERR(va);
 
+	flags &= IOVMF_HW_MASK;
 	flags |= IOVMF_DISCONT;
 	flags |= IOVMF_MMIO;
+	flags |= (da ? IOVMF_DA_FIXED : IOVMF_DA_ANON);
 
 	da = __iommu_vmap(obj, da, sgt, va, bytes, flags);
 	if (IS_ERR_VALUE(da))
@@ -689,7 +674,7 @@ EXPORT_SYMBOL_GPL(iommu_vunmap);
  * @flags:	iovma and page property
  *
  * Allocate @bytes linearly and creates 1-n-1 mapping and returns
- * @da again, which might be adjusted if 'IOVMF_DA_FIXED' is not set.
+ * @da again, which might be adjusted if 'IOVMF_DA_ANON' is set.
  */
 u32 iommu_vmalloc(struct iommu *obj, u32 da, size_t bytes, u32 flags)
 {
@@ -705,15 +690,17 @@ u32 iommu_vmalloc(struct iommu *obj, u32 da, size_t bytes, u32 flags)
 	if (!va)
 		return -ENOMEM;
 
-	flags |= IOVMF_DISCONT;
-	flags |= IOVMF_ALLOC;
-
-	sgt = sgtable_alloc(bytes, flags, da, 0);
+	sgt = sgtable_alloc(bytes, flags);
 	if (IS_ERR(sgt)) {
 		da = PTR_ERR(sgt);
 		goto err_sgt_alloc;
 	}
 	sgtable_fill_vmalloc(sgt, va);
+
+	flags &= IOVMF_HW_MASK;
+	flags |= IOVMF_DISCONT;
+	flags |= IOVMF_ALLOC;
+	flags |= (da ? IOVMF_DA_FIXED : IOVMF_DA_ANON);
 
 	da = __iommu_vmap(obj, da, sgt, va, bytes, flags);
 	if (IS_ERR_VALUE(da))
@@ -754,11 +741,11 @@ static u32 __iommu_kmap(struct iommu *obj, u32 da, u32 pa, void *va,
 {
 	struct sg_table *sgt;
 
-	sgt = sgtable_alloc(bytes, flags, da, pa);
+	sgt = sgtable_alloc(bytes, flags);
 	if (IS_ERR(sgt))
 		return PTR_ERR(sgt);
 
-	sgtable_fill_kmalloc(sgt, pa, da, bytes);
+	sgtable_fill_kmalloc(sgt, pa, bytes);
 
 	da = map_iommu_region(obj, da, sgt, va, bytes, flags);
 	if (IS_ERR_VALUE(da)) {
@@ -777,7 +764,7 @@ static u32 __iommu_kmap(struct iommu *obj, u32 da, u32 pa, void *va,
  * @flags:	iovma and page property
  *
  * Creates 1-1-1 mapping and returns @da again, which can be
- * adjusted if 'IOVMF_DA_FIXED' is not set.
+ * adjusted if 'IOVMF_DA_ANON' is set.
  */
 u32 iommu_kmap(struct iommu *obj, u32 da, u32 pa, size_t bytes,
 		 u32 flags)
@@ -793,8 +780,10 @@ u32 iommu_kmap(struct iommu *obj, u32 da, u32 pa, size_t bytes,
 	if (!va)
 		return -ENOMEM;
 
+	flags &= IOVMF_HW_MASK;
 	flags |= IOVMF_LINEAR;
 	flags |= IOVMF_MMIO;
+	flags |= (da ? IOVMF_DA_FIXED : IOVMF_DA_ANON);
 
 	da = __iommu_kmap(obj, da, pa, va, bytes, flags);
 	if (IS_ERR_VALUE(da))
@@ -817,7 +806,7 @@ void iommu_kunmap(struct iommu *obj, u32 da)
 	struct sg_table *sgt;
 	typedef void (*func_t)(const void *);
 
-	sgt = unmap_vm_area(obj, da, (func_t)iounmap,
+	sgt = unmap_vm_area(obj, da, (func_t)__iounmap,
 			    IOVMF_LINEAR | IOVMF_MMIO);
 	if (!sgt)
 		dev_dbg(obj->dev, "%s: No sgt\n", __func__);
@@ -833,7 +822,7 @@ EXPORT_SYMBOL_GPL(iommu_kunmap);
  * @flags:	iovma and page property
  *
  * Allocate @bytes linearly and creates 1-1-1 mapping and returns
- * @da again, which might be adjusted if 'IOVMF_DA_FIXED' is not set.
+ * @da again, which might be adjusted if 'IOVMF_DA_ANON' is set.
  */
 u32 iommu_kmalloc(struct iommu *obj, u32 da, size_t bytes, u32 flags)
 {
@@ -850,8 +839,10 @@ u32 iommu_kmalloc(struct iommu *obj, u32 da, size_t bytes, u32 flags)
 		return -ENOMEM;
 	pa = virt_to_phys(va);
 
+	flags &= IOVMF_HW_MASK;
 	flags |= IOVMF_LINEAR;
 	flags |= IOVMF_ALLOC;
+	flags |= (da ? IOVMF_DA_FIXED : IOVMF_DA_ANON);
 
 	da = __iommu_kmap(obj, da, pa, va, bytes, flags);
 	if (IS_ERR_VALUE(da))

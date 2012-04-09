@@ -18,8 +18,6 @@
 #include <linux/phy.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
-#include <linux/slab.h>
-#include <linux/of.h>
 #include <net/ethoc.h>
 
 static int buffer_size = 0x8000; /* 32 KBytes */
@@ -175,16 +173,16 @@ MODULE_PARM_DESC(buffer_size, "DMA buffer allocation size");
  * @iobase:	pointer to I/O memory region
  * @membase:	pointer to buffer memory region
  * @dma_alloc:	dma allocated buffer size
- * @io_region_size:	I/O memory region size
  * @num_tx:	number of send buffers
  * @cur_tx:	last send buffer written
  * @dty_tx:	last buffer actually sent
  * @num_rx:	number of receive buffers
  * @cur_rx:	current receive buffer
- * @vma:        pointer to array of virtual memory addresses for buffers
  * @netdev:	pointer to network device structure
  * @napi:	NAPI structure
+ * @stats:	network device statistics
  * @msg_enable:	device state flags
+ * @rx_lock:	receive lock
  * @lock:	device lock
  * @phy:	attached PHY
  * @mdio:	MDIO bus for PHY access
@@ -194,7 +192,6 @@ struct ethoc {
 	void __iomem *iobase;
 	void __iomem *membase;
 	int dma_alloc;
-	resource_size_t io_region_size;
 
 	unsigned int num_tx;
 	unsigned int cur_tx;
@@ -203,12 +200,12 @@ struct ethoc {
 	unsigned int num_rx;
 	unsigned int cur_rx;
 
-	void** vma;
-
 	struct net_device *netdev;
 	struct napi_struct napi;
+	struct net_device_stats stats;
 	u32 msg_enable;
 
+	spinlock_t rx_lock;
 	spinlock_t lock;
 
 	struct phy_device *phy;
@@ -285,22 +282,18 @@ static inline void ethoc_disable_rx_and_tx(struct ethoc *dev)
 	ethoc_write(dev, MODER, mode);
 }
 
-static int ethoc_init_ring(struct ethoc *dev, unsigned long mem_start)
+static int ethoc_init_ring(struct ethoc *dev)
 {
 	struct ethoc_bd bd;
 	int i;
-	void* vma;
 
 	dev->cur_tx = 0;
 	dev->dty_tx = 0;
 	dev->cur_rx = 0;
 
-	ethoc_write(dev, TX_BD_NUM, dev->num_tx);
-
 	/* setup transmission buffers */
-	bd.addr = mem_start;
+	bd.addr = virt_to_phys(dev->membase);
 	bd.stat = TX_BD_IRQ | TX_BD_CRC;
-	vma = dev->membase;
 
 	for (i = 0; i < dev->num_tx; i++) {
 		if (i == dev->num_tx - 1)
@@ -308,9 +301,6 @@ static int ethoc_init_ring(struct ethoc *dev, unsigned long mem_start)
 
 		ethoc_write_bd(dev, i, &bd);
 		bd.addr += ETHOC_BUFSIZ;
-
-		dev->vma[i] = vma;
-		vma += ETHOC_BUFSIZ;
 	}
 
 	bd.stat = RX_BD_EMPTY | RX_BD_IRQ;
@@ -321,9 +311,6 @@ static int ethoc_init_ring(struct ethoc *dev, unsigned long mem_start)
 
 		ethoc_write_bd(dev, dev->num_tx + i, &bd);
 		bd.addr += ETHOC_BUFSIZ;
-
-		dev->vma[dev->num_tx + i] = vma;
-		vma += ETHOC_BUFSIZ;
 	}
 
 	return 0;
@@ -364,39 +351,39 @@ static unsigned int ethoc_update_rx_stats(struct ethoc *dev,
 
 	if (bd->stat & RX_BD_TL) {
 		dev_err(&netdev->dev, "RX: frame too long\n");
-		netdev->stats.rx_length_errors++;
+		dev->stats.rx_length_errors++;
 		ret++;
 	}
 
 	if (bd->stat & RX_BD_SF) {
 		dev_err(&netdev->dev, "RX: frame too short\n");
-		netdev->stats.rx_length_errors++;
+		dev->stats.rx_length_errors++;
 		ret++;
 	}
 
 	if (bd->stat & RX_BD_DN) {
 		dev_err(&netdev->dev, "RX: dribble nibble\n");
-		netdev->stats.rx_frame_errors++;
+		dev->stats.rx_frame_errors++;
 	}
 
 	if (bd->stat & RX_BD_CRC) {
 		dev_err(&netdev->dev, "RX: wrong CRC\n");
-		netdev->stats.rx_crc_errors++;
+		dev->stats.rx_crc_errors++;
 		ret++;
 	}
 
 	if (bd->stat & RX_BD_OR) {
 		dev_err(&netdev->dev, "RX: overrun\n");
-		netdev->stats.rx_over_errors++;
+		dev->stats.rx_over_errors++;
 		ret++;
 	}
 
 	if (bd->stat & RX_BD_MISS)
-		netdev->stats.rx_missed_errors++;
+		dev->stats.rx_missed_errors++;
 
 	if (bd->stat & RX_BD_LC) {
 		dev_err(&netdev->dev, "RX: late collision\n");
-		netdev->stats.collisions++;
+		dev->stats.collisions++;
 		ret++;
 	}
 
@@ -412,42 +399,31 @@ static int ethoc_rx(struct net_device *dev, int limit)
 		unsigned int entry;
 		struct ethoc_bd bd;
 
-		entry = priv->num_tx + priv->cur_rx;
+		entry = priv->num_tx + (priv->cur_rx % priv->num_rx);
 		ethoc_read_bd(priv, entry, &bd);
-		if (bd.stat & RX_BD_EMPTY) {
-			ethoc_ack_irq(priv, INT_MASK_RX);
-			/* If packet (interrupt) came in between checking
-			 * BD_EMTPY and clearing the interrupt source, then we
-			 * risk missing the packet as the RX interrupt won't
-			 * trigger right away when we reenable it; hence, check
-			 * BD_EMTPY here again to make sure there isn't such a
-			 * packet waiting for us...
-			 */
-			ethoc_read_bd(priv, entry, &bd);
-			if (bd.stat & RX_BD_EMPTY)
-				break;
-		}
+		if (bd.stat & RX_BD_EMPTY)
+			break;
 
 		if (ethoc_update_rx_stats(priv, &bd) == 0) {
 			int size = bd.stat >> 16;
-			struct sk_buff *skb;
+			struct sk_buff *skb = netdev_alloc_skb(dev, size);
 
 			size -= 4; /* strip the CRC */
-			skb = netdev_alloc_skb_ip_align(dev, size);
+			skb_reserve(skb, 2); /* align TCP/IP header */
 
 			if (likely(skb)) {
-				void *src = priv->vma[entry];
+				void *src = phys_to_virt(bd.addr);
 				memcpy_fromio(skb_put(skb, size), src, size);
 				skb->protocol = eth_type_trans(skb, dev);
-				dev->stats.rx_packets++;
-				dev->stats.rx_bytes += size;
+				priv->stats.rx_packets++;
+				priv->stats.rx_bytes += size;
 				netif_receive_skb(skb);
 			} else {
 				if (net_ratelimit())
 					dev_warn(&dev->dev, "low on memory - "
 							"packet dropped\n");
 
-				dev->stats.rx_dropped++;
+				priv->stats.rx_dropped++;
 				break;
 			}
 		}
@@ -456,120 +432,101 @@ static int ethoc_rx(struct net_device *dev, int limit)
 		bd.stat &= ~RX_BD_STATS;
 		bd.stat |=  RX_BD_EMPTY;
 		ethoc_write_bd(priv, entry, &bd);
-		if (++priv->cur_rx == priv->num_rx)
-			priv->cur_rx = 0;
+		priv->cur_rx++;
 	}
 
 	return count;
 }
 
-static void ethoc_update_tx_stats(struct ethoc *dev, struct ethoc_bd *bd)
+static int ethoc_update_tx_stats(struct ethoc *dev, struct ethoc_bd *bd)
 {
 	struct net_device *netdev = dev->netdev;
 
 	if (bd->stat & TX_BD_LC) {
 		dev_err(&netdev->dev, "TX: late collision\n");
-		netdev->stats.tx_window_errors++;
+		dev->stats.tx_window_errors++;
 	}
 
 	if (bd->stat & TX_BD_RL) {
 		dev_err(&netdev->dev, "TX: retransmit limit\n");
-		netdev->stats.tx_aborted_errors++;
+		dev->stats.tx_aborted_errors++;
 	}
 
 	if (bd->stat & TX_BD_UR) {
 		dev_err(&netdev->dev, "TX: underrun\n");
-		netdev->stats.tx_fifo_errors++;
+		dev->stats.tx_fifo_errors++;
 	}
 
 	if (bd->stat & TX_BD_CS) {
 		dev_err(&netdev->dev, "TX: carrier sense lost\n");
-		netdev->stats.tx_carrier_errors++;
+		dev->stats.tx_carrier_errors++;
 	}
 
 	if (bd->stat & TX_BD_STATS)
-		netdev->stats.tx_errors++;
+		dev->stats.tx_errors++;
 
-	netdev->stats.collisions += (bd->stat >> 4) & 0xf;
-	netdev->stats.tx_bytes += bd->stat >> 16;
-	netdev->stats.tx_packets++;
+	dev->stats.collisions += (bd->stat >> 4) & 0xf;
+	dev->stats.tx_bytes += bd->stat >> 16;
+	dev->stats.tx_packets++;
+	return 0;
 }
 
-static int ethoc_tx(struct net_device *dev, int limit)
+static void ethoc_tx(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
-	int count;
-	struct ethoc_bd bd;
 
-	for (count = 0; count < limit; ++count) {
-		unsigned int entry;
+	spin_lock(&priv->lock);
 
-		entry = priv->dty_tx & (priv->num_tx-1);
+	while (priv->dty_tx != priv->cur_tx) {
+		unsigned int entry = priv->dty_tx % priv->num_tx;
+		struct ethoc_bd bd;
 
 		ethoc_read_bd(priv, entry, &bd);
+		if (bd.stat & TX_BD_READY)
+			break;
 
-		if (bd.stat & TX_BD_READY || (priv->dty_tx == priv->cur_tx)) {
-			ethoc_ack_irq(priv, INT_MASK_TX);
-			/* If interrupt came in between reading in the BD
-			 * and clearing the interrupt source, then we risk
-			 * missing the event as the TX interrupt won't trigger
-			 * right away when we reenable it; hence, check
-			 * BD_EMPTY here again to make sure there isn't such an
-			 * event pending...
-			 */
-			ethoc_read_bd(priv, entry, &bd);
-			if (bd.stat & TX_BD_READY ||
-			    (priv->dty_tx == priv->cur_tx))
-				break;
-		}
-
-		ethoc_update_tx_stats(priv, &bd);
-		priv->dty_tx++;
+		entry = (++priv->dty_tx) % priv->num_tx;
+		(void)ethoc_update_tx_stats(priv, &bd);
 	}
 
 	if ((priv->cur_tx - priv->dty_tx) <= (priv->num_tx / 2))
 		netif_wake_queue(dev);
 
-	return count;
+	ethoc_ack_irq(priv, INT_MASK_TX);
+	spin_unlock(&priv->lock);
 }
 
 static irqreturn_t ethoc_interrupt(int irq, void *dev_id)
 {
-	struct net_device *dev = dev_id;
+	struct net_device *dev = (struct net_device *)dev_id;
 	struct ethoc *priv = netdev_priv(dev);
 	u32 pending;
-	u32 mask;
 
-	/* Figure out what triggered the interrupt...
-	 * The tricky bit here is that the interrupt source bits get
-	 * set in INT_SOURCE for an event regardless of whether that
-	 * event is masked or not.  Thus, in order to figure out what
-	 * triggered the interrupt, we need to remove the sources
-	 * for all events that are currently masked.  This behaviour
-	 * is not particularly well documented but reasonable...
-	 */
-	mask = ethoc_read(priv, INT_MASK);
+	ethoc_disable_irq(priv, INT_MASK_ALL);
 	pending = ethoc_read(priv, INT_SOURCE);
-	pending &= mask;
-
 	if (unlikely(pending == 0)) {
+		ethoc_enable_irq(priv, INT_MASK_ALL);
 		return IRQ_NONE;
 	}
 
 	ethoc_ack_irq(priv, pending);
 
-	/* We always handle the dropped packet interrupt */
 	if (pending & INT_MASK_BUSY) {
 		dev_err(&dev->dev, "packet dropped\n");
-		dev->stats.rx_dropped++;
+		priv->stats.rx_dropped++;
 	}
 
-	/* Handle receive/transmit event by switching to polling */
-	if (pending & (INT_MASK_TX | INT_MASK_RX)) {
-		ethoc_disable_irq(priv, INT_MASK_TX | INT_MASK_RX);
-		napi_schedule(&priv->napi);
+	if (pending & INT_MASK_RX) {
+		if (napi_schedule_prep(&priv->napi))
+			__napi_schedule(&priv->napi);
+	} else {
+		ethoc_enable_irq(priv, INT_MASK_RX);
 	}
 
+	if (pending & INT_MASK_TX)
+		ethoc_tx(dev);
+
+	ethoc_enable_irq(priv, INT_MASK_ALL & ~INT_MASK_RX);
 	return IRQ_HANDLED;
 }
 
@@ -595,29 +552,26 @@ static int ethoc_get_mac_address(struct net_device *dev, void *addr)
 static int ethoc_poll(struct napi_struct *napi, int budget)
 {
 	struct ethoc *priv = container_of(napi, struct ethoc, napi);
-	int rx_work_done = 0;
-	int tx_work_done = 0;
+	int work_done = 0;
 
-	rx_work_done = ethoc_rx(priv->netdev, budget);
-	tx_work_done = ethoc_tx(priv->netdev, budget);
-
-	if (rx_work_done < budget && tx_work_done < budget) {
+	work_done = ethoc_rx(priv->netdev, budget);
+	if (work_done < budget) {
+		ethoc_enable_irq(priv, INT_MASK_RX);
 		napi_complete(napi);
-		ethoc_enable_irq(priv, INT_MASK_TX | INT_MASK_RX);
 	}
 
-	return rx_work_done;
+	return work_done;
 }
 
 static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 {
+	unsigned long timeout = jiffies + ETHOC_MII_TIMEOUT;
 	struct ethoc *priv = bus->priv;
-	int i;
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_READ);
 
-	for (i=0; i < 5; i++) {
+	while (time_before(jiffies, timeout)) {
 		u32 status = ethoc_read(priv, MIISTATUS);
 		if (!(status & MIISTATUS_BUSY)) {
 			u32 data = ethoc_read(priv, MIIRX_DATA);
@@ -625,7 +579,8 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 			ethoc_write(priv, MIICOMMAND, 0);
 			return data;
 		}
-		usleep_range(100,200);
+
+		schedule();
 	}
 
 	return -EBUSY;
@@ -633,21 +588,19 @@ static int ethoc_mdio_read(struct mii_bus *bus, int phy, int reg)
 
 static int ethoc_mdio_write(struct mii_bus *bus, int phy, int reg, u16 val)
 {
+	unsigned long timeout = jiffies + ETHOC_MII_TIMEOUT;
 	struct ethoc *priv = bus->priv;
-	int i;
 
 	ethoc_write(priv, MIIADDRESS, MIIADDRESS_ADDR(phy, reg));
 	ethoc_write(priv, MIITX_DATA, val);
 	ethoc_write(priv, MIICOMMAND, MIICOMMAND_WRITE);
 
-	for (i=0; i < 5; i++) {
+	while (time_before(jiffies, timeout)) {
 		u32 stat = ethoc_read(priv, MIISTATUS);
-		if (!(stat & MIISTATUS_BUSY)) {
-			/* reset MII command register */
-			ethoc_write(priv, MIICOMMAND, 0);
+		if (!(stat & MIISTATUS_BUSY))
 			return 0;
-		}
-		usleep_range(100,200);
+
+		schedule();
 	}
 
 	return -EBUSY;
@@ -662,16 +615,25 @@ static void ethoc_mdio_poll(struct net_device *dev)
 {
 }
 
-static int __devinit ethoc_mdio_probe(struct net_device *dev)
+static int ethoc_mdio_probe(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	struct phy_device *phy;
-	int err;
+	int i;
 
-	if (priv->phy_id != -1) {
-		phy = priv->mdio->phy_map[priv->phy_id];
-	} else {
-		phy = phy_find_first(priv->mdio);
+	for (i = 0; i < PHY_MAX_ADDR; i++) {
+		phy = priv->mdio->phy_map[i];
+		if (phy) {
+			if (priv->phy_id != -1) {
+				/* attach to specified PHY */
+				if (priv->phy_id == phy->addr)
+					break;
+			} else {
+				/* autoselect PHY if none was specified */
+				if (phy->addr != 0)
+					break;
+			}
+		}
 	}
 
 	if (!phy) {
@@ -679,11 +641,11 @@ static int __devinit ethoc_mdio_probe(struct net_device *dev)
 		return -ENXIO;
 	}
 
-	err = phy_connect_direct(dev, phy, ethoc_mdio_poll, 0,
+	phy = phy_connect(dev, dev_name(&phy->dev), &ethoc_mdio_poll, 0,
 			PHY_INTERFACE_MODE_GMII);
-	if (err) {
+	if (IS_ERR(phy)) {
 		dev_err(&dev->dev, "could not attach to PHY\n");
-		return err;
+		return PTR_ERR(phy);
 	}
 
 	priv->phy = phy;
@@ -693,6 +655,8 @@ static int __devinit ethoc_mdio_probe(struct net_device *dev)
 static int ethoc_open(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
+	unsigned int min_tx = 2;
+	unsigned int num_bd;
 	int ret;
 
 	ret = request_irq(dev->irq, ethoc_interrupt, IRQF_SHARED,
@@ -700,7 +664,14 @@ static int ethoc_open(struct net_device *dev)
 	if (ret)
 		return ret;
 
-	ethoc_init_ring(priv, dev->mem_start);
+	/* calculate the number of TX/RX buffers, maximum 128 supported */
+	num_bd = min_t(unsigned int,
+		128, (dev->mem_end - dev->mem_start + 1) / ETHOC_BUFSIZ);
+	priv->num_tx = max(min_tx, num_bd / 4);
+	priv->num_rx = num_bd - priv->num_tx;
+	ethoc_write(priv, TX_BD_NUM, priv->num_tx);
+
+	ethoc_init_ring(priv);
 	ethoc_reset(priv);
 
 	if (netif_queue_stopped(dev)) {
@@ -760,7 +731,7 @@ static int ethoc_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		phy = priv->phy;
 	}
 
-	return phy_mii_ioctl(phy, ifr, cmd);
+	return phy_mii_ioctl(phy, mdio, cmd);
 }
 
 static int ethoc_config(struct net_device *dev, struct ifmap *map)
@@ -784,7 +755,7 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
 	u32 mode = ethoc_read(priv, MODER);
-	struct netdev_hw_addr *ha;
+	struct dev_mc_list *mc = NULL;
 	u32 hash[2] = { 0, 0 };
 
 	/* set loopback mode if requested */
@@ -812,8 +783,8 @@ static void ethoc_set_multicast_list(struct net_device *dev)
 		hash[0] = 0xffffffff;
 		hash[1] = 0xffffffff;
 	} else {
-		netdev_for_each_mc_addr(ha, dev) {
-			u32 crc = ether_crc(ETH_ALEN, ha->addr);
+		for (mc = dev->mc_list; mc; mc = mc->next) {
+			u32 crc = ether_crc(mc->dmi_addrlen, mc->dmi_addr);
 			int bit = (crc >> 26) & 0x3f;
 			hash[bit >> 5] |= 1 << (bit & 0x1f);
 		}
@@ -836,6 +807,12 @@ static void ethoc_tx_timeout(struct net_device *dev)
 		ethoc_interrupt(dev->irq, dev);
 }
 
+static struct net_device_stats *ethoc_stats(struct net_device *dev)
+{
+	struct ethoc *priv = netdev_priv(dev);
+	return &priv->stats;
+}
+
 static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethoc *priv = netdev_priv(dev);
@@ -844,7 +821,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	void *dest;
 
 	if (unlikely(skb->len > ETHOC_BUFSIZ)) {
-		dev->stats.tx_errors++;
+		priv->stats.tx_errors++;
 		goto out;
 	}
 
@@ -858,7 +835,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	else
 		bd.stat &= ~TX_BD_PAD;
 
-	dest = priv->vma[entry];
+	dest = phys_to_virt(bd.addr);
 	memcpy_toio(dest, skb->data, skb->len);
 
 	bd.stat &= ~(TX_BD_STATS | TX_BD_LEN_MASK);
@@ -873,6 +850,7 @@ static netdev_tx_t ethoc_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		netif_stop_queue(dev);
 	}
 
+	dev->trans_start = jiffies;
 	spin_unlock_irq(&priv->lock);
 out:
 	dev_kfree_skb(skb);
@@ -888,6 +866,7 @@ static const struct net_device_ops ethoc_netdev_ops = {
 	.ndo_set_multicast_list = ethoc_set_multicast_list,
 	.ndo_change_mtu = ethoc_change_mtu,
 	.ndo_tx_timeout = ethoc_tx_timeout,
+	.ndo_get_stats = ethoc_stats,
 	.ndo_start_xmit = ethoc_start_xmit,
 };
 
@@ -895,7 +874,7 @@ static const struct net_device_ops ethoc_netdev_ops = {
  * ethoc_probe() - initialize OpenCores ethernet MAC
  * pdev:	platform device
  */
-static int __devinit ethoc_probe(struct platform_device *pdev)
+static int ethoc_probe(struct platform_device *pdev)
 {
 	struct net_device *netdev = NULL;
 	struct resource *res = NULL;
@@ -903,7 +882,6 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	struct resource *mem = NULL;
 	struct ethoc *priv = NULL;
 	unsigned int phy;
-	int num_bd;
 	int ret = 0;
 
 	/* allocate networking device */
@@ -926,7 +904,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	}
 
 	mmio = devm_request_mem_region(&pdev->dev, res->start,
-			resource_size(res), res->name);
+			res->end - res->start + 1, res->name);
 	if (!mmio) {
 		dev_err(&pdev->dev, "cannot request I/O memory space\n");
 		ret = -ENXIO;
@@ -939,7 +917,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (res) {
 		mem = devm_request_mem_region(&pdev->dev, res->start,
-			resource_size(res), res->name);
+			res->end - res->start + 1, res->name);
 		if (!mem) {
 			dev_err(&pdev->dev, "cannot request memory space\n");
 			ret = -ENXIO;
@@ -965,10 +943,9 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	priv = netdev_priv(netdev);
 	priv->netdev = netdev;
 	priv->dma_alloc = 0;
-	priv->io_region_size = mmio->end - mmio->start + 1;
 
 	priv->iobase = devm_ioremap_nocache(&pdev->dev, netdev->base_addr,
-			resource_size(mmio));
+			mmio->end - mmio->start + 1);
 	if (!priv->iobase) {
 		dev_err(&pdev->dev, "cannot remap I/O memory space\n");
 		ret = -ENXIO;
@@ -977,7 +954,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 
 	if (netdev->mem_end) {
 		priv->membase = devm_ioremap_nocache(&pdev->dev,
-			netdev->mem_start, resource_size(mem));
+			netdev->mem_start, mem->end - mem->start + 1);
 		if (!priv->membase) {
 			dev_err(&pdev->dev, "cannot remap memory space\n");
 			ret = -ENXIO;
@@ -985,7 +962,7 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		}
 	} else {
 		/* Allocate buffer memory */
-		priv->membase = dmam_alloc_coherent(&pdev->dev,
+		priv->membase = dma_alloc_coherent(NULL,
 			buffer_size, (void *)&netdev->mem_start,
 			GFP_KERNEL);
 		if (!priv->membase) {
@@ -998,45 +975,12 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 		priv->dma_alloc = buffer_size;
 	}
 
-	/* calculate the number of TX/RX buffers, maximum 128 supported */
-	num_bd = min_t(unsigned int,
-		128, (netdev->mem_end - netdev->mem_start + 1) / ETHOC_BUFSIZ);
-	if (num_bd < 4) {
-		ret = -ENODEV;
-		goto error;
-	}
-	/* num_tx must be a power of two */
-	priv->num_tx = rounddown_pow_of_two(num_bd >> 1);
-	priv->num_rx = num_bd - priv->num_tx;
-
-	dev_dbg(&pdev->dev, "ethoc: num_tx: %d num_rx: %d\n",
-		priv->num_tx, priv->num_rx);
-
-	priv->vma = devm_kzalloc(&pdev->dev, num_bd*sizeof(void*), GFP_KERNEL);
-	if (!priv->vma) {
-		ret = -ENOMEM;
-		goto error;
-	}
-
 	/* Allow the platform setup code to pass in a MAC address. */
 	if (pdev->dev.platform_data) {
-		struct ethoc_platform_data *pdata = pdev->dev.platform_data;
+		struct ethoc_platform_data *pdata =
+			(struct ethoc_platform_data *)pdev->dev.platform_data;
 		memcpy(netdev->dev_addr, pdata->hwaddr, IFHWADDRLEN);
 		priv->phy_id = pdata->phy_id;
-	} else {
-		priv->phy_id = -1;
-
-#ifdef CONFIG_OF
-		{
-		const uint8_t* mac;
-
-		mac = of_get_property(pdev->dev.of_node,
-				      "local-mac-address",
-				      NULL);
-		if (mac)
-			memcpy(netdev->dev_addr, mac, IFHWADDRLEN);
-		}
-#endif
 	}
 
 	/* Check that the given MAC address is valid. If it isn't, read the
@@ -1095,26 +1039,29 @@ static int __devinit ethoc_probe(struct platform_device *pdev)
 	netdev->features |= 0;
 
 	/* setup NAPI */
+	memset(&priv->napi, 0, sizeof(priv->napi));
 	netif_napi_add(netdev, &priv->napi, ethoc_poll, 64);
 
+	spin_lock_init(&priv->rx_lock);
 	spin_lock_init(&priv->lock);
 
 	ret = register_netdev(netdev);
 	if (ret < 0) {
 		dev_err(&netdev->dev, "failed to register interface\n");
-		goto error2;
+		goto error;
 	}
 
 	goto out;
 
-error2:
-	netif_napi_del(&priv->napi);
 error:
 	mdiobus_unregister(priv->mdio);
 free_mdio:
 	kfree(priv->mdio->irq);
 	mdiobus_free(priv->mdio);
 free:
+	if (priv->dma_alloc)
+		dma_free_coherent(NULL, priv->dma_alloc, priv->membase,
+			netdev->mem_start);
 	free_netdev(netdev);
 out:
 	return ret;
@@ -1124,7 +1071,7 @@ out:
  * ethoc_remove() - shutdown OpenCores ethernet MAC
  * @pdev:	platform device
  */
-static int __devexit ethoc_remove(struct platform_device *pdev)
+static int ethoc_remove(struct platform_device *pdev)
 {
 	struct net_device *netdev = platform_get_drvdata(pdev);
 	struct ethoc *priv = netdev_priv(netdev);
@@ -1132,7 +1079,6 @@ static int __devexit ethoc_remove(struct platform_device *pdev)
 	platform_set_drvdata(pdev, NULL);
 
 	if (netdev) {
-		netif_napi_del(&priv->napi);
 		phy_disconnect(priv->phy);
 		priv->phy = NULL;
 
@@ -1141,6 +1087,9 @@ static int __devexit ethoc_remove(struct platform_device *pdev)
 			kfree(priv->mdio->irq);
 			mdiobus_free(priv->mdio);
 		}
+		if (priv->dma_alloc)
+			dma_free_coherent(NULL, priv->dma_alloc, priv->membase,
+				netdev->mem_start);
 		unregister_netdev(netdev);
 		free_netdev(netdev);
 	}
@@ -1163,21 +1112,13 @@ static int ethoc_resume(struct platform_device *pdev)
 # define ethoc_resume  NULL
 #endif
 
-static struct of_device_id ethoc_match[] = {
-	{ .compatible = "opencores,ethoc", },
-	{},
-};
-MODULE_DEVICE_TABLE(of, ethoc_match);
-
 static struct platform_driver ethoc_driver = {
 	.probe   = ethoc_probe,
-	.remove  = __devexit_p(ethoc_remove),
+	.remove  = ethoc_remove,
 	.suspend = ethoc_suspend,
 	.resume  = ethoc_resume,
 	.driver  = {
 		.name = "ethoc",
-		.owner = THIS_MODULE,
-		.of_match_table = ethoc_match,
 	},
 };
 

@@ -19,7 +19,6 @@
 
 #include <linux/if_arp.h>
 #include <linux/init.h>
-#include <linux/slab.h>
 #include <net/x25.h>
 
 LIST_HEAD(x25_route_list);
@@ -137,10 +136,8 @@ struct net_device *x25_dev_get(char *devname)
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
 					&& dev->type != ARPHRD_ETHER
 #endif
-					))){
+					)))
 		dev_put(dev);
-		dev = NULL;
-	}
 
 	return dev;
 }
@@ -193,7 +190,7 @@ int x25_route_ioctl(unsigned int cmd, void __user *arg)
 		goto out;
 
 	rc = -EINVAL;
-	if (rt.sigdigits > 15)
+	if (rt.sigdigits < 0 || rt.sigdigits > 15)
 		goto out;
 
 	dev = x25_dev_get(rt.device);

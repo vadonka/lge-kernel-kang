@@ -15,9 +15,7 @@
 #include "nvodm_query.h"
 #include "nvodm_query_discovery.h"
 
-#include <linux/switch.h>
-
-#define HALL_DEBUG 0
+#define HALL_DEBUG 1
 
 typedef struct star_hall_device_data
 {
@@ -33,14 +31,13 @@ typedef struct star_hall_device_data
 	NvU8 int_even_odd;
 	struct delayed_work delayed_work_hall;
 	struct input_dev* input_device;
-	struct switch_dev sdev;
 }star_hall_device;
 
 static star_hall_device *g_hall;
 static atomic_t sensing_hall;
 static bool power_enabled = false;
 
-// 20100903  Power control bug fix [START]
+// 20100903 taewan.kim@lge.com Power control bug fix [START]
 static int star_hall_set_power_rail( NvU32 vdd_id, NvBool is_enable )
 {
     NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
@@ -77,7 +74,7 @@ static int star_hall_set_power_rail( NvU32 vdd_id, NvBool is_enable )
 
     return -1;
 }
-// 20100903  Power control bug fix [END]
+// 20100903 taewan.kim@lge.com Power control bug fix [END]
 
 static void star_hall_work_func( struct work_struct* work )
 {
@@ -98,7 +95,7 @@ static ssize_t star_hall_sensing_show(struct device *dev, struct device_attribut
 	return (ssize_t)(strlen(buf) + 1);
 }
 
-static ssize_t star_hall_sensing_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t star_hall_sensing_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 		
 }
@@ -108,7 +105,7 @@ static ssize_t star_hall_onoff_show(struct device *dev, struct device_attribute 
 	sprintf(buf, "%d\n", (power_enabled == true));
 	return (ssize_t)(strlen(buf) + 1);
 }
-static ssize_t star_hall_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t star_hall_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32 val = 0;
 	val = simple_strtoul(buf, NULL, 10);
@@ -150,14 +147,10 @@ static void star_hall_intr_handler( void *arg )
 		{atomic_set( &sensing_hall, 1 );input_report_abs(g_hall->input_device, ABS_HAT2X, 1);input_sync(g_hall->input_device);}
 
 	//NvOdmGpioInterruptMask(g_hall->h_hall_intr, NV_FALSE);// NV_FALSE --> enable intr , NV_TRUE --> disable
-
-	/* 2 == CAR */
-	switch_set_state(&g_hall->sdev, gpio_status ? 0 : 2);
-
 	NvOdmGpioInterruptDone(g_hall->h_hall_intr);
 }
 
-static int __devinit star_hall_probe( struct platform_device *pdev )
+static int __init star_hall_probe( struct platform_device *pdev )
 {
 	int err = 0;
 	struct device *dev = &pdev->dev;
@@ -256,9 +249,6 @@ static int __devinit star_hall_probe( struct platform_device *pdev )
 		goto err_irq_request;
 	}
 
-	g_hall->sdev.name = "dock";
-	switch_dev_register(&g_hall->sdev);
-
 	return 0;
 
 error:
@@ -270,29 +260,12 @@ err_irq_request:
 
 static int star_hall_remove( struct platform_device *pdev )
 {
-	switch_dev_unregister(&g_hall->sdev);
 	return 0;
-}
-
-int star_hall_suspend(struct platform_device *dev, pm_message_t state)
-{
-        star_hall_set_power_rail(g_hall->vdd_id, NV_FALSE);
-
-        return 0;
-}
-
-int star_hall_resume(struct platform_device *dev)
-{
-        star_hall_set_power_rail(g_hall->vdd_id, NV_TRUE);
-
-        return 0;
 }
 
 static struct platform_driver star_hall_driver = {
 	.probe = star_hall_probe,
 	.remove = star_hall_remove,
-	.suspend = star_hall_suspend,
-	.resume = star_hall_resume,
 	.driver = {
 		.name = "star_hall",
 	},

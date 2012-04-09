@@ -3,7 +3,7 @@
     bttv-gpio.c  --  gpio sub drivers
 
     sysfs-based sub driver interface for bttv
-    mainly intended for gpio access
+    mainly intented for gpio access
 
 
     Copyright (C) 1996,97,98 Ralph  Metzler (rjkm@thp.uni-koeln.de)
@@ -30,7 +30,6 @@
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/device.h>
-#include <linux/slab.h>
 #include <asm/io.h>
 
 #include "bttvp.h"

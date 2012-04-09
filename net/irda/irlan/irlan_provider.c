@@ -34,7 +34,6 @@
 #include <linux/init.h>
 #include <linux/random.h>
 #include <linux/bitops.h>
-#include <linux/slab.h>
 
 #include <asm/system.h>
 #include <asm/byteorder.h>
@@ -128,6 +127,7 @@ static void irlan_provider_connect_indication(void *instance, void *sap,
 {
 	struct irlan_cb *self;
 	struct tsap_cb *tsap;
+	__u32 saddr, daddr;
 
 	IRDA_DEBUG(0, "%s()\n", __func__ );
 
@@ -140,6 +140,8 @@ static void irlan_provider_connect_indication(void *instance, void *sap,
 	IRDA_ASSERT(tsap == self->provider.tsap_ctrl,return;);
 	IRDA_ASSERT(self->provider.state == IRLAN_IDLE, return;);
 
+	daddr = irttp_get_daddr(tsap);
+	saddr = irttp_get_saddr(tsap);
 	self->provider.max_sdu_size = max_sdu_size;
 	self->provider.max_header_size = max_header_size;
 

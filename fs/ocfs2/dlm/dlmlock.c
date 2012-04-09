@@ -106,9 +106,6 @@ static int dlm_can_grant_new_lock(struct dlm_lock_resource *res,
 
 		if (!dlm_lock_compatible(tmplock->ml.type, lock->ml.type))
 			return 0;
-		if (!dlm_lock_compatible(tmplock->ml.convert_type,
-					 lock->ml.type))
-			return 0;
 	}
 
 	return 1;
@@ -128,7 +125,7 @@ static enum dlm_status dlmlock_master(struct dlm_ctxt *dlm,
 	int call_ast = 0, kick_thread = 0;
 	enum dlm_status status = DLM_NORMAL;
 
-	mlog(0, "type=%d\n", lock->ml.type);
+	mlog_entry("type=%d\n", lock->ml.type);
 
 	spin_lock(&res->spinlock);
 	/* if called from dlm_create_lock_handler, need to
@@ -227,8 +224,8 @@ static enum dlm_status dlmlock_remote(struct dlm_ctxt *dlm,
 	enum dlm_status status = DLM_DENIED;
 	int lockres_changed = 1;
 
-	mlog(0, "type=%d, lockres %.*s, flags = 0x%x\n",
-	     lock->ml.type, res->lockname.len,
+	mlog_entry("type=%d\n", lock->ml.type);
+	mlog(0, "lockres %.*s, flags = 0x%x\n", res->lockname.len,
 	     res->lockname.name, flags);
 
 	spin_lock(&res->spinlock);
@@ -272,7 +269,7 @@ static enum dlm_status dlmlock_remote(struct dlm_ctxt *dlm,
 		}
 		dlm_revert_pending_lock(res, lock);
 		dlm_lock_put(lock);
-	} else if (dlm_is_recovery_lock(res->lockname.name,
+	} else if (dlm_is_recovery_lock(res->lockname.name, 
 					res->lockname.len)) {
 		/* special case for the $RECOVERY lock.
 		 * there will never be an AST delivered to put
@@ -308,6 +305,8 @@ static enum dlm_status dlm_send_remote_lock_request(struct dlm_ctxt *dlm,
 	int tmpret, status = 0;
 	enum dlm_status ret;
 
+	mlog_entry_void();
+
 	memset(&create, 0, sizeof(create));
 	create.node_idx = dlm->node_num;
 	create.requested_type = lock->ml.type;
@@ -330,9 +329,7 @@ static enum dlm_status dlm_send_remote_lock_request(struct dlm_ctxt *dlm,
 			BUG();
 		}
 	} else {
-		mlog(ML_ERROR, "Error %d when sending message %u (key 0x%x) to "
-		     "node %u\n", tmpret, DLM_CREATE_LOCK_MSG, dlm->key,
-		     res->owner);
+		mlog_errno(tmpret);
 		if (dlm_is_host_down(tmpret)) {
 			ret = DLM_RECOVERING;
 			mlog(0, "node %u died so returning DLM_RECOVERING "
@@ -432,7 +429,7 @@ struct dlm_lock * dlm_new_lock(int type, u8 node, u64 cookie,
 	struct dlm_lock *lock;
 	int kernel_allocated = 0;
 
-	lock = kmem_cache_zalloc(dlm_lock_cache, GFP_NOFS);
+	lock = (struct dlm_lock *) kmem_cache_zalloc(dlm_lock_cache, GFP_NOFS);
 	if (!lock)
 		return NULL;
 
@@ -474,6 +471,8 @@ int dlm_create_lock_handler(struct o2net_msg *msg, u32 len, void *data,
 	unsigned int namelen;
 
 	BUG_ON(!dlm);
+
+	mlog_entry_void();
 
 	if (!dlm_grab(dlm))
 		return DLM_REJECTED;

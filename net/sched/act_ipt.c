@@ -19,7 +19,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/module.h>
 #include <linux/init.h>
-#include <linux/slab.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
 #include <linux/tc_act/tc_ipt.h>
@@ -39,7 +38,7 @@ static struct tcf_hashinfo ipt_hash_info = {
 	.lock	=	&ipt_lock,
 };
 
-static int ipt_init_target(struct xt_entry_target *t, char *table, unsigned int hook)
+static int ipt_init_target(struct ipt_entry_target *t, char *table, unsigned int hook)
 {
 	struct xt_tgchk_param par;
 	struct xt_target *target;
@@ -47,8 +46,8 @@ static int ipt_init_target(struct xt_entry_target *t, char *table, unsigned int 
 
 	target = xt_request_find_target(AF_INET, t->u.user.name,
 					t->u.user.revision);
-	if (IS_ERR(target))
-		return PTR_ERR(target);
+	if (!target)
+		return -ENOENT;
 
 	t->u.kernel.target = target;
 	par.table     = table;
@@ -66,7 +65,7 @@ static int ipt_init_target(struct xt_entry_target *t, char *table, unsigned int 
 	return 0;
 }
 
-static void ipt_destroy_target(struct xt_entry_target *t)
+static void ipt_destroy_target(struct ipt_entry_target *t)
 {
 	struct xt_tgdtor_param par = {
 		.target   = t->u.kernel.target,
@@ -99,7 +98,7 @@ static const struct nla_policy ipt_policy[TCA_IPT_MAX + 1] = {
 	[TCA_IPT_TABLE]	= { .type = NLA_STRING, .len = IFNAMSIZ },
 	[TCA_IPT_HOOK]	= { .type = NLA_U32 },
 	[TCA_IPT_INDEX]	= { .type = NLA_U32 },
-	[TCA_IPT_TARG]	= { .len = sizeof(struct xt_entry_target) },
+	[TCA_IPT_TARG]	= { .len = sizeof(struct ipt_entry_target) },
 };
 
 static int tcf_ipt_init(struct nlattr *nla, struct nlattr *est,
@@ -108,7 +107,7 @@ static int tcf_ipt_init(struct nlattr *nla, struct nlattr *est,
 	struct nlattr *tb[TCA_IPT_MAX + 1];
 	struct tcf_ipt *ipt;
 	struct tcf_common *pc;
-	struct xt_entry_target *td, *t;
+	struct ipt_entry_target *td, *t;
 	char *tname;
 	int ret = 0, err;
 	u32 hook = 0;
@@ -126,7 +125,7 @@ static int tcf_ipt_init(struct nlattr *nla, struct nlattr *est,
 	if (tb[TCA_IPT_TARG] == NULL)
 		return -EINVAL;
 
-	td = (struct xt_entry_target *)nla_data(tb[TCA_IPT_TARG]);
+	td = (struct ipt_entry_target *)nla_data(tb[TCA_IPT_TARG]);
 	if (nla_len(tb[TCA_IPT_TARG]) < td->u.target_size)
 		return -EINVAL;
 
@@ -138,7 +137,7 @@ static int tcf_ipt_init(struct nlattr *nla, struct nlattr *est,
 		pc = tcf_hash_create(index, est, a, sizeof(*ipt), bind,
 				     &ipt_idx_gen, &ipt_hash_info);
 		if (IS_ERR(pc))
-			return PTR_ERR(pc);
+		    return PTR_ERR(pc);
 		ret = ACT_P_CREATED;
 	} else {
 		if (!ovr) {
@@ -162,8 +161,7 @@ static int tcf_ipt_init(struct nlattr *nla, struct nlattr *est,
 	if (unlikely(!t))
 		goto err2;
 
-	err = ipt_init_target(t, tname, hook);
-	if (err < 0)
+	if ((err = ipt_init_target(t, tname, hook)) < 0)
 		goto err3;
 
 	spin_lock_bh(&ipt->tcf_lock);
@@ -200,7 +198,7 @@ static int tcf_ipt(struct sk_buff *skb, struct tc_action *a,
 {
 	int ret = 0, result = 0;
 	struct tcf_ipt *ipt = a->priv;
-	struct xt_action_param par;
+	struct xt_target_param par;
 
 	if (skb_cloned(skb)) {
 		if (pskb_expand_head(skb, 0, 0, GFP_ATOMIC))
@@ -210,12 +208,12 @@ static int tcf_ipt(struct sk_buff *skb, struct tc_action *a,
 	spin_lock(&ipt->tcf_lock);
 
 	ipt->tcf_tm.lastuse = jiffies;
-	bstats_update(&ipt->tcf_bstats, skb);
+	ipt->tcf_bstats.bytes += qdisc_pkt_len(skb);
+	ipt->tcf_bstats.packets++;
 
 	/* yes, we have to worry about both in and out dev
-	 * worry later - danger - this API seems to have changed
-	 * from earlier kernels
-	 */
+	 worry later - danger - this API seems to have changed
+	 from earlier kernels */
 	par.in       = skb->dev;
 	par.out      = NULL;
 	par.hooknum  = ipt->tcfi_hook;
@@ -231,13 +229,12 @@ static int tcf_ipt(struct sk_buff *skb, struct tc_action *a,
 		result = TC_ACT_SHOT;
 		ipt->tcf_qstats.drops++;
 		break;
-	case XT_CONTINUE:
+	case IPT_CONTINUE:
 		result = TC_ACT_PIPE;
 		break;
 	default:
 		if (net_ratelimit())
-			pr_notice("tc filter: Bogus netfilter code"
-				  " %d assume ACCEPT\n", ret);
+			printk("Bogus netfilter code %d assume ACCEPT\n", ret);
 		result = TC_POLICE_OK;
 		break;
 	}
@@ -250,14 +247,14 @@ static int tcf_ipt_dump(struct sk_buff *skb, struct tc_action *a, int bind, int 
 {
 	unsigned char *b = skb_tail_pointer(skb);
 	struct tcf_ipt *ipt = a->priv;
-	struct xt_entry_target *t;
+	struct ipt_entry_target *t;
 	struct tcf_t tm;
 	struct tc_cnt c;
 
 	/* for simple targets kernel size == user size
-	 * user name = target name
-	 * for foolproof you need to not assume this
-	 */
+	** user name = target name
+	** for foolproof you need to not assume this
+	*/
 
 	t = kmemdup(ipt->tcfi_t, ipt->tcfi_t->u.user.target_size, GFP_ATOMIC);
 	if (unlikely(!t))

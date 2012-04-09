@@ -275,6 +275,7 @@ exit_dummy:
 		if (s35390a->client[i])
 			i2c_unregister_device(s35390a->client[i]);
 	kfree(s35390a);
+	i2c_set_clientdata(client, NULL);
 
 exit:
 	return err;
@@ -291,6 +292,7 @@ static int s35390a_remove(struct i2c_client *client)
 
 	rtc_device_unregister(s35390a->rtc);
 	kfree(s35390a);
+	i2c_set_clientdata(client, NULL);
 
 	return 0;
 }

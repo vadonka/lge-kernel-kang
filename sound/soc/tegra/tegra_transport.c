@@ -36,11 +36,10 @@
 	}                                                                    \
 	wait_for_completion(&comp);                                          \
 
-extern struct tegra_audio_state_t tegra_audio_state;
 
 static AlsaTransport* atrans = 0;
 
-// 20110223, , media server restart 2 [start]
+// 20110223, lake.kim@lge.com, media server restart 2 [start]
 static NvError tegra_transport_mixer_open(NvAudioFxMixerHandle* phMixer)
 {
 	NvError status = NvSuccess;
@@ -59,7 +58,7 @@ static NvError tegra_transport_mixer_open(NvAudioFxMixerHandle* phMixer)
 EXIT_WITH_ERROR:
 	return retStatus;
 }
-// 20110223, , media server restart 2 [end]
+// 20110223, lake.kim@lge.com, media server restart 2 [end]
 
 static void tegra_transport_mixer_close(NvAudioFxMixerHandle hMixer)
 {
@@ -299,9 +298,9 @@ static void AlsaTransportServiceThread(void *arg)
 			switch (in.Message.Message) {
 			case NVFXTRANSPORT_MESSAGE_MIXER_OPEN: {
 				*in.MixerOpen.phMixer = in.MixerOpen.hMixer;
-// 20110223, , media server restart 2 [start]
+// 20110223, lake.kim@lge.com, media server restart 2 [start]
 				*in.MixerOpen.pReturnError = in.MixerOpen.ReturnError;
-// 20110223, , media server restart 2 [end]				
+// 20110223, lake.kim@lge.com, media server restart 2 [end]				
 				transport_complete(in.MixerOpen.pPrivateData);
 			}
 			break;
@@ -498,7 +497,7 @@ int tegra_audiofx_init(struct tegra_audio_data* tegra_snd_cx)
 			snd_printk(KERN_ERR "tegra_transport_init failed \n");
 			return -EFAULT;
 		}
-// 20110223, , media server restart 2 [start]
+// 20110223, lake.kim@lge.com, media server restart 2 [start]
 		e = tegra_snd_cx->xrt_fxn.MixerOpen(
 			&tegra_snd_cx->mixer_handle);
 
@@ -506,7 +505,7 @@ int tegra_audiofx_init(struct tegra_audio_data* tegra_snd_cx)
 			ret = -EFAULT;
 			goto fail;
 		}
-// 20110223, , media server restart 2 [end]
+// 20110223, lake.kim@lge.com, media server restart 2 [end]
 		e = tegra_audiofx_createfx(tegra_snd_cx);
 		if (e != NvSuccess) {
 			snd_printk(KERN_ERR "tegra_audiofx_createfx failed \n");
@@ -554,6 +553,7 @@ int tegra_audiofx_init(struct tegra_audio_data* tegra_snd_cx)
 		tegra_snd_cx->mi2s1 = tegra_snd_cx->xrt_fxn.MixerCreateObject(
 						tegra_snd_cx->mixer_handle,
 						NvAudioFxI2s1Id);
+		tegra_snd_cx->mi2s1_device_available = NvAudioFxIoDevice_Default;
 
 		tegra_snd_cx->i2s1_play_mix = tegra_snd_cx->xrt_fxn.MixerCreateObject(
 						tegra_snd_cx->mixer_handle,
@@ -694,11 +694,8 @@ static void tegra_audiofx_notifier_thread(void *arg)
 						NvAudioFxIoDeviceControlChangeMessage* iccm =
 							(NvAudioFxIoDeviceControlChangeMessage*)message;
 
-						mutex_lock(&tegra_audio_state.mutex_lock);
-						tegra_audio_state.devices_available = iccm->IoDevice;
-						mutex_unlock(&tegra_audio_state.mutex_lock);
-						if (audio_context->device_id == I2S1)
-							tegra_audiofx_route(audio_context);
+						audio_context->mi2s1_device_available = iccm->IoDevice;
+						tegra_audiofx_route(audio_context);
 					}
 
 				}
@@ -709,8 +706,7 @@ static void tegra_audiofx_notifier_thread(void *arg)
 							(NvAudioFxIoDeviceControlChangeMessage*)message;
 
 						audio_context->mspdif_device_available = iccm->IoDevice;
-						if (audio_context->device_id == I2S1)
-							tegra_audiofx_route(audio_context);
+						tegra_audiofx_route(audio_context);
 					}
 				}
 			}
@@ -738,16 +734,16 @@ NvError tegra_audiofx_route(struct tegra_audio_data *audio_context)
 		audio_context->spdif_plugin) {
 		spdif_device_select = NvAudioFxIoDevice_Aux;
 	}
-	else if(tegra_audio_state.devices_available &
+	else if(audio_context->mi2s1_device_available &
 		NvAudioFxIoDevice_HeadphoneOut) {
 		i2s1_device_select = NvAudioFxIoDevice_HeadphoneOut;
 	}
-	else if(tegra_audio_state.devices_available &
+	else if(audio_context->mi2s1_device_available &
 		NvAudioFxIoDevice_BuiltInSpeaker) {
 		i2s1_device_select = NvAudioFxIoDevice_BuiltInSpeaker;
 	}
 	else {
-		i2s1_device_select = tegra_audio_state.devices_available;
+		i2s1_device_select = audio_context->mi2s1_device_available;
 	}
 
 	e = audio_context->xrt_fxn.SetProperty(

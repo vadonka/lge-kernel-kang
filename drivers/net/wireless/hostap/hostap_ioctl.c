@@ -1,6 +1,5 @@
 /* ioctl() (mostly Linux Wireless Extensions) routines for Host AP driver */
 
-#include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/sched.h>
 #include <linux/ethtool.h>
@@ -1696,7 +1695,7 @@ static int prism2_request_scan(struct net_device *dev)
 		hostap_set_word(dev, HFA384X_RID_CNFROAMINGMODE,
 				HFA384X_ROAMING_FIRMWARE);
 
-	return ret;
+	return 0;
 }
 
 #else /* !PRISM2_NO_STATION_MODES */
@@ -1945,7 +1944,7 @@ static char * __prism2_translate_scan(local_info_t *local,
 }
 
 
-/* Translate scan data returned from the card to a card independent
+/* Translate scan data returned from the card to a card independant
  * format that the Wireless Tools will understand - Jean II */
 static inline int prism2_translate_scan(local_info_t *local,
 					struct iw_request_info *info,
@@ -2043,7 +2042,7 @@ static inline int prism2_ioctl_giwscan_sta(struct net_device *dev,
 		 * until results are ready for various reasons.
 		 * First, managing wait queues is complex and racy
 		 * (there may be multiple simultaneous callers).
-		 * Second, we grab some rtnetlink lock before coming
+		 * Second, we grab some rtnetlink lock before comming
 		 * here (in dev_ioctl()).
 		 * Third, the caller can wait on the Wireless Event
 		 * - Jean II */
@@ -3039,7 +3038,8 @@ static int prism2_ioctl_priv_download(local_info_t *local, struct iw_point *p)
 	    p->length > 1024 || !p->pointer)
 		return -EINVAL;
 
-	param = kmalloc(p->length, GFP_KERNEL);
+	param = (struct prism2_download_param *)
+		kmalloc(p->length, GFP_KERNEL);
 	if (param == NULL)
 		return -ENOMEM;
 

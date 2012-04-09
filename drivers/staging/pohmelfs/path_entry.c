@@ -14,6 +14,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/ktime.h>
 #include <linux/fs_struct.h>
@@ -44,9 +45,9 @@ int pohmelfs_construct_path_string(struct pohmelfs_inode *pi, void *data, int le
 		return -ENOENT;
 	}
 
-	spin_lock(&current->fs->lock);
+	read_lock(&current->fs->lock);
 	path.mnt = mntget(current->fs->root.mnt);
-	spin_unlock(&current->fs->lock);
+	read_unlock(&current->fs->lock);
 
 	path.dentry = d;
 
@@ -83,24 +84,19 @@ out:
 int pohmelfs_path_length(struct pohmelfs_inode *pi)
 {
 	struct dentry *d, *root, *first;
-	int len;
-	unsigned seq;
+	int len = 1; /* Root slash */
 
-	first = d_find_alias(&pi->vfs_inode);
-	if (!first) {
+	first = d = d_find_alias(&pi->vfs_inode);
+	if (!d) {
 		dprintk("%s: ino: %llu, mode: %o.\n", __func__, pi->ino, pi->vfs_inode.i_mode);
 		return -ENOENT;
 	}
 
-	spin_lock(&current->fs->lock);
+	read_lock(&current->fs->lock);
 	root = dget(current->fs->root.dentry);
-	spin_unlock(&current->fs->lock);
+	read_unlock(&current->fs->lock);
 
-rename_retry:
-	len = 1; /* Root slash */
-	d = first;
-	seq = read_seqbegin(&rename_lock);
-	rcu_read_lock();
+	spin_lock(&dcache_lock);
 
 	if (!IS_ROOT(d) && d_unhashed(d))
 		len += UNHASHED_OBSCURE_STRING_SIZE; /* Obscure " (deleted)" string */
@@ -109,9 +105,7 @@ rename_retry:
 		len += d->d_name.len + 1; /* Plus slash */
 		d = d->d_parent;
 	}
-	rcu_read_unlock();
-	if (read_seqretry(&rename_lock, seq))
-		goto rename_retry;
+	spin_unlock(&dcache_lock);
 
 	dput(root);
 	dput(first);

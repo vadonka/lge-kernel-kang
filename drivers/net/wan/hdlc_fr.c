@@ -112,7 +112,7 @@ typedef struct {
 	unsigned de:	1;
 	unsigned ea2:	1;
 #endif
-}__packed fr_hdr;
+}__attribute__ ((packed)) fr_hdr;
 
 
 typedef struct pvc_device_struct {
@@ -182,7 +182,7 @@ static inline pvc_device* find_pvc(hdlc_device *hdlc, u16 dlci)
 		if (pvc->dlci == dlci)
 			return pvc;
 		if (pvc->dlci > dlci)
-			return NULL; /* the list is sorted */
+			return NULL; /* the listed is sorted */
 		pvc = pvc->next;
 	}
 
@@ -1070,7 +1070,7 @@ static int fr_add_pvc(struct net_device *frad, unsigned int dlci, int type)
 	hdlc_device *hdlc = dev_to_hdlc(frad);
 	pvc_device *pvc;
 	struct net_device *dev;
-	int used;
+	int result, used;
 
 	if ((pvc = add_pvc(frad, dlci)) == NULL) {
 		printk(KERN_WARNING "%s: Memory squeeze on fr_add_pvc()\n",
@@ -1083,10 +1083,9 @@ static int fr_add_pvc(struct net_device *frad, unsigned int dlci, int type)
 
 	used = pvc_is_used(pvc);
 
-	if (type == ARPHRD_ETHER) {
+	if (type == ARPHRD_ETHER)
 		dev = alloc_netdev(0, "pvceth%d", ether_setup);
-		dev->priv_flags &= ~IFF_TX_SKB_SHARING;
-	} else
+	else
 		dev = alloc_netdev(0, "pvc%d", pvc_setup);
 
 	if (!dev) {
@@ -1106,6 +1105,13 @@ static int fr_add_pvc(struct net_device *frad, unsigned int dlci, int type)
 	dev->mtu = HDLC_MAX_MTU;
 	dev->tx_queue_len = 0;
 	dev->ml_priv = pvc;
+
+	result = dev_alloc_name(dev, dev->name);
+	if (result < 0) {
+		free_netdev(dev);
+		delete_unused_pvcs(hdlc);
+		return result;
+	}
 
 	if (register_netdevice(dev) != 0) {
 		free_netdev(dev);
@@ -1208,10 +1214,10 @@ static int fr_ioctl(struct net_device *dev, struct ifreq *ifr)
 		return 0;
 
 	case IF_PROTO_FR:
-		if (!capable(CAP_NET_ADMIN))
+		if(!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
-		if (dev->flags & IFF_UP)
+		if(dev->flags & IFF_UP)
 			return -EBUSY;
 
 		if (copy_from_user(&new_settings, fr_s, size))
@@ -1257,7 +1263,7 @@ static int fr_ioctl(struct net_device *dev, struct ifreq *ifr)
 		if (dev_to_hdlc(dev)->proto != &proto) /* Different proto */
 			return -EINVAL;
 
-		if (!capable(CAP_NET_ADMIN))
+		if(!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
 		if (copy_from_user(&pvc, ifr->ifr_settings.ifs_ifsu.fr_pvc,

@@ -20,7 +20,9 @@
 #define STAR_ERS_TEST_PROC_FILE "driver/fota_test"
 extern int create_star_fota_test_proc_file(void);
 extern void remove_star_fota_test_proc_file(void);
-//extern int fota_ebl_download(void);
+#if defined (CONFIG_MODEM_IFX)
+extern int fota_ebl_download(void);
+#endif
 
 typedef enum
 {
@@ -35,8 +37,10 @@ extern void DP3T_Switch_ctrl(DP3T_MODE_TYPE mode);
 void ifx_uart_sw_ctrl( void )
 {
     printk("%s\n", __func__);
-    //USIF_ctrl(USIF_IPC);
-    //DP3T_Switch_ctrl(DP3T_NC);
+#if defined (CONFIG_MODEM_IFX)	
+    USIF_ctrl(USIF_IPC);
+    DP3T_Switch_ctrl(DP3T_NC);
+#endif	
 }
 
 void ifx_power_low(void)
@@ -114,9 +118,12 @@ void ifx_reset_high(void)
 
 void ifx_fota_reset(void)
 {
-    //fota_ebl_download();
+#if defined (CONFIG_MODEM_IFX)
+    fota_ebl_download();
+#endif	
 }
-
+//LGSI_MERGED_FROM_FROYO_MR[START]
+#if defined (CONFIG_MODEM_MDM)	
 int mdm_reset(void)
 {
     unsigned int pin_val = 0;    
@@ -207,8 +214,8 @@ error_open_gpio_pin_acquire_fail:
 error_open_gpio_fail:
 	return -ENOSYS;
 }
-
-
+#endif
+//LGSI_MERGED_FROM_FROYO_MR[END]
 static ssize_t fota_test_proc_read(struct file *filp, char *buf, size_t len, loff_t *offset)
 {
     
@@ -251,13 +258,14 @@ static ssize_t fota_test_proc_write(struct file *filp, const char *buf, size_t l
         case '5':
 	    ifx_fota_reset();
             break;	    
-			case '6':
+#if defined (CONFIG_MODEM_MDM)				    
+        case '6':
         	mdm_reset();
         	break;
         case '7':
         	mdm_rts_low();
         	break;
-
+#endif		
 	default :
             printk("FOTA Driver invalid arg\n");
             break;

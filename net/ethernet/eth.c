@@ -73,8 +73,8 @@ __setup("ether=", netdev_boot_setup);
  * @len:   packet length (<= skb->len)
  *
  *
- * Set the protocol type. For a packet of type ETH_P_802_3/2 we put the length
- * in here instead.
+ * Set the protocol type. For a packet of type ETH_P_802_3 we put the length
+ * in here instead. It is up to the 802.2 layer to carry protocol information.
  */
 int eth_header(struct sk_buff *skb, struct net_device *dev,
 	       unsigned short type,
@@ -82,7 +82,7 @@ int eth_header(struct sk_buff *skb, struct net_device *dev,
 {
 	struct ethhdr *eth = (struct ethhdr *)skb_push(skb, ETH_HLEN);
 
-	if (type != ETH_P_802_3 && type != ETH_P_802_2)
+	if (type != ETH_P_802_3)
 		eth->h_proto = htons(type);
 	else
 		eth->h_proto = htons(len);
@@ -136,7 +136,7 @@ int eth_rebuild_header(struct sk_buff *skb)
 	default:
 		printk(KERN_DEBUG
 		       "%s: unable to resolve type %X addresses.\n",
-		       dev->name, ntohs(eth->h_proto));
+		       dev->name, (int)eth->h_proto);
 
 		memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
 		break;
@@ -158,10 +158,11 @@ EXPORT_SYMBOL(eth_rebuild_header);
 __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ethhdr *eth;
+	unsigned char *rawp;
 
 	skb->dev = dev;
 	skb_reset_mac_header(skb);
-	skb_pull_inline(skb, ETH_HLEN);
+	skb_pull(skb, ETH_HLEN);
 	eth = eth_hdr(skb);
 
 	if (unlikely(is_multicast_ether_addr(eth->h_dest))) {
@@ -198,13 +199,15 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	if (ntohs(eth->h_proto) >= 1536)
 		return eth->h_proto;
 
+	rawp = skb->data;
+
 	/*
 	 *      This is a magic hack to spot IPX packets. Older Novell breaks
 	 *      the protocol design and runs IPX over 802.3 without an 802.2 LLC
 	 *      layer. We look for FFFF which isn't a used 802.2 SSAP/DSAP. This
 	 *      won't work for fault tolerant netware but does for the rest.
 	 */
-	if (skb->len >= 2 && *(unsigned short *)(skb->data) == 0xFFFF)
+	if (*(unsigned short *)rawp == 0xFFFF)
 		return htons(ETH_P_802_3);
 
 	/*
@@ -340,7 +343,6 @@ void ether_setup(struct net_device *dev)
 	dev->addr_len		= ETH_ALEN;
 	dev->tx_queue_len	= 1000;	/* Ethernet wants good queues */
 	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
-	dev->priv_flags		= IFF_TX_SKB_SHARING;
 
 	memset(dev->broadcast, 0xFF, ETH_ALEN);
 
@@ -348,11 +350,10 @@ void ether_setup(struct net_device *dev)
 EXPORT_SYMBOL(ether_setup);
 
 /**
- * alloc_etherdev_mqs - Allocates and sets up an Ethernet device
+ * alloc_etherdev_mq - Allocates and sets up an Ethernet device
  * @sizeof_priv: Size of additional driver-private structure to be allocated
  *	for this Ethernet device
- * @txqs: The number of TX queues this device has.
- * @rxqs: The number of RX queues this device has.
+ * @queue_count: The number of queues this device has.
  *
  * Fill in the fields of the device structure with Ethernet-generic
  * values. Basically does everything except registering the device.
@@ -362,15 +363,14 @@ EXPORT_SYMBOL(ether_setup);
  * this private data area.
  */
 
-struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
-				      unsigned int rxqs)
+struct net_device *alloc_etherdev_mq(int sizeof_priv, unsigned int queue_count)
 {
-	return alloc_netdev_mqs(sizeof_priv, "eth%d", ether_setup, txqs, rxqs);
+	return alloc_netdev_mq(sizeof_priv, "eth%d", ether_setup, queue_count);
 }
-EXPORT_SYMBOL(alloc_etherdev_mqs);
+EXPORT_SYMBOL(alloc_etherdev_mq);
 
 static size_t _format_mac_addr(char *buf, int buflen,
-			       const unsigned char *addr, int len)
+				const unsigned char *addr, int len)
 {
 	int i;
 	char *cp = buf;
@@ -379,7 +379,7 @@ static size_t _format_mac_addr(char *buf, int buflen,
 		cp += scnprintf(cp, buflen - (cp - buf), "%02x", addr[i]);
 		if (i == len - 1)
 			break;
-		cp += scnprintf(cp, buflen - (cp - buf), ":");
+		cp += strlcpy(cp, ":", buflen - (cp - buf));
 	}
 	return cp - buf;
 }
@@ -389,7 +389,14 @@ ssize_t sysfs_format_mac(char *buf, const unsigned char *addr, int len)
 	size_t l;
 
 	l = _format_mac_addr(buf, PAGE_SIZE, addr, len);
-	l += scnprintf(buf + l, PAGE_SIZE - l, "\n");
-	return (ssize_t)l;
+	l += strlcpy(buf + l, "\n", PAGE_SIZE - l);
+	return ((ssize_t) l);
 }
 EXPORT_SYMBOL(sysfs_format_mac);
+
+char *print_mac(char *buf, const unsigned char *addr)
+{
+	_format_mac_addr(buf, MAC_BUF_SIZE, addr, ETH_ALEN);
+	return buf;
+}
+EXPORT_SYMBOL(print_mac);

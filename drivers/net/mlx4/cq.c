@@ -35,7 +35,6 @@
  */
 
 #include <linux/hardirq.h>
-#include <linux/gfp.h>
 
 #include <linux/mlx4/cmd.h>
 #include <linux/mlx4/cq.h>
@@ -198,7 +197,7 @@ int mlx4_cq_alloc(struct mlx4_dev *dev, int nent, struct mlx4_mtt *mtt,
 	u64 mtt_addr;
 	int err;
 
-	if (vector > dev->caps.num_comp_vectors + dev->caps.comp_pool)
+	if (vector >= dev->caps.num_comp_vectors)
 		return -EINVAL;
 
 	cq->vector = vector;

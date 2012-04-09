@@ -757,7 +757,7 @@ static void ewrk3_timeout(struct net_device *dev)
 		 */
 		ENABLE_IRQs;
 
-		dev->trans_start = jiffies; /* prevent tx timeout */
+		dev->trans_start = jiffies;
 		netif_wake_queue(dev);
 	}
 }
@@ -862,6 +862,7 @@ static netdev_tx_t ewrk3_queue_pkt(struct sk_buff *skb, struct net_device *dev)
 	spin_unlock_irq (&lp->hw_lock);
 
 	dev->stats.tx_bytes += skb->len;
+	dev->trans_start = jiffies;
 	dev_kfree_skb (skb);
 
 	/* Check for free resources: stop Tx queue if there are none */
@@ -1168,7 +1169,7 @@ static void set_multicast_list(struct net_device *dev)
 static void SetMulticastFilter(struct net_device *dev)
 {
 	struct ewrk3_private *lp = netdev_priv(dev);
-	struct netdev_hw_addr *ha;
+	struct dev_mc_list *dmi = dev->mc_list;
 	u_long iobase = dev->base_addr;
 	int i;
 	char *addrs, bit, byte;
@@ -1212,8 +1213,9 @@ static void SetMulticastFilter(struct net_device *dev)
 		}
 
 		/* Update table */
-		netdev_for_each_mc_addr(ha, dev) {
-			addrs = ha->addr;
+		for (i = 0; i < dev->mc_count; i++) {	/* for each address in the list */
+			addrs = dmi->dmi_addr;
+			dmi = dmi->next;
 			if ((*addrs & 0x01) == 1) {	/* multicast address? */
 				crc = ether_crc_le(ETH_ALEN, addrs);
 				hashcode = crc & ((1 << 9) - 1);	/* hashcode is 9 LSb of CRC */
@@ -1369,6 +1371,8 @@ static void __init EthwrkSignature(char *name, char *eeprom_image)
 		name[EWRK3_STRLEN] = '\0';
 	} else
 		name[0] = '\0';
+
+	return;
 }
 
 /*
@@ -1545,7 +1549,7 @@ static int ewrk3_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	}
 
 	ecmd->supported |= SUPPORTED_10baseT_Half;
-	ethtool_cmd_speed_set(ecmd, SPEED_10);
+	ecmd->speed = SPEED_10;
 	ecmd->duplex = DUPLEX_HALF;
 	return 0;
 }
@@ -1604,47 +1608,55 @@ static u32 ewrk3_get_link(struct net_device *dev)
 	return !(cmr & CMR_LINK);
 }
 
-static int ewrk3_set_phys_id(struct net_device *dev,
-			     enum ethtool_phys_id_state state)
+static int ewrk3_phys_id(struct net_device *dev, u32 data)
 {
 	struct ewrk3_private *lp = netdev_priv(dev);
 	unsigned long iobase = dev->base_addr;
+	unsigned long flags;
 	u8 cr;
+	int count;
 
-	spin_lock_irq(&lp->hw_lock);
+	/* Toggle LED 4x per second */
+	count = data << 2;
 
-	switch (state) {
-	case ETHTOOL_ID_ACTIVE:
-		/* Prevent ISR from twiddling the LED */
-		lp->led_mask = 0;
-		spin_unlock_irq(&lp->hw_lock);
-		return 2;	/* cycle on/off twice per second */
+	spin_lock_irqsave(&lp->hw_lock, flags);
 
-	case ETHTOOL_ID_ON:
-		cr = inb(EWRK3_CR);
-		outb(cr | CR_LED, EWRK3_CR);
-		break;
-
-	case ETHTOOL_ID_OFF:
-		cr = inb(EWRK3_CR);
-		outb(cr & ~CR_LED, EWRK3_CR);
-		break;
-
-	case ETHTOOL_ID_INACTIVE:
-		lp->led_mask = CR_LED;
-		cr = inb(EWRK3_CR);
-		outb(cr & ~CR_LED, EWRK3_CR);
+	/* Bail if a PHYS_ID is already in progress */
+	if (lp->led_mask == 0) {
+		spin_unlock_irqrestore(&lp->hw_lock, flags);
+		return -EBUSY;
 	}
-	spin_unlock_irq(&lp->hw_lock);
 
-	return 0;
+	/* Prevent ISR from twiddling the LED */
+	lp->led_mask = 0;
+
+	while (count--) {
+		/* Toggle the LED */
+		cr = inb(EWRK3_CR);
+		outb(cr ^ CR_LED, EWRK3_CR);
+
+		/* Wait a little while */
+		spin_unlock_irqrestore(&lp->hw_lock, flags);
+		msleep(250);
+		spin_lock_irqsave(&lp->hw_lock, flags);
+
+		/* Exit if we got a signal */
+		if (signal_pending(current))
+			break;
+	}
+
+	lp->led_mask = CR_LED;
+	cr = inb(EWRK3_CR);
+	outb(cr & ~CR_LED, EWRK3_CR);
+	spin_unlock_irqrestore(&lp->hw_lock, flags);
+	return signal_pending(current) ? -ERESTARTSYS : 0;
 }
 
 static const struct ethtool_ops ethtool_ops_203 = {
 	.get_drvinfo = ewrk3_get_drvinfo,
 	.get_settings = ewrk3_get_settings,
 	.set_settings = ewrk3_set_settings,
-	.set_phys_id = ewrk3_set_phys_id,
+	.phys_id = ewrk3_phys_id,
 };
 
 static const struct ethtool_ops ethtool_ops = {
@@ -1652,7 +1664,7 @@ static const struct ethtool_ops ethtool_ops = {
 	.get_settings = ewrk3_get_settings,
 	.set_settings = ewrk3_set_settings,
 	.get_link = ewrk3_get_link,
-	.set_phys_id = ewrk3_set_phys_id,
+	.phys_id = ewrk3_phys_id,
 };
 
 /*
@@ -1765,7 +1777,8 @@ static int ewrk3_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 		break;
 	case EWRK3_SET_MCA:	/* Set a multicast address */
 		if (capable(CAP_NET_ADMIN)) {
-			if (ioc->len > HASH_TABLE_LEN) {
+			if (ioc->len > 1024)
+			{
 				status = -EINVAL;
 				break;
 			}

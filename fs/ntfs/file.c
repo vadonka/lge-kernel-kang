@@ -1,7 +1,7 @@
 /*
  * file.c - NTFS kernel file operations.  Part of the Linux-NTFS project.
  *
- * Copyright (c) 2001-2011 Anton Altaparmakov and Tuxera Inc.
+ * Copyright (c) 2001-2007 Anton Altaparmakov
  *
  * This program/include file is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published
@@ -20,7 +20,6 @@
  */
 
 #include <linux/buffer_head.h>
-#include <linux/gfp.h>
 #include <linux/pagemap.h>
 #include <linux/pagevec.h>
 #include <linux/sched.h>
@@ -98,6 +97,9 @@ static int ntfs_file_open(struct inode *vi, struct file *filp)
  * the page at all.  For a more detailed explanation see ntfs_truncate() in
  * fs/ntfs/inode.c.
  *
+ * @cached_page and @lru_pvec are just optimizations for dealing with multiple
+ * pages.
+ *
  * Return 0 on success and -errno on error.  In the case that an error is
  * encountered it is possible that the initialized size will already have been
  * incremented some way towards @new_init_size but it is guaranteed that if
@@ -107,7 +109,8 @@ static int ntfs_file_open(struct inode *vi, struct file *filp)
  * Locking: i_mutex on the vfs inode corrseponsind to the ntfs inode @ni must be
  *	    held by the caller.
  */
-static int ntfs_attr_extend_initialized(ntfs_inode *ni, const s64 new_init_size)
+static int ntfs_attr_extend_initialized(ntfs_inode *ni, const s64 new_init_size,
+		struct page **cached_page, struct pagevec *lru_pvec)
 {
 	s64 old_init_size;
 	loff_t old_i_size;
@@ -396,16 +399,21 @@ static inline void ntfs_fault_in_pages_readable_iovec(const struct iovec *iov,
  * @cached_page: allocated but as yet unused page
  * @lru_pvec:	lru-buffering pagevec of caller
  *
- * Obtain @nr_pages locked page cache pages from the mapping @mapping and
+ * Obtain @nr_pages locked page cache pages from the mapping @maping and
  * starting at index @index.
  *
- * If a page is newly created, add it to lru list
+ * If a page is newly created, increment its refcount and add it to the
+ * caller's lru-buffering pagevec @lru_pvec.
+ *
+ * This is the same as mm/filemap.c::__grab_cache_page(), except that @nr_pages
+ * are obtained at once instead of just one page and that 0 is returned on
+ * success and -errno on error.
  *
  * Note, the page locks are obtained in ascending page index order.
  */
 static inline int __ntfs_grab_cache_pages(struct address_space *mapping,
 		pgoff_t index, const unsigned nr_pages, struct page **pages,
-		struct page **cached_page)
+		struct page **cached_page, struct pagevec *lru_pvec)
 {
 	int err, nr;
 
@@ -421,7 +429,7 @@ static inline int __ntfs_grab_cache_pages(struct address_space *mapping,
 					goto err_out;
 				}
 			}
-			err = add_to_page_cache_lru(*cached_page, mapping, index,
+			err = add_to_page_cache(*cached_page, mapping, index,
 					GFP_KERNEL);
 			if (unlikely(err)) {
 				if (err == -EEXIST)
@@ -429,6 +437,9 @@ static inline int __ntfs_grab_cache_pages(struct address_space *mapping,
 				goto err_out;
 			}
 			pages[nr] = *cached_page;
+			page_cache_get(*cached_page);
+			if (unlikely(!pagevec_add(lru_pvec, *cached_page)))
+				__pagevec_lru_add_file(lru_pvec);
 			*cached_page = NULL;
 		}
 		index++;
@@ -1270,7 +1281,7 @@ rl_not_mapped_enoent:
 
 /*
  * Copy as much as we can into the pages and return the number of bytes which
- * were successfully copied.  If a fault is encountered then clear the pages
+ * were sucessfully copied.  If a fault is encountered then clear the pages
  * out to (ofs + bytes) and return the number of bytes which were copied.
  */
 static inline size_t ntfs_copy_from_user(struct page **pages,
@@ -1380,14 +1391,15 @@ static inline void ntfs_set_next_iovec(const struct iovec **iovp,
  * pages (out to offset + bytes), to emulate ntfs_copy_from_user()'s
  * single-segment behaviour.
  *
- * We call the same helper (__ntfs_copy_from_user_iovec_inatomic()) both when
- * atomic and when not atomic.  This is ok because it calls
- * __copy_from_user_inatomic() and it is ok to call this when non-atomic.  In
- * fact, the only difference between __copy_from_user_inatomic() and
+ * We call the same helper (__ntfs_copy_from_user_iovec_inatomic()) both
+ * when atomic and when not atomic.  This is ok because
+ * __ntfs_copy_from_user_iovec_inatomic() calls __copy_from_user_inatomic()
+ * and it is ok to call this when non-atomic.
+ * Infact, the only difference between __copy_from_user_inatomic() and
  * __copy_from_user() is that the latter calls might_sleep() and the former
- * should not zero the tail of the buffer on error.  And on many architectures
- * __copy_from_user_inatomic() is just defined to __copy_from_user() so it
- * makes no difference at all on those architectures.
+ * should not zero the tail of the buffer on error.  And on many
+ * architectures __copy_from_user_inatomic() is just defined to
+ * __copy_from_user() so it makes no difference at all on those architectures.
  */
 static inline size_t ntfs_copy_from_user_iovec(struct page **pages,
 		unsigned nr_pages, unsigned ofs, const struct iovec **iov,
@@ -1408,28 +1420,28 @@ static inline size_t ntfs_copy_from_user_iovec(struct page **pages,
 		if (unlikely(copied != len)) {
 			/* Do it the slow way. */
 			addr = kmap(*pages);
-			copied = __ntfs_copy_from_user_iovec_inatomic(addr +
-					ofs, *iov, *iov_ofs, len);
+			copied = __ntfs_copy_from_user_iovec_inatomic(addr + ofs,
+					*iov, *iov_ofs, len);
+			/*
+			 * Zero the rest of the target like __copy_from_user().
+			 */
+			memset(addr + ofs + copied, 0, len - copied);
+			kunmap(*pages);
 			if (unlikely(copied != len))
 				goto err_out;
-			kunmap(*pages);
 		}
 		total += len;
-		ntfs_set_next_iovec(iov, iov_ofs, len);
 		bytes -= len;
 		if (!bytes)
 			break;
+		ntfs_set_next_iovec(iov, iov_ofs, len);
 		ofs = 0;
 	} while (++pages < last_page);
 out:
 	return total;
 err_out:
-	BUG_ON(copied > len);
-	/* Zero the rest of the target like __copy_from_user(). */
-	memset(addr + ofs + copied, 0, len - copied);
-	kunmap(*pages);
 	total += copied;
-	ntfs_set_next_iovec(iov, iov_ofs, copied);
+	/* Zero the rest of the target like __copy_from_user(). */
 	while (++pages < last_page) {
 		bytes -= len;
 		if (!bytes)
@@ -1787,6 +1799,7 @@ static ssize_t ntfs_file_buffered_write(struct kiocb *iocb,
 	ssize_t status, written;
 	unsigned nr_pages;
 	int err;
+	struct pagevec lru_pvec;
 
 	ntfs_debug("Entering for i_ino 0x%lx, attribute type 0x%x, "
 			"pos 0x%llx, count 0x%lx.",
@@ -1898,6 +1911,7 @@ static ssize_t ntfs_file_buffered_write(struct kiocb *iocb,
 			}
 		}
 	}
+	pagevec_init(&lru_pvec, 0);
 	written = 0;
 	/*
 	 * If the write starts beyond the initialized size, extend it up to the
@@ -1910,7 +1924,8 @@ static ssize_t ntfs_file_buffered_write(struct kiocb *iocb,
 	ll = ni->initialized_size;
 	read_unlock_irqrestore(&ni->size_lock, flags);
 	if (pos > ll) {
-		err = ntfs_attr_extend_initialized(ni, pos);
+		err = ntfs_attr_extend_initialized(ni, pos, &cached_page,
+				&lru_pvec);
 		if (err < 0) {
 			ntfs_error(vol->sb, "Cannot perform write to inode "
 					"0x%lx, attribute type 0x%x, because "
@@ -1996,7 +2011,7 @@ static ssize_t ntfs_file_buffered_write(struct kiocb *iocb,
 			ntfs_fault_in_pages_readable_iovec(iov, iov_ofs, bytes);
 		/* Get and lock @do_pages starting at index @start_idx. */
 		status = __ntfs_grab_cache_pages(mapping, start_idx, do_pages,
-				pages, &cached_page);
+				pages, &cached_page, &lru_pvec);
 		if (unlikely(status))
 			break;
 		/*
@@ -2061,6 +2076,7 @@ err_out:
 	*ppos = pos;
 	if (cached_page)
 		page_cache_release(cached_page);
+	pagevec_lru_add_file(&lru_pvec);
 	ntfs_debug("Done.  Returning %s (written 0x%lx, status %li).",
 			written ? "written" : "status", (unsigned long)written,
 			(long)status);
@@ -2132,6 +2148,7 @@ static ssize_t ntfs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 /**
  * ntfs_file_fsync - sync a file to disk
  * @filp:	file to be synced
+ * @dentry:	dentry describing the file to sync
  * @datasync:	if non-zero only flush user data and not metadata
  *
  * Data integrity sync of a file to disk.  Used for fsync, fdatasync, and msync
@@ -2147,21 +2164,25 @@ static ssize_t ntfs_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
  * Also, if @datasync is true, we do not wait on the inode to be written out
  * but we always wait on the page cache pages to be written out.
  *
+ * Note: In the past @filp could be NULL so we ignore it as we don't need it
+ * anyway.
+ *
  * Locking: Caller must hold i_mutex on the inode.
  *
  * TODO: We should probably also write all attribute/index inodes associated
  * with this inode but since we have no simple way of getting to them we ignore
  * this problem for now.
  */
-static int ntfs_file_fsync(struct file *filp, int datasync)
+static int ntfs_file_fsync(struct file *filp, struct dentry *dentry,
+		int datasync)
 {
-	struct inode *vi = filp->f_mapping->host;
+	struct inode *vi = dentry->d_inode;
 	int err, ret = 0;
 
 	ntfs_debug("Entering for inode 0x%lx.", vi->i_ino);
 	BUG_ON(S_ISDIR(vi->i_mode));
 	if (!datasync || !NInoNonResident(NTFS_I(vi)))
-		ret = __ntfs_write_inode(vi, 1);
+		ret = ntfs_write_inode(vi, 1);
 	write_inode_now(vi, !datasync);
 	/*
 	 * NOTE: If we were to use mapping->private_list (see ext2 and

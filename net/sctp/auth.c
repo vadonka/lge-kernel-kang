@@ -34,7 +34,6 @@
  * be incorporated into the next SCTP release.
  */
 
-#include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
@@ -113,7 +112,7 @@ struct sctp_shared_key *sctp_auth_shkey_create(__u16 key_id, gfp_t gfp)
 	return new;
 }
 
-/* Free the shared key structure */
+/* Free the shared key stucture */
 static void sctp_auth_shkey_free(struct sctp_shared_key *sh_key)
 {
 	BUG_ON(!list_empty(&sh_key->key_list));
@@ -122,7 +121,7 @@ static void sctp_auth_shkey_free(struct sctp_shared_key *sh_key)
 	kfree(sh_key);
 }
 
-/* Destroy the entire key list.  This is done during the
+/* Destory the entire key list.  This is done during the
  * associon and endpoint free process.
  */
 void sctp_auth_destroy_keys(struct list_head *keys)
@@ -324,7 +323,7 @@ static struct sctp_auth_bytes *sctp_auth_asoc_create_secret(
 	if (!peer_key_vector || !local_key_vector)
 		goto out;
 
-	/* Figure out the order in which the key_vectors will be
+	/* Figure out the order in wich the key_vectors will be
 	 * added to the endpoint shared key.
 	 * SCTP-AUTH, Section 6.1:
 	 *   This is performed by selecting the numerically smaller key
@@ -543,20 +542,16 @@ struct sctp_hmac *sctp_auth_asoc_get_hmac(const struct sctp_association *asoc)
 		id = ntohs(hmacs->hmac_ids[i]);
 
 		/* Check the id is in the supported range */
-		if (id > SCTP_AUTH_HMAC_ID_MAX) {
-			id = 0;
+		if (id > SCTP_AUTH_HMAC_ID_MAX)
 			continue;
-		}
 
 		/* See is we support the id.  Supported IDs have name and
 		 * length fields set, so that we can allocated and use
 		 * them.  We can safely just check for name, for without the
 		 * name, we can't allocate the TFM.
 		 */
-		if (!sctp_hmac_list[id].hmac_name) {
-			id = 0;
+		if (!sctp_hmac_list[id].hmac_name)
 			continue;
-		}
 
 		break;
 	}

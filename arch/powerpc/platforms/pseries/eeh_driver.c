@@ -63,6 +63,22 @@ static void print_device_node_tree(struct pci_dn *pdn, int dent)
 }
 #endif
 
+/** 
+ * irq_in_use - return true if this irq is being used 
+ */
+static int irq_in_use(unsigned int irq)
+{
+	int rc = 0;
+	unsigned long flags;
+   struct irq_desc *desc = irq_desc + irq;
+
+	spin_lock_irqsave(&desc->lock, flags);
+	if (desc->action)
+		rc = 1;
+	spin_unlock_irqrestore(&desc->lock, flags);
+	return rc;
+}
+
 /**
  * eeh_disable_irq - disable interrupt for the recovering device
  */
@@ -77,7 +93,7 @@ static void eeh_disable_irq(struct pci_dev *dev)
 	if (dev->msi_enabled || dev->msix_enabled)
 		return;
 
-	if (!irq_has_action(dev->irq))
+	if (!irq_in_use(dev->irq))
 		return;
 
 	PCI_DN(dn)->eeh_mode |= EEH_MODE_IRQ_DISABLED;
@@ -328,7 +344,7 @@ struct pci_dn * handle_eeh_events (struct eeh_event *event)
 	struct pci_bus *frozen_bus;
 	int rc = 0;
 	enum pci_ers_result result = PCI_ERS_RESULT_NONE;
-	const char *location, *pci_str, *drv_str, *bus_pci_str, *bus_drv_str;
+	const char *location, *pci_str, *drv_str;
 
 	frozen_dn = find_device_pe(event->dn);
 	if (!frozen_dn) {
@@ -337,7 +353,7 @@ struct pci_dn * handle_eeh_events (struct eeh_event *event)
 		location = location ? location : "unknown";
 		printk(KERN_ERR "EEH: Error: Cannot find partition endpoint "
 		                "for location=%s pci addr=%s\n",
-		        location, eeh_pci_name(event->dev));
+		        location, pci_name(event->dev));
 		return NULL;
 	}
 
@@ -364,8 +380,13 @@ struct pci_dn * handle_eeh_events (struct eeh_event *event)
 	frozen_pdn = PCI_DN(frozen_dn);
 	frozen_pdn->eeh_freeze_count++;
 
-	pci_str = eeh_pci_name(event->dev);
-	drv_str = pcid_name(event->dev);
+	if (frozen_pdn->pcidev) {
+		pci_str = pci_name (frozen_pdn->pcidev);
+		drv_str = pcid_name (frozen_pdn->pcidev);
+	} else {
+		pci_str = pci_name (event->dev);
+		drv_str = pcid_name (event->dev);
+	}
 	
 	if (frozen_pdn->eeh_freeze_count > EEH_MAX_ALLOWED_FREEZES)
 		goto excess_failures;
@@ -373,17 +394,8 @@ struct pci_dn * handle_eeh_events (struct eeh_event *event)
 	printk(KERN_WARNING
 	   "EEH: This PCI device has failed %d times in the last hour:\n",
 		frozen_pdn->eeh_freeze_count);
-
-	if (frozen_pdn->pcidev) {
-		bus_pci_str = pci_name(frozen_pdn->pcidev);
-		bus_drv_str = pcid_name(frozen_pdn->pcidev);
-		printk(KERN_WARNING
-			"EEH: Bus location=%s driver=%s pci addr=%s\n",
-			location, bus_drv_str, bus_pci_str);
-	}
-
 	printk(KERN_WARNING
-		"EEH: Device location=%s driver=%s pci addr=%s\n",
+		"EEH: location=%s driver=%s pci addr=%s\n",
 		location, drv_str, pci_str);
 
 	/* Walk the various device drivers attached to this slot through
@@ -482,9 +494,9 @@ excess_failures:
 	 * due to actual, failed cards.
 	 */
 	printk(KERN_ERR
-	   "EEH: PCI device at location=%s driver=%s pci addr=%s\n"
+	   "EEH: PCI device at location=%s driver=%s pci addr=%s \n"
 		"has failed %d times in the last hour "
-		"and has been permanently disabled.\n"
+		"and has been permanently disabled. \n"
 		"Please try reseating this device or replacing it.\n",
 		location, drv_str, pci_str, frozen_pdn->eeh_freeze_count);
 	goto perm_error;
@@ -492,7 +504,7 @@ excess_failures:
 hard_fail:
 	printk(KERN_ERR
 	   "EEH: Unable to recover from failure of PCI device "
-	   "at location=%s driver=%s pci addr=%s\n"
+	   "at location=%s driver=%s pci addr=%s \n"
 	   "Please try reseating this device or replacing it.\n",
 		location, drv_str, pci_str);
 

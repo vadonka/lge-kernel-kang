@@ -69,31 +69,7 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/mach-types.h>
-//P990_IFX_GB_LGSI_START
-//Domain:- RIL: 
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo  [START] */
-//BEGIN :  2011-7-8 
-//MOD : 0019311: [Star-GB] since 2nd RIL recovery, recovery is not working.
-/*
-	RECOVERY_MODE
-		description : This mode is used to recover the at command pending state
-				     Step.1 : CP reset
-				     Step.2 : Close all mux channels
-				     Step.3 : Wait until CP is rebooting for 5 seconds
-*/
-#define RECOVERY_MODE
-#ifdef RECOVERY_MODE
-#include "nvos.h"
-#include "nvcommon.h"
-#include "nvodm_services.h"
-#include "nvodm_query_discovery.h"
 
-static NvOdmServicesGpioHandle hGpio = NULL;
-static NvOdmGpioPinHandle hPin = NULL; 
-#endif
-//END :  2011-7-8 
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo [END] */
-//P990_IFX_GB_TD_ISSUE_FIX_LGSI_END
 #ifdef LGE_KERNEL_MUX
 #include <linux/spinlock.h>
 #include <linux/semaphore.h>
@@ -121,14 +97,13 @@ static NvOdmGpioPinHandle hPin = NULL;
 struct wake_lock	 	s_wake_lock;
 static unsigned int	s_wake_lock_flag;
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+
 //LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT START
-//#define MAX_SIZE_OF_RX_QUEUE 10
+#define MAX_SIZE_OF_RX_QUEUE 10
 //LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT END
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//#define SPI_MORE_ATTR 0x8000
+#define SPI_MORE_ATTR 0x8000
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
 
 #define LOCK_T          spinlock_t
 #define CREATELOCK(_l)  spin_lock_init(&(_l))
@@ -211,9 +186,7 @@ static struct tty_struct *mux_table[TS0710MAX_CHANNELS];
 static struct ktermios *mux_termios[TS0710MAX_CHANNELS];
 static struct ktermios *mux_termios_locked[TS0710MAX_CHANNELS];
 static volatile short int mux_tty[TS0710MAX_CHANNELS];
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-static volatile struct file * mux_filp[TS0710MAX_CHANNELS];
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+static volatile int mux_file_flags[TS0710MAX_CHANNELS];
 
 #ifdef min
 #undef min
@@ -223,11 +196,7 @@ static volatile struct file * mux_filp[TS0710MAX_CHANNELS];
 static ts0710_con ts0710_connection;
 
 #ifdef LGE_KERNEL_MUX
-static DEFINE_SEMAPHORE(spi_write_sema); /* use semaphore to synchronize different threads*/
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-static struct semaphore spi_write_data_sema[33];
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
-
+static DECLARE_MUTEX(spi_write_sema); /* use semaphore to synchronize different threads*/
 struct spi_data_recived_struct {
     struct tty_struct *tty; 
     const u8 *data; 
@@ -235,27 +204,21 @@ struct spi_data_recived_struct {
     int size;
     int updated;
 };
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//#define MAX_WAITING_FRAMES_PER_CHANNEL 4
-#define MAX_WAITING_FRAMES 50
-//static DECLARE_WAIT_QUEUE_HEAD(wq);
-//static volatile short int frames_to_send_count[TS0710MAX_CHANNELS];
+#define MAX_WAITING_FRAMES_PER_CHANNEL 4
+#define MAX_WAITING_FRAMES (MAX_WAITING_FRAMES_PER_CHANNEL * (TS0710MAX_CHANNELS - 1) + TS0710MAX_CHANNELS)
+static DECLARE_WAIT_QUEUE_HEAD(wq);
+static volatile short int frames_to_send_count[TS0710MAX_CHANNELS];
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
 struct spi_data_send_struct;
 struct spi_data_send_struct {
     struct spi_data_send_struct *next;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-//    u8  dlci;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
+    u8  dlci;
     u8 *data;
     int size;
 };
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-static DEFINE_SPINLOCK(frame_nodes_lock);
-static unsigned long lock_flag ;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
+static LOCK_T frame_nodes_lock;
 static struct spi_data_send_struct frame_node[MAX_WAITING_FRAMES];
 static struct spi_data_send_struct *frame_to_send[TS0710MAX_PRIORITY_NUMBER];          
 static struct spi_data_recived_struct spi_data_recieved;
@@ -273,111 +236,118 @@ static u8 default_priority_table[] = {
 61,61,61,61,61,61,       /* 56-61 DLC */
 63,63                    /* 62-63 DLC */
 };
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//static int frames_to_send_counter = 0;
+static int frames_to_send_counter = 0;
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
 static int max_frame_usage = 0;
 static void nodes_init(void)
 {
     int i;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-    spin_lock_irqsave(&frame_nodes_lock, lock_flag);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
-    for (i=0; i<MAX_WAITING_FRAMES;i++){
+    CREATELOCK(frame_nodes_lock);
+    LOCK(frame_nodes_lock);
+    for (i = 0; i < MAX_WAITING_FRAMES; i++) {
         frame_node[i].next = NULL;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-//        frame_node[i].dlci = 0;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]		
+        frame_node[i].dlci = 0;
         frame_node[i].data = NULL;
         frame_node[i].size = 0;
     }
     for (i = 0; i < TS0710MAX_PRIORITY_NUMBER; i++) {
         frame_to_send[i] = NULL;
     }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-    spin_unlock_irqrestore(&frame_nodes_lock, lock_flag);
-//    for (i = 0; i < TS0710MAX_CHANNELS; i++) {
-//        frames_to_send_count[i] = 0;
-//    }
-//    frames_to_send_counter = 0;
+    for (i = 0; i < TS0710MAX_CHANNELS; i++) {
+        frames_to_send_count[i] = 0;
+    }
+    frames_to_send_counter = 0;
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//    UNLOCK(frame_nodes_lock);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
+    UNLOCK(frame_nodes_lock);
 }
 
 static int node_put_to_send(u8 dlci, u8 *data, int size)
 {
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
     int i;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-    int retval = 0; 
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
-							   
+    int retval = (mux_file_flags[dlci] & O_NONBLOCK) ? -EWOULDBLOCK :
+                                                       in_interrupt() ? -EIO : -ENOMEM;
     int free_node = MAX_WAITING_FRAMES + 1;
     struct spi_data_send_struct *new_frame;
 //    u8 * buf;
     u8 priority;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-    int frame_count = 0;
+    int count = -1; // -1 means not valid value
+#ifdef TS0710LOG
+    unsigned int smp_id = smp_processor_id();
+#endif
 
-    priority = ts0710_connection.dlci[dlci].priority;    
-//    buf = kmalloc(size, GFP_ATOMIC);
-//    if (buf)
-//         memcpy(buf, data, size);
-//    else
-//    {
-//         printk("\nTS0710:node_put_to_send:buf null, return ENOMEM\r\n");
-//         return -ENOMEM;
-//    }
+    if (!dlci ||
+        ((retval != -ENOMEM) && (frames_to_send_count[dlci] < MAX_WAITING_FRAMES_PER_CHANNEL)) ||
+        ((retval == -ENOMEM) && (wait_event_interruptible_timeout(wq, (frames_to_send_count[dlci] < MAX_WAITING_FRAMES_PER_CHANNEL),
+                                                                  TS0710MUX_TIME_OUT) > 0))) {
+	    priority = ts0710_connection.dlci[dlci].priority;
+	//    buf = kmalloc(size, GFP_ATOMIC);
+	//    if (buf)
+	//         memcpy(buf, data, size);
+	//    else
+	//         return retval;
 
-    spin_lock_irqsave(&frame_nodes_lock, lock_flag);
-    for (i=0; i<MAX_WAITING_FRAMES;i++){
-        if(frame_node[i].size == 0){
-            free_node = i;
-            if(free_node > max_frame_usage){
-                max_frame_usage = free_node;
-            }
-            break;    
-        }
-    }
-    if(free_node < MAX_WAITING_FRAMES){
-        frame_node[free_node].next = NULL;
-        frame_node[free_node].data = data;
-        frame_node[free_node].size = size;
-        retval = size;
-        if(frame_to_send[priority] == NULL){
-            frame_to_send[priority]= &frame_node[free_node];
-        }
-        else{
-            new_frame = frame_to_send[priority];
-            while (new_frame->next != NULL){
-                new_frame = new_frame->next;
-                frame_count++;
-                if(frame_count>MAX_WAITING_FRAMES) {
-                  TS0710_PRINTK("\n Never hit this case : frame_count(%d) > MAX_WAITING_FRAMES[%d]\r\n", frame_count, MAX_WAITING_FRAMES);
-                  break;
-                }
-            }
-            new_frame->next = &frame_node[free_node];
-        }
-    }
-    spin_unlock_irqrestore(&frame_nodes_lock, lock_flag);
+	    TS0710_LOG("CPU%d: [%d] dlci: frame_nodes_lock [waiting...]", smp_id, dlci);
+	    //WAIT_UNLOCK(frame_nodes_lock);
+	    LOCK(frame_nodes_lock);
+	    TS0710_LOG("CPU%d: [%d] dlci: frame_nodes_lock [locked]", smp_id, dlci);
 
-    if(free_node >= MAX_WAITING_FRAMES){
-       	TS0710_DEBUG("\nTS0710 free_node[%d] < MAX_WAITING_FRAMES\r\n", free_node);
-        kfree(data);
-        retval = -ENOMEM; 
-    }
+	    for (i = 0; i < MAX_WAITING_FRAMES; i++) {
+	        if (frame_node[i].size == 0) {
+	            free_node = i;
+	//                if (free_node > max_frame_usage) {
+	//                    max_frame_usage = free_node;
+	//                    LTMUX("max_frame_usage=%d", max_frame_usage);
+	//                }
+	            break;
+	        }
+	    }
 
-    if(retval > 0 ){
-        up(&spi_write_sema);
-    }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+	    if (free_node < MAX_WAITING_FRAMES) {
+	        frame_node[free_node].next = NULL;
+	        frame_node[free_node].dlci = dlci;
+			frame_node[free_node].data = data;
+	        frame_node[free_node].size = size;
+	        retval = size;
+
+	        if (frame_to_send[priority] == NULL) {
+	            frame_to_send[priority] = &frame_node[free_node];
+	        }
+	        else {
+	            new_frame = frame_to_send[priority];
+	            while (new_frame->next != NULL) {
+	                new_frame = new_frame->next;
+	            }
+	            new_frame->next = &frame_node[free_node];
+	        }
+	        ++frames_to_send_count[dlci];
+	        ++frames_to_send_counter;
+	    }
+
+	    count = frames_to_send_counter;
+	    UNLOCK(frame_nodes_lock);
+	    TS0710_LOG("CPU%d: [%d] dlci: frame_nodes_lock [unlocked]", smp_id, dlci);
+
+	    if (retval < 0) {
+	        TS0710_LOG("Never hit this case: data lost!");
+	        kfree(data);
+	    }
+	    else {
+	        TS0710_LOG("spi_write_sema: up [++frames_to_send_counter=%d]", count);
+	        up(&spi_write_sema);
+	    }
+	}
+	else
+	{
+		TS0710_LOG("This data(ptr=%x) can't be sent!!\n", data);
+		if(data != NULL)
+			kfree(data);
+	}
+
     TS0710_LOG("return retval=%d", retval);
-				TS0710_PRINTK ("return val %d \n",retval);
     return retval;
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
 }
@@ -499,7 +469,6 @@ static int mux_send_frame(u8 dlci, int initiator,
 
   if (!framebuf) {
     printk(KERN_ERR "mux_send_frame:: Alloc Failed \n");
-				TS0710_PRINTK ("mux_send_frame:: Alloc Failed \n");
     return -1;
   }
 
@@ -515,7 +484,6 @@ static int mux_send_frame(u8 dlci, int initiator,
 			crc_len = 0;
 			break;
 		default:
-				TS0710_PRINTK ("mux_send_frame:: default \n");
 			pf = 1;
 			crc_len = 0;
 	}
@@ -557,12 +525,6 @@ static int mux_send_frame(u8 dlci, int initiator,
 		framebuf[pos ++] = MUX_ADVANCED_FLAG_SEQ; */
 #ifdef LGE_KERNEL_MUX
     res = node_put_to_send( dlci, framebuf, pos);
-				TS0710_PRINTK ("mux_send_frame:: node_put_to_send %d\n",res);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-    if(res == -ENOMEM){
-      return res;
-    }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
 #else    
 	res = ipc_tty->ops->write(ipc_tty, framebuf, pos);
      kfree(framebuf);
@@ -570,12 +532,9 @@ static int mux_send_frame(u8 dlci, int initiator,
 
 	if (res != pos) {
 		TS0710_LOG("mux_send_frame error %d", res);
-				TS0710_PRINTK ("mux_send_frame:: %d %d\n",res,pos);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-//		if (res < 0)
-//			return res;
-//		else
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]		
+		if (res < 0)
+			return res;
+		else
 			return -1;
 	}
 
@@ -669,9 +628,7 @@ static void send_nsc_msg(ts0710_con * ts0710, mcc_type cmd, u8 cr)
 
 static void mux_send_uih(ts0710_con * ts0710, u8 cr, u8 type, u8 *data, int len)
 {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-     u8 *send = kmalloc(len + 2, GFP_ATOMIC);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
+	u8 *send = kmalloc(len + 2, GFP_KERNEL);
 
 	mcc_short_frame_head *head = (mcc_short_frame_head *)send;
 	head->type.ea = 1;
@@ -750,13 +707,7 @@ void process_mcc(u8 * data, u32 len, ts0710_con * ts0710, int longpkt)
 	case FCON:		/*Flow control on command */
 		TS0710_PRINTK("MUX Received Flow control(all channels) on command");
 		if (mcc_short_pkt->h.type.cr == MCC_CMD) {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-			for (j = 0; j < TS0710_MAX_CHN; j++) {
-				ts0710->dlci[j].state = CONNECTED;
-				up(&spi_write_data_sema[j]);
-				down_trylock(&spi_write_data_sema[j]);
-			}
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]			
+			ts0710->dlci[0].state = CONNECTED;
 			ts0710_fcon_msg(ts0710, MCC_RSP);
 		}
 		break;
@@ -793,10 +744,6 @@ void process_mcc(u8 * data, u32 len, ts0710_con * ts0710, int longpkt)
 				} else if (MUX_STOPPED(ts0710,dlci)) {
 					ts0710->dlci[dlci].state = CONNECTED;
 					TS0710_LOG ("MUX Received Flow on on dlci [%d]", dlci);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]					
-					up(&spi_write_data_sema[dlci]);
-					down_trylock(&spi_write_data_sema[dlci]);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]					
 				}
 
 				ts0710_msc_msg(ts0710, v24_sigs, MCC_RSP, dlci);
@@ -846,11 +793,11 @@ void process_mcc(u8 * data, u32 len, ts0710_con * ts0710, int longpkt)
 		}
 
 	case NSC:		/*Non supported command resonse */
-		TS0710_LOG("MUX Received Non supported command response");
+		LTMUX("MUX Received Non supported command response");
 		break;
 
 	default:		/*Non supported command received */
-		TS0710_LOG("MUX Received a non supported command");
+		LTMUX("MUX Received a non supported command");
 		send_nsc_msg(ts0710, mcc_short_pkt->h.type, MCC_RSP);
 		break;
 	}
@@ -870,27 +817,16 @@ static inline void add_post_recv_queue(mux_recv_struct ** head,
 	new_item->next = *head;
 	*head = new_item;
 }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-#define MUX_CONTROL_BUG_FIX //by eunae.kim 2011-01-07
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
 static void ts0710_flow_on(u8 dlci, ts0710_con * ts0710)
 {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-#if defined(MUX_CONTROL_BUG_FIX) /*  2011-01-07 */
 	if (!((ts0710->dlci[0].state) & (CONNECTED | FLOW_STOPPED)))
 		return;
 
 	if (!((ts0710->dlci[dlci].state) & (CONNECTED | FLOW_STOPPED)))
 		return;
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-#else
-           if (!(ts0710->dlci[0].state) & (CONNECTED | FLOW_STOPPED))
-                     return;
-
-           if (!(ts0710->dlci[dlci].state) & (CONNECTED | FLOW_STOPPED))
-                     return;
-#endif
 
 	if (!(ts0710->dlci[dlci].flow_control))
 		return;
@@ -996,7 +932,7 @@ void ts0710_recv_data_server(ts0710_con * ts0710, short_frame *short_pkt, int le
 		TS0710_DEBUG("UIH packet received");
 
 		if (GET_PF(short_pkt->h.control)) {
-			TS0710_LOG("MUX Error: UIH packet with P/F set, discard it!");
+			LTMUX("MUX Error: UIH packet with P/F set, discard it!");
 			break;
 		}
 
@@ -1046,7 +982,7 @@ void process_uih(ts0710_con * ts0710, char *data, int len, u8 dlci) {
 
 	if ((ts0710->dlci[dlci].state != CONNECTED)
 			&& (ts0710->dlci[dlci].state != FLOW_STOPPED)) {
-		TS0710_LOG("MUX Error: DLCI [%d] not connected, discard it!", dlci);
+		LTMUX("MUX Error: DLCI [%d] not connected, discard it!", dlci);
 		send_dm(ts0710, dlci);
 		return;
 	}
@@ -1080,7 +1016,7 @@ void process_uih(ts0710_con * ts0710, char *data, int len, u8 dlci) {
 	if (!uih_len)
 		return;
 
-	TS0710_LOG("TS07.10:uih tag %x on dlci %d",tag,dlci);
+	LTMUX("TS07.10:uih tag %x on dlci %d",tag,dlci);
 #endif
 
 	tty_idx = dlci;
@@ -1110,9 +1046,9 @@ void process_uih(ts0710_con * ts0710, char *data, int len, u8 dlci) {
 		recv_room = tty->receive_room;
 
 	if ((recv_room - (uih_len + recv_info->total)) <
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-			ts0710->dlci[dlci].mtu) {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]			
+//LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT START
+			MAX_SIZE_OF_RX_QUEUE * ts0710->dlci[dlci].mtu) {
+//LGE_TELECA_CR:1056_SPI/MUX_IMPROVEMENT END
 		flow_control = 1;
 	}
 #ifdef LGE_FROYO_BSP
@@ -1435,23 +1371,12 @@ static void mux_close(struct tty_struct *tty, struct file *filp)
 	if (mux_tty[line] == 0)
 #ifdef LGE_KERNEL_MUX
 /*Workaround Infineon modem - DLS opened once will never be closed*/
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//20100915-1, , Fix VT can't recevie data from CP [START]
-		if(dlci==12)
-		{	//When VT close DLC 12 with flow off status, must send flow on status to CP
-			//TS0710_PRINTK("%s - close channel[%d]\n", __FUNCTION__, dlci);
-			ts0710_flow_on(dlci, &ts0710_connection);
-		}
-	TS0710_PRINTK("%s - close channel[%d]\n", __FUNCTION__, dlci);	
-//20100915, , Fix VT can't recevie data from CP [END]
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
         return;
 #else        
 		ts0710_close_channel(dlci);
 #endif    
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-     mux_filp[line] = NULL;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
+
 	if (mux_tty[line] != 0)
 		return;
 
@@ -1637,11 +1562,11 @@ static void DUMP_MUX_BUFFER(const unsigned char *txt, const unsigned char *buf, 
             ++i;
         }
         *cur_str = 0;
-        TS0710_LOG("%s:count:%d [ %s]", txt, count, dump_buf_str);
+        LTMUX("%s:count:%d [ %s]", txt, count, dump_buf_str);
     }
     else
     {
-        TS0710_LOG("%s: buffer is NULL", txt);
+        LTMUX("%s: buffer is NULL", txt);
     }
 }
 #else
@@ -1659,11 +1584,11 @@ static int mux_write(struct tty_struct *tty,
 	int frame_size = 0;
 	int frame_written = 0;
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//	DUMP_MUX_BUFFER(__FUNCTION__, buf, count);
+	DUMP_MUX_BUFFER(__FUNCTION__, buf, count);
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
 	if (!count)
 		return 0;
 
@@ -1674,19 +1599,8 @@ static int mux_write(struct tty_struct *tty,
 	 * FIXME: support DATATAG
 	 * */
 #ifdef LGE_KERNEL_MUX
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
 /* To remove Motorola's modem specific*/
-  if(ts0710->dlci[dlci].state == FLOW_STOPPED){
-    TS0710_DEBUG("TS0710 Write:Flow OFF state = %d \n",ts0710->dlci[dlci].state);
-    if(mux_filp[dlci]->f_flags & O_NONBLOCK){
-      TS0710_DEBUG("TS0710 Write: returning  EWOULDBLOCK for flow stopped channel\n");
-      return -EWOULDBLOCK;
-    }
-    else {
-      while (down_interruptible(&spi_write_data_sema[dlci])!=0){};
-    }
-  }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
 /* spliting big packets into small one */
 	while(count)
 	{
@@ -1694,30 +1608,18 @@ static int mux_write(struct tty_struct *tty,
 
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
 		frame_written = mux_send_uih_data(ts0710, dlci, (u8 *)(buf + written), frame_size);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-          if(frame_written == -ENOMEM){
-            if(mux_filp[dlci]->f_flags & O_NONBLOCK){
-              return -EWOULDBLOCK;
-            }
-            else if(ts0710->dlci[dlci].state == FLOW_STOPPED){
-              down(&spi_write_data_sema[dlci]);
-            }
-            else
-              TS0710_DEBUG("\nTS0710:mux_write(), NOMEM, returning 0, should be stopped by mtx \n");
-            }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
+
 		if (frame_written < 0) {
 			TS0710_DEBUG("send frame error");
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
 			/* send frame error */
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]			
-			return -1;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]			
+			return frame_written;
 		} else {
 			written += frame_written;
 			count -= frame_written;
 		}
-	};
+	}
 #else
 	written = mux_send_uih_data(ts0710, dlci, (u8 *)buf, count) - 7;
 #endif    
@@ -1775,9 +1677,7 @@ static void mux_flush_buffer(struct tty_struct *tty)
 	if (MUX_INVALID(line))
 		return;
 
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-	TS0710_PRINTK("MUX %s: line is:%d\n", __FUNCTION__, line);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
+	TS0710_PRINTK("");
 
 	if ((mux_send_info_flags[line])
 	    && (mux_send_info[line])
@@ -1806,15 +1706,13 @@ static int mux_open(struct tty_struct *tty, struct file *filp)
 	u8 dlci;
 	mux_send_struct *send_info;
 	mux_recv_struct *recv_info;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//	UNUSED_PARAM(filp);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
+	UNUSED_PARAM(filp);
+
 	retval = -ENODEV;
 
 	line = tty->index;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-     mux_filp[line] = filp;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]		
+        mux_file_flags[line] = filp->f_flags;
 
 	if (!(ipc_tty && line))
 		return -ENODEV;
@@ -2060,73 +1958,64 @@ void ts_ldisc_rx(struct tty_struct *tty, const u8 *data, char *flags, int size)
 static int ts_ldisc_tx_looper(void *param)
 {
     int i,res;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-//    u8 dlci;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
+    u8 dlci;
     u8 *data_ptr;
     int data_size;
     void *next_ptr;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//    int count = -1; // -1 means not valid value
-//#ifdef TS0710LOG
-//    unsigned int smp_id = smp_processor_id();
-//#endif
+    int count = -1; // -1 means not valid value
+#ifdef TS0710LOG
+    unsigned int smp_id = smp_processor_id();
+#endif
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
 
     while(!kthread_should_stop()) {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//        TS0710_LOG("CPU%d: frame_nodes_lock [waiting...]", smp_id);
+        TS0710_LOG("CPU%d: frame_nodes_lock [waiting...]", smp_id);
         WAIT_UNLOCK(frame_nodes_lock);
         LOCK(frame_nodes_lock);
-//        TS0710_LOG("CPU%d: frame_nodes_lock [locked]", smp_id);
+        TS0710_LOG("CPU%d: frame_nodes_lock [locked]", smp_id);
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
         data_size = 0;
         data_ptr  = NULL;
         for(i = 0; i < TS0710MAX_PRIORITY_NUMBER ; i++) {
             if(frame_to_send[i] != NULL) {
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]			
-//                dlci = frame_to_send[i]->dlci;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]				
+                dlci = frame_to_send[i]->dlci;
                 data_ptr = frame_to_send[i]->data;
                 data_size = frame_to_send[i]->size;
                 next_ptr = frame_to_send[i]->next;
                 frame_to_send[i]->size = 0;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]				
-                //frame_to_send[i]->dlci = 0;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]				
+                frame_to_send[i]->dlci = 0;
                 frame_to_send[i]->data = NULL;
                 frame_to_send[i]->next = NULL;
                 frame_to_send[i]= next_ptr;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]				
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
-//               --frames_to_send_count[dlci];
-//                --frames_to_send_counter;
+                --frames_to_send_count[dlci];
+                --frames_to_send_counter;
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
                 break;
             }
         }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
 //LGE_TELECA_CR1317_DATA_THROUGHPUT START
+        count = frames_to_send_counter;
         UNLOCK(frame_nodes_lock);
+        TS0710_LOG("CPU%d: frame_nodes_lock [unlocked]", smp_id);
 
-        if((data_size > 0) && (data_ptr != NULL)){
-			//printk("%s-%d\n",__FUNCTION__, __LINE__);	
-            res = ipc_tty->ops->write(ipc_tty, data_ptr, data_size);
-			//printk("%s-%d\n",__FUNCTION__, __LINE__);	
+        if((data_size > 0) && (data_ptr != NULL)) {
+            wake_up_interruptible(&wq);
+            TS0710_LOG("writing to SPI start [i=%d; --frames_to_send_counter=%d]", i, count);
+            res = ipc_tty->ops->write(ipc_tty, data_ptr, data_size | ((count > 0) ? SPI_MORE_ATTR : 0));
+            TS0710_LOG("writing to SPI end [i=%d]", i);
             if (res != data_size)
-                printk("\nTS0710:ts_ldisc_tx_looper:data_size=%d,res=%d\n",data_size,res);
-            kfree(data_ptr);    
+            {
+                LTMUX("ERROR: writing to SPI failed [data_size=%d; res=%d]", data_size, res);
+            }
+            kfree(data_ptr);
         }
 
         TS0710_LOG("spi_write_sema: down");
         down(&spi_write_sema);
 //LGE_TELECA_CR1317_DATA_THROUGHPUT END
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
     }
     return 0;
 }
@@ -2136,9 +2025,6 @@ static int ts_ldisc_tx_looper(void *param)
 static int ts_ldisc_open(struct tty_struct *tty)
 {
 	struct mux_data *disc_data;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-     int i;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	 
 
 	tty->receive_room = 65536;
 
@@ -2149,19 +2035,9 @@ static int ts_ldisc_open(struct tty_struct *tty)
 
 	tty->disc_data = disc_data;
 
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-    for (i=0; i<32; i++){
-        spi_write_data_sema[i].lock = __SPIN_LOCK_UNLOCKED(spi_write_data_sema[i].lock);
-        spi_write_data_sema[i].count = 0;
-        spi_write_data_sema[i].wait_list.next = &(spi_write_data_sema[i].wait_list);
-        spi_write_data_sema[i].wait_list.prev = &(spi_write_data_sema[i].wait_list);
-    }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
 	ipc_tty = tty;
 #ifdef LGE_KERNEL_MUX
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-    spin_lock_init(&frame_nodes_lock) ;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
     nodes_init();
     ts0710_reset_dlci_priority();
     spi_data_recieved.tty = NULL;
@@ -2169,7 +2045,7 @@ static int ts_ldisc_open(struct tty_struct *tty)
     spi_data_recieved.flags = NULL;
     spi_data_recieved.size = 0;
     spi_data_recieved.updated = 0;
-    // LGE_UPDATE_S // 20100826 
+    // LGE_UPDATE_S // 20100826 syblue.lee@lge.com
     task = NULL;
     // LGE_UPDATE_E
     write_task = NULL;
@@ -2181,15 +2057,14 @@ static int ts_ldisc_open(struct tty_struct *tty)
 
 	return 0;
 }
-//P990_IFX_GB_LGSI_START
-//Domain:- RIL: 
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo  [START] */
+
 /*
 	RECOVERY_MODE
 		description : This mode is used to recover the at command pending state
 				     Step.1 : CP reset
 				     Step.2 : Close all mux channels
 				     Step.3 : Wait until CP is rebooting for 5 seconds
+*/
 #define RECOVERY_MODE
 #ifdef RECOVERY_MODE
 #include "nvos.h"
@@ -2197,9 +2072,6 @@ static int ts_ldisc_open(struct tty_struct *tty)
 #include "nvodm_services.h"
 #include "nvodm_query_discovery.h"
 #endif
-*/
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo [END] */
-//P990_IFX_GB_TD_ISSUE_FIX_LGSI_END
 
 static void ts_ldisc_close(struct tty_struct *tty)
 {
@@ -2212,7 +2084,7 @@ static void ts_ldisc_close(struct tty_struct *tty)
         TS0710_DEBUG("READ_THREAD is stopped");    
     }
     if(write_task != NULL){
-        // LGE_UPDATE_S // 20100826 
+        // LGE_UPDATE_S // 20100826 syblue.lee@lge.com
         TS0710_LOG("spi_write_sema: up");
         up(&spi_write_sema);
         // LGE_UPDATE_E
@@ -2223,17 +2095,9 @@ static void ts_ldisc_close(struct tty_struct *tty)
 #ifdef RECOVERY_MODE
 	{
 		ts0710_con *ts0710 = &ts0710_connection;
-
 		u8 j;
-//P990_IFX_GB_LGSI_START
-//Domain:- RIL: 
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo  [START] */
-/*
 		NvOdmServicesGpioHandle hGpio = NULL;
 		NvOdmGpioPinHandle hPin = NULL; 
-*/
-/*  :: 08-July-11 :: RIL Recovery for second time not working due to local variable NvOdmGpioPinHandle declaration, now made global as per Froyo [END] */
-//P990_IFX_GB_TD_ISSUE_FIX_LGSI_END
 
 #ifdef ENABLE_MUX_WAKE_LOCK
 		wake_lock_timeout(&s_wake_lock, MUX_WAKELOCK_TIME);
@@ -2267,19 +2131,42 @@ static void ts_ldisc_close(struct tty_struct *tty)
 			hGpio =  (NvOdmServicesGpioHandle)NvOdmGpioOpen();
 		if(hPin==NULL)
 			hPin = NvOdmGpioAcquirePinHandle(hGpio, 'v'-'a', 0);
-		NvOdmGpioSetState(hGpio,hPin, 1);	//20100607, , remain only this code
+		NvOdmGpioSetState(hGpio,hPin, 1);	//20100607, syblue.lee@lge.com, remain only this code
 		NvOdmGpioConfig(hGpio, hPin, NvOdmGpioPinMode_Output);
 		NvOsSleepMS(200);
-		NvOdmGpioSetState(hGpio,hPin, 0);	//20100607, , remain only this code
+		NvOdmGpioSetState(hGpio,hPin, 0);	//20100607, syblue.lee@lge.com, remain only this code
 		NvOsSleepMS(200);
-		NvOdmGpioSetState(hGpio,hPin, 1);	//20100607, , remain only this code
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-//		NvOdmGpioReleasePinHandle(hGpio, hPin);
-//		NvOdmGpioClose(hGpio);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]		
+		NvOdmGpioSetState(hGpio,hPin, 1);	//20100607, syblue.lee@lge.com, remain only this code
+		NvOdmGpioReleasePinHandle(hGpio, hPin);
+		NvOdmGpioClose(hGpio);
 		//NvOsSleepMS(1000);
 		TS0710_PRINTK("%s - end recovery mode!!\n", __FUNCTION__);
 	}
+#else
+	TS0710_PRINTK("%s - start\n", __FUNCTION__);
+	LOCK(frame_nodes_lock);
+	for(i = 0; i < TS0710MAX_PRIORITY_NUMBER ; i++)
+	{
+		if(frame_to_send[i] != NULL && frame_to_send[i]->data !=NULL)
+		{
+			TS0710_PRINTK("%s - frame_to_send[%d]->data = %x\n", __FUNCTION__, i, frame_to_send[i]->data);
+			kfree(frame_to_send[i]->data);
+			frame_to_send[i]->size = 0;
+			frame_to_send[i]->data = NULL;
+			frame_to_send[i]->next = NULL;
+		}
+	}
+	UNLOCK(frame_nodes_lock);
+	
+	ts0710_upon_disconnect();
+	tty_ldisc_flush(tty);
+	if(tty->disc_data)
+	{
+		TS0710_PRINTK("%s - tty->disc_data = %x\n", __FUNCTION__, tty->disc_data);
+		kfree(tty->disc_data);
+		tty->disc_data = NULL;
+	}
+	TS0710_PRINTK("%s - end\n", __FUNCTION__);
 #endif //RECOVERY_MODE
 #endif //LGE_KERNEL_MUX
 
@@ -2287,7 +2174,7 @@ static void ts_ldisc_close(struct tty_struct *tty)
 
 static void ts_ldisc_wake(struct tty_struct *tty)
 {
-	TS0710_LOG("ts wake");
+	LTMUX("ts wake");
 }
 
 static ssize_t ts_ldisc_read(struct tty_struct *tty, struct file *file,

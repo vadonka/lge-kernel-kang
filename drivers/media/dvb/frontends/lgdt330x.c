@@ -104,8 +104,8 @@ static int i2c_write_demod_bytes (struct lgdt330x_state* state,
  * then reads the data returned for (len) bytes.
  */
 
-static int i2c_read_demod_bytes(struct lgdt330x_state *state,
-				enum I2C_REG reg, u8 *buf, int len)
+static u8 i2c_read_demod_bytes (struct lgdt330x_state* state,
+			       enum I2C_REG reg, u8* buf, int len)
 {
 	u8 wr [] = { reg };
 	struct i2c_msg msg [] = {
@@ -118,8 +118,6 @@ static int i2c_read_demod_bytes(struct lgdt330x_state *state,
 	ret = i2c_transfer(state->i2c, msg, 2);
 	if (ret != 2) {
 		printk(KERN_WARNING "lgdt330x: %s: addr 0x%02x select 0x%02x error (ret == %i)\n", __func__, state->config->demod_address, reg, ret);
-		if (ret >= 0)
-			ret = -EIO;
 	} else {
 		ret = 0;
 	}
@@ -481,7 +479,7 @@ static int lgdt3302_read_status(struct dvb_frontend* fe, fe_status_t* status)
 	switch (state->current_modulation) {
 	case QAM_256:
 	case QAM_64:
-		/* Need to understand why there are 3 lock levels here */
+		/* Need to undestand why there are 3 lock levels here */
 		if ((buf[0] & 0x07) == 0x07)
 			*status |= FE_HAS_CARRIER;
 		break;
@@ -522,7 +520,7 @@ static int lgdt3303_read_status(struct dvb_frontend* fe, fe_status_t* status)
 	switch (state->current_modulation) {
 	case QAM_256:
 	case QAM_64:
-		/* Need to understand why there are 3 lock levels here */
+		/* Need to undestand why there are 3 lock levels here */
 		if ((buf[0] & 0x07) == 0x07)
 			*status |= FE_HAS_CARRIER;
 		else

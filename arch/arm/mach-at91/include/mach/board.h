@@ -39,13 +39,10 @@
 #include <linux/usb/atmel_usba_udc.h>
 #include <linux/atmel-mci.h>
 #include <sound/atmel-ac97c.h>
-#include <linux/serial.h>
 
  /* USB Device */
 struct at91_udc_data {
 	u8	vbus_pin;		/* high == host powering us */
-	u8	vbus_active_low;	/* vbus polarity */
-	u8	vbus_polled;		/* Use polling, not interrupt */
 	u8	pullup_pin;		/* active == D+ pulled up */
 	u8	pullup_active_low;	/* true == pullup_pin is active low */
 };
@@ -101,7 +98,6 @@ struct at91_usbh_data {
 };
 extern void __init at91_add_device_usbh(struct at91_usbh_data *data);
 extern void __init at91_add_device_usbh_ohci(struct at91_usbh_data *data);
-extern void __init at91_add_device_usbh_ehci(struct at91_usbh_data *data);
 
  /* NAND / SmartMedia */
 struct atmel_nand_data {
@@ -137,14 +133,18 @@ extern void __init at91_add_device_spi(struct spi_board_info *devices, int nr_de
 extern void __init at91_register_uart(unsigned id, unsigned portnr, unsigned pins);
 extern void __init at91_set_serial_console(unsigned portnr);
 
+struct at91_uart_config {
+	unsigned short	console_tty;	/* tty number of serial console */
+	unsigned short	nr_tty;		/* number of serial tty's */
+	short		tty_map[];	/* map UART to tty number */
+};
 extern struct platform_device *atmel_default_console_device;
+extern void __init __deprecated at91_init_serial(struct at91_uart_config *config);
 
 struct atmel_uart_data {
-	int			num;		/* port num */
-	short			use_dma_tx;	/* use transmit DMA? */
-	short			use_dma_rx;	/* use receive DMA? */
-	void __iomem		*regs;		/* virt. base address, if any */
-	struct serial_rs485	rs485;		/* rs485 settings */
+	short		use_dma_tx;	/* use transmit DMA? */
+	short		use_dma_rx;	/* use receive DMA? */
+	void __iomem	*regs;		/* virtual base address, if any */
 };
 extern void __init at91_add_device_serial(void);
 
@@ -186,12 +186,7 @@ extern void __init at91_add_device_ac97(struct ac97c_platform_data *data);
 extern void __init at91_add_device_isi(void);
 
  /* Touchscreen Controller */
-struct at91_tsadcc_data {
-	unsigned int    adc_clock;
-	u8		pendet_debounce;
-	u8		ts_sample_hold_time;
-};
-extern void __init at91_add_device_tsadcc(struct at91_tsadcc_data *data);
+extern void __init at91_add_device_tsadcc(void);
 
 /* CAN */
 struct at91_can_data {

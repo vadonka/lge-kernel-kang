@@ -15,7 +15,6 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/in.h>
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -426,13 +425,12 @@ static struct proto nr_proto = {
 	.obj_size = sizeof(struct nr_sock),
 };
 
-static int nr_create(struct net *net, struct socket *sock, int protocol,
-		     int kern)
+static int nr_create(struct net *net, struct socket *sock, int protocol)
 {
 	struct sock *sk;
 	struct nr_sock *nr;
 
-	if (!net_eq(net, &init_net))
+	if (net != &init_net)
 		return -EAFNOSUPPORT;
 
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
@@ -591,6 +589,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		return -EINVAL;
 	}
 	if ((dev = nr_dev_get(&addr->fsa_ax25.sax25_call)) == NULL) {
+		SOCK_DEBUG(sk, "NET/ROM: bind failed: invalid node callsign\n");
 		release_sock(sk);
 		return -EADDRNOTAVAIL;
 	}
@@ -631,7 +630,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	sock_reset_flag(sk, SOCK_ZAPPED);
 	dev_put(dev);
 	release_sock(sk);
-
+	SOCK_DEBUG(sk, "NET/ROM: socket is bound\n");
 	return 0;
 }
 
@@ -738,7 +737,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 		DEFINE_WAIT(wait);
 
 		for (;;) {
-			prepare_to_wait(sk_sleep(sk), &wait,
+			prepare_to_wait(sk->sk_sleep, &wait,
 					TASK_INTERRUPTIBLE);
 			if (sk->sk_state != TCP_SYN_SENT)
 				break;
@@ -751,7 +750,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 			err = -ERESTARTSYS;
 			break;
 		}
-		finish_wait(sk_sleep(sk), &wait);
+		finish_wait(sk->sk_sleep, &wait);
 		if (err)
 			goto out_release;
 	}
@@ -797,7 +796,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	 *	hooked into the SABM we saved
 	 */
 	for (;;) {
-		prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);
+		prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
 		skb = skb_dequeue(&sk->sk_receive_queue);
 		if (skb)
 			break;
@@ -815,7 +814,7 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 		err = -ERESTARTSYS;
 		break;
 	}
-	finish_wait(sk_sleep(sk), &wait);
+	finish_wait(sk->sk_sleep, &wait);
 	if (err)
 		goto out_release;
 
@@ -1081,6 +1080,8 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 		sax.sax25_call   = nr->dest_addr;
 	}
 
+	SOCK_DEBUG(sk, "NET/ROM: sendto: Addresses built.\n");
+
 	/* Build a packet - the conventional user limit is 236 bytes. We can
 	   do ludicrously large NetROM frames but must not overflow */
 	if (len > 65536) {
@@ -1088,6 +1089,7 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 		goto out;
 	}
 
+	SOCK_DEBUG(sk, "NET/ROM: sendto: building packet.\n");
 	size = len + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, msg->msg_flags & MSG_DONTWAIT, &err)) == NULL)
@@ -1101,6 +1103,7 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 	 */
 
 	asmptr = skb_push(skb, NR_TRANSPORT_LEN);
+	SOCK_DEBUG(sk, "Building NET/ROM Header.\n");
 
 	/* Build a NET/ROM Transport header */
 
@@ -1109,11 +1112,14 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 	*asmptr++ = 0;		/* To be filled in later */
 	*asmptr++ = 0;		/*      Ditto            */
 	*asmptr++ = NR_INFO;
+	SOCK_DEBUG(sk, "Built header.\n");
 
 	/*
 	 *	Put the data on the end
 	 */
 	skb_put(skb, len);
+
+	SOCK_DEBUG(sk, "NET/ROM: Appending user data\n");
 
 	/* User data follows immediately after the NET/ROM transport header */
 	if (memcpy_fromiovec(skb_transport_header(skb), msg->msg_iov, len)) {
@@ -1121,6 +1127,8 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 		err = -EFAULT;
 		goto out;
 	}
+
+	SOCK_DEBUG(sk, "NET/ROM: Transmitting buffer\n");
 
 	if (sk->sk_state != TCP_ESTABLISHED) {
 		kfree_skb(skb);
@@ -1258,13 +1266,28 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 
 static void *nr_info_start(struct seq_file *seq, loff_t *pos)
 {
+	struct sock *s;
+	struct hlist_node *node;
+	int i = 1;
+
 	spin_lock_bh(&nr_list_lock);
-	return seq_hlist_start_head(&nr_list, *pos);
+	if (*pos == 0)
+		return SEQ_START_TOKEN;
+
+	sk_for_each(s, node, &nr_list) {
+		if (i == *pos)
+			return s;
+		++i;
+	}
+	return NULL;
 }
 
 static void *nr_info_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	return seq_hlist_next(v, &nr_list, pos);
+	++*pos;
+
+	return (v == SEQ_START_TOKEN) ? sk_head(&nr_list)
+		: sk_next((struct sock *)v);
 }
 
 static void nr_info_stop(struct seq_file *seq, void *v)
@@ -1274,7 +1297,7 @@ static void nr_info_stop(struct seq_file *seq, void *v)
 
 static int nr_info_show(struct seq_file *seq, void *v)
 {
-	struct sock *s = sk_entry(v);
+	struct sock *s = v;
 	struct net_device *dev;
 	struct nr_sock *nr;
 	const char *devname;
@@ -1349,7 +1372,7 @@ static const struct file_operations nr_info_fops = {
 };
 #endif	/* CONFIG_PROC_FS */
 
-static const struct net_proto_family nr_family_ops = {
+static struct net_proto_family nr_family_ops = {
 	.family		=	PF_NETROM,
 	.create		=	nr_create,
 	.owner		=	THIS_MODULE,

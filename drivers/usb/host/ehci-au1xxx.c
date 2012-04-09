@@ -69,15 +69,6 @@ static void au1xxx_stop_ehc(void)
 	au_sync();
 }
 
-static int au1xxx_ehci_setup(struct usb_hcd *hcd)
-{
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-	int ret = ehci_init(hcd);
-
-	ehci->need_io_watchdog = 0;
-	return ret;
-}
-
 static const struct hc_driver ehci_au1xxx_hc_driver = {
 	.description		= hcd_name,
 	.product_desc		= "Au1xxx EHCI",
@@ -95,7 +86,7 @@ static const struct hc_driver ehci_au1xxx_hc_driver = {
 	 * FIXME -- ehci_init() doesn't do enough here.
 	 * See ehci-ppc-soc for a complete implementation.
 	 */
-	.reset			= au1xxx_ehci_setup,
+	.reset			= ehci_init,
 	.start			= ehci_run,
 	.stop			= ehci_stop,
 	.shutdown		= ehci_shutdown,
@@ -130,7 +121,6 @@ static int ehci_hcd_au1xxx_drv_probe(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd;
 	struct ehci_hcd *ehci;
-	struct resource *res;
 	int ret;
 
 	if (usb_disabled())
@@ -154,9 +144,8 @@ static int ehci_hcd_au1xxx_drv_probe(struct platform_device *pdev)
 	if (!hcd)
 		return -ENOMEM;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	hcd->rsrc_start = res->start;
-	hcd->rsrc_len = resource_size(res);
+	hcd->rsrc_start = pdev->resource[0].start;
+	hcd->rsrc_len = pdev->resource[0].end - pdev->resource[0].start + 1;
 
 	if (!request_mem_region(hcd->rsrc_start, hcd->rsrc_len, hcd_name)) {
 		pr_debug("request_mem_region failed");
@@ -175,8 +164,7 @@ static int ehci_hcd_au1xxx_drv_probe(struct platform_device *pdev)
 
 	ehci = hcd_to_ehci(hcd);
 	ehci->caps = hcd->regs;
-	ehci->regs = hcd->regs +
-		HC_LENGTH(ehci, readl(&ehci->caps->hc_capbase));
+	ehci->regs = hcd->regs + HC_LENGTH(readl(&ehci->caps->hc_capbase));
 	/* cache this readonly data; minimize chip reads */
 	ehci->hcs_params = readl(&ehci->caps->hcs_params);
 
@@ -216,27 +204,39 @@ static int ehci_hcd_au1xxx_drv_suspend(struct device *dev)
 	struct usb_hcd *hcd = dev_get_drvdata(dev);
 	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
 	unsigned long flags;
-	int rc = 0;
+	int rc;
+
+	return 0;
+	rc = 0;
 
 	if (time_before(jiffies, ehci->next_statechange))
 		msleep(10);
 
 	/* Root hub was already suspended. Disable irq emission and
-	 * mark HW unaccessible.  The PM and USB cores make sure that
-	 * the root hub is either suspended or stopped.
+	 * mark HW unaccessible, bail out if RH has been resumed. Use
+	 * the spinlock to properly synchronize with possible pending
+	 * RH suspend or resume activity.
+	 *
+	 * This is still racy as hcd->state is manipulated outside of
+	 * any locks =P But that will be a different fix.
 	 */
-	ehci_prepare_ports_for_controller_suspend(ehci, device_may_wakeup(dev));
 	spin_lock_irqsave(&ehci->lock, flags);
+	if (hcd->state != HC_STATE_SUSPENDED) {
+		rc = -EINVAL;
+		goto bail;
+	}
 	ehci_writel(ehci, 0, &ehci->regs->intr_enable);
 	(void)ehci_readl(ehci, &ehci->regs->intr_enable);
 
 	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
+
+	au1xxx_stop_ehc();
+
+bail:
 	spin_unlock_irqrestore(&ehci->lock, flags);
 
 	// could save FLADJ in case of Vaux power loss
 	// ... we'd only use it to handle clock skew
-
-	au1xxx_stop_ehc();
 
 	return rc;
 }
@@ -262,7 +262,6 @@ static int ehci_hcd_au1xxx_drv_resume(struct device *dev)
 	if (ehci_readl(ehci, &ehci->regs->configured_flag) == FLAG_CF) {
 		int	mask = INTR_MASK;
 
-		ehci_prepare_ports_for_controller_resume(ehci);
 		if (!hcd->self.root_hub->do_remote_wakeup)
 			mask &= ~STS_PCD;
 		ehci_writel(ehci, mask, &ehci->regs->intr_enable);
@@ -298,7 +297,7 @@ static int ehci_hcd_au1xxx_drv_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops au1xxx_ehci_pmops = {
+static struct dev_pm_ops au1xxx_ehci_pmops = {
 	.suspend	= ehci_hcd_au1xxx_drv_suspend,
 	.resume		= ehci_hcd_au1xxx_drv_resume,
 };

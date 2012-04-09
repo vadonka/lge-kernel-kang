@@ -32,7 +32,6 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/sched.h>
-#include <linux/slab.h>
 #include <linux/types.h>
 
 #include "b43legacy.h"
@@ -153,7 +152,7 @@ void b43legacy_phy_calibrate(struct b43legacy_wldev *dev)
 	phy->calibrated = 1;
 }
 
-/* initialize B PHY power control
+/* intialize B PHY power control
  * as described in http://bcm-specs.sipsolutions.net/InitPowerControl
  */
 static void b43legacy_phy_init_pctl(struct b43legacy_wldev *dev)

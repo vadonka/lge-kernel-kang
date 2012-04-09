@@ -21,6 +21,7 @@
 #include <linux/ptrace.h>
 #include <linux/interrupt.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/irq.h>
@@ -31,10 +32,8 @@
 
 #define MAX_SLOTS		21
 
-static void it8152_mask_irq(struct irq_data *d)
+static void it8152_mask_irq(unsigned int irq)
 {
-	unsigned int irq = d->irq;
-
        if (irq >= IT8152_LD_IRQ(0)) {
 	       __raw_writel((__raw_readl(IT8152_INTC_LDCNIMR) |
 			    (1 << (irq - IT8152_LD_IRQ(0)))),
@@ -50,10 +49,8 @@ static void it8152_mask_irq(struct irq_data *d)
        }
 }
 
-static void it8152_unmask_irq(struct irq_data *d)
+static void it8152_unmask_irq(unsigned int irq)
 {
-	unsigned int irq = d->irq;
-
        if (irq >= IT8152_LD_IRQ(0)) {
 	       __raw_writel((__raw_readl(IT8152_INTC_LDCNIMR) &
 			     ~(1 << (irq - IT8152_LD_IRQ(0)))),
@@ -71,9 +68,9 @@ static void it8152_unmask_irq(struct irq_data *d)
 
 static struct irq_chip it8152_irq_chip = {
 	.name		= "it8152",
-	.irq_ack	= it8152_mask_irq,
-	.irq_mask	= it8152_mask_irq,
-	.irq_unmask	= it8152_unmask_irq,
+	.ack		= it8152_mask_irq,
+	.mask		= it8152_mask_irq,
+	.unmask		= it8152_unmask_irq,
 };
 
 void it8152_init_irq(void)
@@ -88,8 +85,8 @@ void it8152_init_irq(void)
 	__raw_writel((0), IT8152_INTC_LDCNIRR);
 
 	for (irq = IT8152_IRQ(0); irq <= IT8152_LAST_IRQ; irq++) {
-		irq_set_chip_and_handler(irq, &it8152_irq_chip,
-					 handle_level_irq);
+		set_irq_chip(irq, &it8152_irq_chip);
+		set_irq_handler(irq, handle_level_irq);
 		set_irq_flags(irq, IRQF_VALID | IRQF_PROBE);
 	}
 }
@@ -240,7 +237,7 @@ static struct resource it8152_mem = {
 
 /*
  * The following functions are needed for DMA bouncing.
- * ITE8152 chip can address up to 64MByte, so all the devices
+ * ITE8152 chip can addrees up to 64MByte, so all the devices
  * connected to ITE8152 (PCI and USB) should have limited DMA window
  */
 
@@ -275,8 +272,27 @@ int dma_needs_bounce(struct device *dev, dma_addr_t dma_addr, size_t size)
 		((dma_addr + size - PHYS_OFFSET) >= SZ_64M);
 }
 
-int dma_set_coherent_mask(struct device *dev, u64 mask)
+/*
+ * We override these so we properly do dmabounce otherwise drivers
+ * are able to set the dma_mask to 0xffffffff and we can no longer
+ * trap bounces. :(
+ *
+ * We just return true on everyhing except for < 64MB in which case
+ * we will fail miseralby and die since we can't handle that case.
+ */
+int pci_set_dma_mask(struct pci_dev *dev, u64 mask)
 {
+	dev_dbg(&dev->dev, "%s: %llx\n", __func__, mask);
+	if (mask >= PHYS_OFFSET + SZ_64M - 1)
+		return 0;
+
+	return -EIO;
+}
+
+int
+pci_set_consistent_dma_mask(struct pci_dev *dev, u64 mask)
+{
+	dev_dbg(&dev->dev, "%s: %llx\n", __func__, mask);
 	if (mask >= PHYS_OFFSET + SZ_64M - 1)
 		return 0;
 
@@ -356,4 +372,3 @@ struct pci_bus * __init it8152_pci_scan_bus(int nr, struct pci_sys_data *sys)
 	return pci_scan_bus(nr, &it8152_ops, sys);
 }
 
-EXPORT_SYMBOL(dma_set_coherent_mask);

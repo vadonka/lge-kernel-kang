@@ -11,7 +11,6 @@
 #include <linux/fb.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/slab.h>
 
 #include "carminefb.h"
 #include "carminefb_regs.h"
@@ -32,11 +31,11 @@
 #define CARMINEFB_DEFAULT_VIDEO_MODE	1
 
 static unsigned int fb_mode = CARMINEFB_DEFAULT_VIDEO_MODE;
-module_param(fb_mode, uint, 0444);
+module_param(fb_mode, uint, 444);
 MODULE_PARM_DESC(fb_mode, "Initial video mode as integer.");
 
 static char *fb_mode_str;
-module_param(fb_mode_str, charp, 0444);
+module_param(fb_mode_str, charp, 444);
 MODULE_PARM_DESC(fb_mode_str, "Initial video mode in characters.");
 
 /*
@@ -46,7 +45,7 @@ MODULE_PARM_DESC(fb_mode_str, "Initial video mode in characters.");
  * 0b010 Display 1
  */
 static int fb_displays = CARMINE_USE_DISPLAY0 | CARMINE_USE_DISPLAY1;
-module_param(fb_displays, int, 0444);
+module_param(fb_displays, int, 444);
 MODULE_PARM_DESC(fb_displays, "Bit mode, which displays are used");
 
 struct carmine_hw {
@@ -432,7 +431,7 @@ static int init_hardware(struct carmine_hw *hw)
 	u32 loops;
 	u32 ret;
 
-	/* Initialize Carmine */
+	/* Initalize Carmine */
 	/* Sets internal clock */
 	c_set_hw_reg(hw, CARMINE_CTL_REG + CARMINE_CTL_REG_CLOCK_ENABLE,
 			CARMINE_DFLT_IP_CLOCK_ENABLE);
@@ -654,7 +653,7 @@ static int __devinit carminefb_probe(struct pci_dev *dev,
 		printk(KERN_ERR "carminefb: Memory bar is only %d bytes, %d "
 				"are required.", carminefb_fix.smem_len,
 				CARMINE_TOTAL_DIPLAY_MEM);
-		goto err_unmap_vregs;
+		goto err_free_reg_mmio;
 	}
 
 	if (!request_mem_region(carminefb_fix.smem_start,
@@ -667,6 +666,8 @@ static int __devinit carminefb_probe(struct pci_dev *dev,
 			carminefb_fix.smem_len);
 	if (!hw->screen_mem) {
 		printk(KERN_ERR "carmine: Can't ioremap smem area.\n");
+		release_mem_region(carminefb_fix.smem_start,
+				carminefb_fix.smem_len);
 		goto err_reg_smem;
 	}
 
@@ -708,7 +709,7 @@ err_deinit_hw:
 err_unmap_screen:
 	iounmap(hw->screen_mem);
 err_reg_smem:
-	release_mem_region(carminefb_fix.smem_start, carminefb_fix.smem_len);
+	release_mem_region(carminefb_fix.mmio_start, carminefb_fix.mmio_len);
 err_unmap_vregs:
 	iounmap(hw->v_regs);
 err_free_reg_mmio:

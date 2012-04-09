@@ -29,10 +29,7 @@
 
 #include <mach/iomap.h>
 #include <mach/pinmux.h>
-#include <mach/suspend.h>
 #include "gpio-names.h"
-static inline unsigned long pg_readl(unsigned long offset);
-static inline void pg_writel(unsigned long value, unsigned long offset);
 
 #define _mux(pg_name, f)				\
 	{						\
@@ -964,7 +961,7 @@ const struct tegra_pingroup_desc* tegra_pinmux_get_pingroups(void) {
 }
 
 #ifdef CONFIG_PM
-//20100724  move to "pinmux.h"
+//20100724 byoungwoo.yoon@lge.com move to "pinmux.h"
 /*
 #define TRISTATE_REG_A         0x14
 #define TRISTATE_REG_NUM       4
@@ -1005,14 +1002,14 @@ u32 sleep_pinmux_reg[TRISTATE_REG_NUM + PIN_MUX_CTL_REG_NUM + PULLUPDOWN_REG_NUM
  	0xa000200a,		//  PULLUPDOWN[4]
 };
 #else
-//20100724  for gpio setting while sleep [LGE_START]
+//20100724 byoungwoo.yoon@lge.com for gpio setting while sleep [LGE_START]
 static u32 sleep_pinmux_reg[TRISTATE_REG_NUM + PIN_MUX_CTL_REG_NUM + PULLUPDOWN_REG_NUM] = 
 {
 	// TRISTATE		:   ( 0->normal,   1->tristate)
-#ifdef CONFIG_MACH_STAR_TMUS
+#if defined (CONFIG_MODEM_MDM)
 	0xf736fff9,		//  TRISTATE[0]
-#else
-	0xf716fff9,             //  TRISTATE[0]
+#elif defined (CONFIG_MODEM_IFX)
+    0xf716fff9,		//  TRISTATE[0]
 #endif
 	0xdfe4bfdf,		//  TRISTATE[1]
  	0xffffffff,		//  TRISTATE[2]
@@ -1170,7 +1167,7 @@ void set_reg_data( int pg, long data, int reg )
 
 }
 
-//20100724  for gpio setting while sleep [LGE_END]
+//20100724 byoungwoo.yoon@lge.com for gpio setting while sleep [LGE_END]
 
 static inline unsigned long pg_readl(unsigned long offset)
 {
@@ -1211,7 +1208,7 @@ void tegra_pinmux_suspend(void)
 		pr_info("[POWER-Pinmux] <<<< Suspend PinMux Setting value [END] >>>>>  \n");
 #endif
 
-//20100724  for gpio setting while sleep [LGE_START]
+//20100724 byoungwoo.yoon@lge.com for gpio setting while sleep [LGE_START]
 #if APPLY_SLEEP_GPIO_TABLE
 		ctx = sleep_pinmux_reg;
 		for (i=0; i<TRISTATE_REG_NUM; i++)	{
@@ -1227,7 +1224,7 @@ void tegra_pinmux_suspend(void)
 				pg_writel(*ctx++, PULLUPDOWN_REG_A + i*4);
 			}*/
 #endif
-//20100724  for gpio setting while sleep [LGE_END]
+//20100724 byoungwoo.yoon@lge.com for gpio setting while sleep [LGE_END]
 
 #if SLEEP_GPIO_LOG
 		ctx = pinmux_reg;

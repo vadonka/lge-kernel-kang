@@ -18,7 +18,6 @@
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/bootmem.h>
-#include <linux/gfp.h>
 
 #include <asm/setup.h>
 #include <asm/uaccess.h>
@@ -300,8 +299,6 @@ void __init paging_init(void)
 		zones_size[ZONE_DMA] = m68k_memory[i].size >> PAGE_SHIFT;
 		free_area_init_node(i, zones_size,
 				    m68k_memory[i].addr >> PAGE_SHIFT, NULL);
-		if (node_present_pages(i))
-			node_set_state(i, N_NORMAL_MEMORY);
 	}
 }
 

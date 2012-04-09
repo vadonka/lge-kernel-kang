@@ -47,6 +47,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/screen_info.h>
+#include <linux/smp_lock.h>
 #include <video/vga.h>
 #include <asm/io.h>
 
@@ -111,7 +112,7 @@ static int 		vga_video_font_height;
 static int 		vga_scan_lines		__read_mostly;
 static unsigned int 	vga_rolled_over;
 
-static int vgacon_text_mode_force;
+int vgacon_text_mode_force = 0;
 
 bool vgacon_text_force(void)
 {
@@ -202,7 +203,11 @@ static void vgacon_scrollback_init(int pitch)
 	}
 }
 
-static void vgacon_scrollback_startup(void)
+/*
+ * Called only duing init so call of alloc_bootmen is ok.
+ * Marked __init_refok to silence modpost.
+ */
+static void __init_refok vgacon_scrollback_startup(void)
 {
 	vgacon_scrollback = kcalloc(CONFIG_VGACON_SOFT_SCROLLBACK_SIZE, 1024, GFP_NOWAIT);
 	vgacon_scrollback_init(vga_video_num_columns * 2);
@@ -371,8 +376,7 @@ static const char *vgacon_startup(void)
 	u16 saved1, saved2;
 	volatile u16 *p;
 
-	if (screen_info.orig_video_isVGA == VIDEO_TYPE_VLFB ||
-	    screen_info.orig_video_isVGA == VIDEO_TYPE_EFI) {
+	if (screen_info.orig_video_isVGA == VIDEO_TYPE_VLFB) {
 	      no_vga:
 #ifdef CONFIG_DUMMY_CONSOLE
 		conswitchp = &dummy_con;
@@ -581,11 +585,6 @@ static void vgacon_init(struct vc_data *c, int init)
 	vgacon_uni_pagedir[1]++;
 	if (!vgacon_uni_pagedir[0] && p)
 		con_set_default_unimap(c);
-
-	/* Only set the default if the user didn't deliberately override it */
-	if (global_cursor_default == -1)
-		global_cursor_default =
-			!(screen_info.flags & VIDEO_FLAGS_NOCURSOR);
 }
 
 static void vgacon_deinit(struct vc_data *c)
@@ -1104,6 +1103,7 @@ static int vgacon_do_font_op(struct vgastate *state,char *arg,int set,int ch512)
 		charmap += 4 * cmapsz;
 #endif
 
+	unlock_kernel();
 	spin_lock_irq(&vga_lock);
 	/* First, the Sequencer */
 	vga_wseq(state->vgabase, VGA_SEQ_RESET, 0x1);
@@ -1187,6 +1187,7 @@ static int vgacon_do_font_op(struct vgastate *state,char *arg,int set,int ch512)
 		vga_wattr(state->vgabase, VGA_AR_ENABLE_DISPLAY, 0);	
 	}
 	spin_unlock_irq(&vga_lock);
+	lock_kernel();
 	return 0;
 }
 

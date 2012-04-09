@@ -38,6 +38,7 @@
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/skbuff.h>
+#include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/delay.h>
 #include <linux/crc32.h>
@@ -47,7 +48,6 @@
 #include <linux/rtnetlink.h>
 #include <linux/timer.h>
 #include <linux/platform_device.h>
-#include <linux/gfp.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -219,7 +219,7 @@ static int tsi108_read_mii(struct tsi108_prv_data *data, int reg)
 	if (i == 100)
 		return 0xffff;
 	else
-		return TSI_READ_PHY(TSI108_MAC_MII_DATAIN);
+		return (TSI_READ_PHY(TSI108_MAC_MII_DATAIN));
 }
 
 static void tsi108_write_mii(struct tsi108_prv_data *data,
@@ -263,7 +263,7 @@ static inline void tsi108_write_tbi(struct tsi108_prv_data *data,
 			return;
 		udelay(10);
 	}
-	printk(KERN_ERR "%s function time out\n", __func__);
+	printk(KERN_ERR "%s function time out \n", __func__);
 }
 
 static int mii_speed(struct mii_if_info *mii)
@@ -704,8 +704,8 @@ static int tsi108_send_packet(struct sk_buff * skb, struct net_device *dev)
 
 		if (i == 0) {
 			data->txring[tx].buf0 = dma_map_single(NULL, skb->data,
-					skb_headlen(skb), DMA_TO_DEVICE);
-			data->txring[tx].len = skb_headlen(skb);
+					skb->len - skb->data_len, DMA_TO_DEVICE);
+			data->txring[tx].len = skb->len - skb->data_len;
 			misc |= TSI108_TX_SOF;
 		} else {
 			skb_frag_t *frag = &skb_shinfo(skb)->frags[i - 1];
@@ -802,10 +802,12 @@ static int tsi108_refill_rx(struct net_device *dev, int budget)
 		int rx = data->rxhead;
 		struct sk_buff *skb;
 
-		skb = netdev_alloc_skb_ip_align(dev, TSI108_RXBUF_SIZE);
-		data->rxskbs[rx] = skb;
+		data->rxskbs[rx] = skb = netdev_alloc_skb(dev,
+							  TSI108_RXBUF_SIZE + 2);
 		if (!skb)
 			break;
+
+		skb_reserve(skb, 2); /* Align the data on a 4-byte boundary. */
 
 		data->rxring[rx].buf0 = dma_map_single(NULL, skb->data,
 							TSI108_RX_SKB_SIZE,
@@ -1056,7 +1058,7 @@ static void tsi108_stop_ethernet(struct net_device *dev)
 			return;
 		udelay(10);
 	}
-	printk(KERN_ERR "%s function time out\n", __func__);
+	printk(KERN_ERR "%s function time out \n", __func__);
 }
 
 static void tsi108_reset_ether(struct tsi108_prv_data * data)
@@ -1184,19 +1186,29 @@ static void tsi108_set_rx_mode(struct net_device *dev)
 
 	rxcfg &= ~(TSI108_EC_RXCFG_UFE | TSI108_EC_RXCFG_MFE);
 
-	if (dev->flags & IFF_ALLMULTI || !netdev_mc_empty(dev)) {
+	if (dev->flags & IFF_ALLMULTI || dev->mc_count) {
 		int i;
-		struct netdev_hw_addr *ha;
+		struct dev_mc_list *mc = dev->mc_list;
 		rxcfg |= TSI108_EC_RXCFG_MFE | TSI108_EC_RXCFG_MC_HASH;
 
 		memset(data->mc_hash, 0, sizeof(data->mc_hash));
 
-		netdev_for_each_mc_addr(ha, dev) {
+		while (mc) {
 			u32 hash, crc;
 
-			crc = ether_crc(6, ha->addr);
-			hash = crc >> 23;
-			__set_bit(hash, &data->mc_hash[0]);
+			if (mc->dmi_addrlen == 6) {
+				crc = ether_crc(6, mc->dmi_addr);
+				hash = crc >> 23;
+
+				__set_bit(hash, &data->mc_hash[0]);
+			} else {
+				printk(KERN_ERR
+		"%s: got multicast address of length %d instead of 6.\n",
+				       dev->name,
+				       mc->dmi_addrlen);
+			}
+
+			mc = mc->next;
 		}
 
 		TSI_WRITE(TSI108_EC_HASHADDR,
@@ -1233,7 +1245,7 @@ static void tsi108_init_phy(struct net_device *dev)
 		udelay(10);
 	}
 	if (i == 0)
-		printk(KERN_ERR "%s function time out\n", __func__);
+		printk(KERN_ERR "%s function time out \n", __func__);
 
 	if (data->phy_type == TSI108_PHY_BCM54XX) {
 		tsi108_write_mii(data, 0x09, 0x0300);
@@ -1344,7 +1356,7 @@ static int tsi108_open(struct net_device *dev)
 	for (i = 0; i < TSI108_RXRING_LEN; i++) {
 		struct sk_buff *skb;
 
-		skb = netdev_alloc_skb_ip_align(dev, TSI108_RXBUF_SIZE);
+		skb = netdev_alloc_skb(dev, TSI108_RXBUF_SIZE + NET_IP_ALIGN);
 		if (!skb) {
 			/* Bah.  No memory for now, but maybe we'll get
 			 * some more later.
@@ -1358,6 +1370,8 @@ static int tsi108_open(struct net_device *dev)
 		}
 
 		data->rxskbs[i] = skb;
+		/* Align the payload on a 4-byte boundary */
+		skb_reserve(skb, 2);
 		data->rxskbs[i] = skb;
 		data->rxring[i].buf0 = virt_to_phys(data->rxskbs[i]->data);
 		data->rxring[i].misc = TSI108_RX_OWN | TSI108_RX_INT;

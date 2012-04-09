@@ -32,7 +32,6 @@
 #include <mach/dma.h>
 #include <mach/irqs.h>
 #include <mach/iomap.h>
-#include <mach/suspend.h>
 
 #define APB_DMA_GEN				0x000
 #define GEN_ENABLE				(1<<31)
@@ -1012,7 +1011,6 @@ fail:
 	}
 	return ret;
 }
-postcore_initcall(tegra_dma_init);
 
 #ifdef CONFIG_PM
 static u32 apb_dma[5*TEGRA_SYSTEM_DMA_CH_NR + 3];

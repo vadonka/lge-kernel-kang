@@ -18,13 +18,13 @@
 #include <linux/hdreg.h>	/* HDIO_GETGEO			    */
 #include <linux/bio.h>
 #include <linux/module.h>
-#include <linux/compat.h>
 #include <linux/init.h>
 
 #include <asm/debug.h>
 #include <asm/idals.h>
 #include <asm/ebcdic.h>
 #include <asm/io.h>
+#include <asm/todclk.h>
 #include <asm/uaccess.h>
 #include <asm/cio.h>
 #include <asm/ccwdev.h>
@@ -54,15 +54,6 @@
 #define ECKD_F7(i) (i->factor7)
 #define ECKD_F8(i) (i->factor8)
 
-/*
- * raw track access always map to 64k in memory
- * so it maps to 16 blocks of 4k per track
- */
-#define DASD_RAW_BLOCK_PER_TRACK 16
-#define DASD_RAW_BLOCKSIZE 4096
-/* 64k are 128 x 512 byte sectors  */
-#define DASD_RAW_SECTORS_PER_TRACK 128
-
 MODULE_LICENSE("GPL");
 
 static struct dasd_discipline dasd_eckd_discipline;
@@ -72,7 +63,7 @@ static struct dasd_discipline dasd_eckd_discipline;
 static struct ccw_device_id dasd_eckd_ids[] = {
 	{ CCW_DEVICE_DEVTYPE (0x3990, 0, 0x3390, 0), .driver_info = 0x1},
 	{ CCW_DEVICE_DEVTYPE (0x2105, 0, 0x3390, 0), .driver_info = 0x2},
-	{ CCW_DEVICE_DEVTYPE (0x3880, 0, 0x3380, 0), .driver_info = 0x3},
+	{ CCW_DEVICE_DEVTYPE (0x3880, 0, 0x3390, 0), .driver_info = 0x3},
 	{ CCW_DEVICE_DEVTYPE (0x3990, 0, 0x3380, 0), .driver_info = 0x4},
 	{ CCW_DEVICE_DEVTYPE (0x2105, 0, 0x3380, 0), .driver_info = 0x5},
 	{ CCW_DEVICE_DEVTYPE (0x9343, 0, 0x9345, 0), .driver_info = 0x6},
@@ -87,31 +78,6 @@ MODULE_DEVICE_TABLE(ccw, dasd_eckd_ids);
 
 static struct ccw_driver dasd_eckd_driver; /* see below */
 
-#define INIT_CQR_OK 0
-#define INIT_CQR_UNFORMATTED 1
-#define INIT_CQR_ERROR 2
-
-/* emergency request for reserve/release */
-static struct {
-	struct dasd_ccw_req cqr;
-	struct ccw1 ccw;
-	char data[32];
-} *dasd_reserve_req;
-static DEFINE_MUTEX(dasd_reserve_mutex);
-
-/* definitions for the path verification worker */
-struct path_verification_work_data {
-	struct work_struct worker;
-	struct dasd_device *device;
-	struct dasd_ccw_req cqr;
-	struct ccw1 ccw;
-	__u8 rcd_buffer[DASD_ECKD_RCD_DATA_SIZE];
-	int isglobal;
-	__u8 tbvpm;
-};
-static struct path_verification_work_data *path_verification_worker;
-static DEFINE_MUTEX(dasd_path_verification_mutex);
-
 /* initial attempt at a probe function. this can be simplified once
  * the other detection code is gone */
 static int
@@ -120,8 +86,7 @@ dasd_eckd_probe (struct ccw_device *cdev)
 	int ret;
 
 	/* set ECKD specific ccw-device options */
-	ret = ccw_device_set_options(cdev, CCWDEV_ALLOW_FORCE |
-				     CCWDEV_DO_PATHGROUP | CCWDEV_DO_MULTIPATH);
+	ret = ccw_device_set_options(cdev, CCWDEV_ALLOW_FORCE);
 	if (ret) {
 		DBF_EVENT_DEVID(DBF_WARNING, cdev, "%s",
 				"dasd_eckd_probe: could not set "
@@ -394,23 +359,6 @@ static void fill_LRE_data(struct LRE_eckd_data *data, unsigned int trk,
 		data->length = reclen;
 		data->operation.operation = 0x03;
 		break;
-	case DASD_ECKD_CCW_WRITE_FULL_TRACK:
-		data->operation.orientation = 0x0;
-		data->operation.operation = 0x3F;
-		data->extended_operation = 0x11;
-		data->length = 0;
-		data->extended_parameter_length = 0x02;
-		if (data->count > 8) {
-			data->extended_parameter[0] = 0xFF;
-			data->extended_parameter[1] = 0xFF;
-			data->extended_parameter[1] <<= (16 - count);
-		} else {
-			data->extended_parameter[0] = 0xFF;
-			data->extended_parameter[0] <<= (8 - count);
-			data->extended_parameter[1] = 0x00;
-		}
-		data->sector = 0xFF;
-		break;
 	case DASD_ECKD_CCW_WRITE_TRACK_DATA:
 		data->auxiliary.length_valid = 0x1;
 		data->length = reclen;	/* not tlf, as one might think */
@@ -433,12 +381,6 @@ static void fill_LRE_data(struct LRE_eckd_data *data, unsigned int trk,
 		break;
 	case DASD_ECKD_CCW_READ_COUNT:
 		data->operation.operation = 0x06;
-		break;
-	case DASD_ECKD_CCW_READ_TRACK:
-		data->operation.orientation = 0x1;
-		data->operation.operation = 0x0C;
-		data->extended_parameter_length = 0;
-		data->sector = 0xFF;
 		break;
 	case DASD_ECKD_CCW_READ_TRACK_DATA:
 		data->auxiliary.length_valid = 0x1;
@@ -483,16 +425,10 @@ static int prefix_LRE(struct ccw1 *ccw, struct PFX_eckd_data *pfxdata,
 
 	ccw->cmd_code = DASD_ECKD_CCW_PFX;
 	ccw->flags = 0;
-	if (cmd == DASD_ECKD_CCW_WRITE_FULL_TRACK) {
-		ccw->count = sizeof(*pfxdata) + 2;
-		ccw->cda = (__u32) __pa(pfxdata);
-		memset(pfxdata, 0, sizeof(*pfxdata) + 2);
-	} else {
-		ccw->count = sizeof(*pfxdata);
-		ccw->cda = (__u32) __pa(pfxdata);
-		memset(pfxdata, 0, sizeof(*pfxdata));
-	}
+	ccw->count = sizeof(*pfxdata);
+	ccw->cda = (__u32) __pa(pfxdata);
 
+	memset(pfxdata, 0, sizeof(*pfxdata));
 	/* prefix data */
 	if (format > 1) {
 		DBF_DEV_EVENT(DBF_ERR, basedev,
@@ -526,7 +462,6 @@ static int prefix_LRE(struct ccw1 *ccw, struct PFX_eckd_data *pfxdata,
 		dedata->mask.perm = 0x1;
 		dedata->attributes.operation = basepriv->attrib.operation;
 		break;
-	case DASD_ECKD_CCW_READ_TRACK:
 	case DASD_ECKD_CCW_READ_TRACK_DATA:
 		dedata->mask.perm = 0x1;
 		dedata->attributes.operation = basepriv->attrib.operation;
@@ -552,11 +487,6 @@ static int prefix_LRE(struct ccw1 *ccw, struct PFX_eckd_data *pfxdata,
 		dedata->mask.auth = 0x1;
 		dedata->attributes.operation = DASD_BYPASS_CACHE;
 		rc = check_XRC_on_prefix(pfxdata, basedev);
-		break;
-	case DASD_ECKD_CCW_WRITE_FULL_TRACK:
-		dedata->mask.perm = 0x03;
-		dedata->attributes.operation = basepriv->attrib.operation;
-		dedata->blk_size = 0;
 		break;
 	case DASD_ECKD_CCW_WRITE_TRACK_DATA:
 		dedata->mask.perm = 0x02;
@@ -756,20 +686,18 @@ dasd_eckd_cdl_reclen(int recid)
 /*
  * Generate device unique id that specifies the physical device.
  */
-static int dasd_eckd_generate_uid(struct dasd_device *device)
+static int dasd_eckd_generate_uid(struct dasd_device *device,
+				  struct dasd_uid *uid)
 {
 	struct dasd_eckd_private *private;
-	struct dasd_uid *uid;
 	int count;
-	unsigned long flags;
 
 	private = (struct dasd_eckd_private *) device->private;
 	if (!private)
 		return -ENODEV;
 	if (!private->ned || !private->gneq)
 		return -ENODEV;
-	uid = &private->uid;
-	spin_lock_irqsave(get_ccwdev_lock(device->cdev), flags);
+
 	memset(uid, 0, sizeof(struct dasd_uid));
 	memcpy(uid->vendor, private->ned->HDA_manufacturer,
 	       sizeof(uid->vendor) - 1);
@@ -792,79 +720,40 @@ static int dasd_eckd_generate_uid(struct dasd_device *device)
 				private->vdsneq->uit[count]);
 		}
 	}
-	spin_unlock_irqrestore(get_ccwdev_lock(device->cdev), flags);
 	return 0;
 }
 
-static int dasd_eckd_get_uid(struct dasd_device *device, struct dasd_uid *uid)
+static struct dasd_ccw_req *dasd_eckd_build_rcd_lpm(struct dasd_device *device,
+						    void *rcd_buffer,
+						    struct ciw *ciw, __u8 lpm)
 {
-	struct dasd_eckd_private *private;
-	unsigned long flags;
-
-	if (device->private) {
-		private = (struct dasd_eckd_private *)device->private;
-		spin_lock_irqsave(get_ccwdev_lock(device->cdev), flags);
-		*uid = private->uid;
-		spin_unlock_irqrestore(get_ccwdev_lock(device->cdev), flags);
-		return 0;
-	}
-	return -EINVAL;
-}
-
-static void dasd_eckd_fill_rcd_cqr(struct dasd_device *device,
-				   struct dasd_ccw_req *cqr,
-				   __u8 *rcd_buffer,
-				   __u8 lpm)
-{
+	struct dasd_ccw_req *cqr;
 	struct ccw1 *ccw;
-	/*
-	 * buffer has to start with EBCDIC "V1.0" to show
-	 * support for virtual device SNEQ
-	 */
-	rcd_buffer[0] = 0xE5;
-	rcd_buffer[1] = 0xF1;
-	rcd_buffer[2] = 0x4B;
-	rcd_buffer[3] = 0xF0;
+
+	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1 /* RCD */, ciw->count,
+				   device);
+
+	if (IS_ERR(cqr)) {
+		DBF_DEV_EVENT(DBF_WARNING, device, "%s",
+			      "Could not allocate RCD request");
+		return cqr;
+	}
 
 	ccw = cqr->cpaddr;
-	ccw->cmd_code = DASD_ECKD_CCW_RCD;
-	ccw->flags = 0;
+	ccw->cmd_code = ciw->cmd;
 	ccw->cda = (__u32)(addr_t)rcd_buffer;
-	ccw->count = DASD_ECKD_RCD_DATA_SIZE;
-	cqr->magic = DASD_ECKD_MAGIC;
+	ccw->count = ciw->count;
 
 	cqr->startdev = device;
 	cqr->memdev = device;
 	cqr->block = NULL;
 	cqr->expires = 10*HZ;
 	cqr->lpm = lpm;
-	cqr->retries = 256;
+	clear_bit(DASD_CQR_FLAGS_USE_ERP, &cqr->flags);
+	cqr->retries = 2;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
-	set_bit(DASD_CQR_VERIFY_PATH, &cqr->flags);
-}
-
-static int dasd_eckd_read_conf_immediately(struct dasd_device *device,
-					   struct dasd_ccw_req *cqr,
-					   __u8 *rcd_buffer,
-					   __u8 lpm)
-{
-	struct ciw *ciw;
-	int rc;
-	/*
-	 * sanity check: scan for RCD command in extended SenseID data
-	 * some devices do not support RCD
-	 */
-	ciw = ccw_device_get_ciw(device->cdev, CIW_TYPE_RCD);
-	if (!ciw || ciw->cmd != DASD_ECKD_CCW_RCD)
-		return -EOPNOTSUPP;
-
-	dasd_eckd_fill_rcd_cqr(device, cqr, rcd_buffer, lpm);
-	clear_bit(DASD_CQR_FLAGS_USE_ERP, &cqr->flags);
-	set_bit(DASD_CQR_ALLOW_SLOCK, &cqr->flags);
-	cqr->retries = 5;
-	rc = dasd_sleep_on_immediatly(cqr);
-	return rc;
+	return cqr;
 }
 
 static int dasd_eckd_read_conf_lpm(struct dasd_device *device,
@@ -877,29 +766,32 @@ static int dasd_eckd_read_conf_lpm(struct dasd_device *device,
 	struct dasd_ccw_req *cqr;
 
 	/*
-	 * sanity check: scan for RCD command in extended SenseID data
-	 * some devices do not support RCD
+	 * scan for RCD command in extended SenseID data
 	 */
 	ciw = ccw_device_get_ciw(device->cdev, CIW_TYPE_RCD);
-	if (!ciw || ciw->cmd != DASD_ECKD_CCW_RCD) {
+	if (!ciw || ciw->cmd == 0) {
 		ret = -EOPNOTSUPP;
 		goto out_error;
 	}
-	rcd_buf = kzalloc(DASD_ECKD_RCD_DATA_SIZE, GFP_KERNEL | GFP_DMA);
+	rcd_buf = kzalloc(ciw->count, GFP_KERNEL | GFP_DMA);
 	if (!rcd_buf) {
 		ret = -ENOMEM;
 		goto out_error;
 	}
-	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1 /* RCD */,
-				   0, /* use rcd_buf as data ara */
-				   device);
+
+	/*
+	 * buffer has to start with EBCDIC "V1.0" to show
+	 * support for virtual device SNEQ
+	 */
+	rcd_buf[0] = 0xE5;
+	rcd_buf[1] = 0xF1;
+	rcd_buf[2] = 0x4B;
+	rcd_buf[3] = 0xF0;
+	cqr = dasd_eckd_build_rcd_lpm(device, rcd_buf, ciw, lpm);
 	if (IS_ERR(cqr)) {
-		DBF_DEV_EVENT(DBF_WARNING, device, "%s",
-			      "Could not allocate RCD request");
-		ret = -ENOMEM;
+		ret =  PTR_ERR(cqr);
 		goto out_error;
 	}
-	dasd_eckd_fill_rcd_cqr(device, cqr, rcd_buf, lpm);
 	ret = dasd_sleep_on(cqr);
 	/*
 	 * on success we update the user input parms
@@ -908,7 +800,7 @@ static int dasd_eckd_read_conf_lpm(struct dasd_device *device,
 	if (ret)
 		goto out_error;
 
-	*rcd_buffer_size = DASD_ECKD_RCD_DATA_SIZE;
+	*rcd_buffer_size = ciw->count;
 	*rcd_buffer = rcd_buf;
 	return 0;
 out_error:
@@ -978,18 +870,18 @@ static int dasd_eckd_read_conf(struct dasd_device *device)
 	void *conf_data;
 	int conf_len, conf_data_saved;
 	int rc;
-	__u8 lpm, opm;
+	__u8 lpm;
 	struct dasd_eckd_private *private;
-	struct dasd_path *path_data;
+	struct dasd_eckd_path *path_data;
 
 	private = (struct dasd_eckd_private *) device->private;
-	path_data = &device->path_data;
-	opm = ccw_device_get_path_mask(device->cdev);
+	path_data = (struct dasd_eckd_path *) &private->path_data;
+	path_data->opm = ccw_device_get_path_mask(device->cdev);
 	lpm = 0x80;
 	conf_data_saved = 0;
 	/* get configuration data per operational path */
 	for (lpm = 0x80; lpm; lpm>>= 1) {
-		if (lpm & opm) {
+		if (lpm & path_data->opm){
 			rc = dasd_eckd_read_conf_lpm(device, &conf_data,
 						     &conf_len, lpm);
 			if (rc && rc != -EOPNOTSUPP) {	/* -EOPNOTSUPP is ok */
@@ -1002,8 +894,6 @@ static int dasd_eckd_read_conf(struct dasd_device *device)
 				DBF_EVENT_DEVID(DBF_WARNING, device->cdev, "%s",
 						"No configuration data "
 						"retrieved");
-				/* no further analysis possible */
-				path_data->opm |= lpm;
 				continue;	/* no error */
 			}
 			/* save first valid configuration data */
@@ -1027,145 +917,10 @@ static int dasd_eckd_read_conf(struct dasd_device *device)
 				path_data->ppm |= lpm;
 				break;
 			}
-			path_data->opm |= lpm;
 			if (conf_data != private->conf_data)
 				kfree(conf_data);
 		}
 	}
-	return 0;
-}
-
-static int verify_fcx_max_data(struct dasd_device *device, __u8 lpm)
-{
-	struct dasd_eckd_private *private;
-	int mdc;
-	u32 fcx_max_data;
-
-	private = (struct dasd_eckd_private *) device->private;
-	if (private->fcx_max_data) {
-		mdc = ccw_device_get_mdc(device->cdev, lpm);
-		if ((mdc < 0)) {
-			dev_warn(&device->cdev->dev,
-				 "Detecting the maximum data size for zHPF "
-				 "requests failed (rc=%d) for a new path %x\n",
-				 mdc, lpm);
-			return mdc;
-		}
-		fcx_max_data = mdc * FCX_MAX_DATA_FACTOR;
-		if (fcx_max_data < private->fcx_max_data) {
-			dev_warn(&device->cdev->dev,
-				 "The maximum data size for zHPF requests %u "
-				 "on a new path %x is below the active maximum "
-				 "%u\n", fcx_max_data, lpm,
-				 private->fcx_max_data);
-			return -EACCES;
-		}
-	}
-	return 0;
-}
-
-static void do_path_verification_work(struct work_struct *work)
-{
-	struct path_verification_work_data *data;
-	struct dasd_device *device;
-	__u8 lpm, opm, npm, ppm, epm;
-	unsigned long flags;
-	int rc;
-
-	data = container_of(work, struct path_verification_work_data, worker);
-	device = data->device;
-
-	opm = 0;
-	npm = 0;
-	ppm = 0;
-	epm = 0;
-	for (lpm = 0x80; lpm; lpm >>= 1) {
-		if (lpm & data->tbvpm) {
-			memset(data->rcd_buffer, 0, sizeof(data->rcd_buffer));
-			memset(&data->cqr, 0, sizeof(data->cqr));
-			data->cqr.cpaddr = &data->ccw;
-			rc = dasd_eckd_read_conf_immediately(device, &data->cqr,
-							     data->rcd_buffer,
-							     lpm);
-			if (!rc) {
-				switch (dasd_eckd_path_access(data->rcd_buffer,
-						     DASD_ECKD_RCD_DATA_SIZE)) {
-				case 0x02:
-					npm |= lpm;
-					break;
-				case 0x03:
-					ppm |= lpm;
-					break;
-				}
-				opm |= lpm;
-			} else if (rc == -EOPNOTSUPP) {
-				DBF_EVENT_DEVID(DBF_WARNING, device->cdev, "%s",
-				       "path verification: No configuration "
-				       "data retrieved");
-				opm |= lpm;
-			} else if (rc == -EAGAIN) {
-				DBF_EVENT_DEVID(DBF_WARNING, device->cdev, "%s",
-					"path verification: device is stopped,"
-					" try again later");
-				epm |= lpm;
-			} else {
-				dev_warn(&device->cdev->dev,
-					 "Reading device feature codes failed "
-					 "(rc=%d) for new path %x\n", rc, lpm);
-				continue;
-			}
-			if (verify_fcx_max_data(device, lpm)) {
-				opm &= ~lpm;
-				npm &= ~lpm;
-				ppm &= ~lpm;
-			}
-		}
-	}
-	/*
-	 * There is a small chance that a path is lost again between
-	 * above path verification and the following modification of
-	 * the device opm mask. We could avoid that race here by using
-	 * yet another path mask, but we rather deal with this unlikely
-	 * situation in dasd_start_IO.
-	 */
-	spin_lock_irqsave(get_ccwdev_lock(device->cdev), flags);
-	if (!device->path_data.opm && opm) {
-		device->path_data.opm = opm;
-		dasd_generic_path_operational(device);
-	} else
-		device->path_data.opm |= opm;
-	device->path_data.npm |= npm;
-	device->path_data.ppm |= ppm;
-	device->path_data.tbvpm |= epm;
-	spin_unlock_irqrestore(get_ccwdev_lock(device->cdev), flags);
-
-	dasd_put_device(device);
-	if (data->isglobal)
-		mutex_unlock(&dasd_path_verification_mutex);
-	else
-		kfree(data);
-}
-
-static int dasd_eckd_verify_path(struct dasd_device *device, __u8 lpm)
-{
-	struct path_verification_work_data *data;
-
-	data = kmalloc(sizeof(*data), GFP_ATOMIC | GFP_DMA);
-	if (!data) {
-		if (mutex_trylock(&dasd_path_verification_mutex)) {
-			data = path_verification_worker;
-			data->isglobal = 1;
-		} else
-			return -ENOMEM;
-	} else {
-		memset(data, 0, sizeof(*data));
-		data->isglobal = 0;
-	}
-	INIT_WORK(&data->worker, do_path_verification_work);
-	dasd_get_device(device);
-	data->device = device;
-	data->tbvpm = lpm;
-	schedule_work(&data->worker);
 	return 0;
 }
 
@@ -1192,7 +947,8 @@ static int dasd_eckd_read_features(struct dasd_device *device)
 	cqr->startdev = device;
 	cqr->memdev = device;
 	cqr->block = NULL;
-	cqr->retries = 256;
+	clear_bit(DASD_CQR_FLAGS_USE_ERP, &cqr->flags);
+	cqr->retries = 5;
 	cqr->expires = 10 * HZ;
 
 	/* Prepare for Read Subsystem Data */
@@ -1254,9 +1010,9 @@ static struct dasd_ccw_req *dasd_eckd_build_psf_ssc(struct dasd_device *device,
 	}
 	psf_ssc_data = (struct dasd_psf_ssc_data *)cqr->data;
 	psf_ssc_data->order = PSF_ORDER_SSC;
-	psf_ssc_data->suborder = 0xc0;
+	psf_ssc_data->suborder = 0x40;
 	if (enable_pav) {
-		psf_ssc_data->suborder |= 0x08;
+		psf_ssc_data->suborder |= 0x88;
 		psf_ssc_data->reserved[0] = 0x88;
 	}
 	ccw = cqr->cpaddr;
@@ -1267,7 +1023,6 @@ static struct dasd_ccw_req *dasd_eckd_build_psf_ssc(struct dasd_device *device,
 	cqr->startdev = device;
 	cqr->memdev = device;
 	cqr->block = NULL;
-	cqr->retries = 256;
 	cqr->expires = 10*HZ;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
@@ -1300,7 +1055,7 @@ dasd_eckd_psf_ssc(struct dasd_device *device, int enable_pav)
 /*
  * Valide storage server of current device.
  */
-static void dasd_eckd_validate_server(struct dasd_device *device)
+static int dasd_eckd_validate_server(struct dasd_device *device)
 {
 	int rc;
 	struct dasd_eckd_private *private;
@@ -1311,43 +1066,13 @@ static void dasd_eckd_validate_server(struct dasd_device *device)
 	else
 		enable_pav = 1;
 	rc = dasd_eckd_psf_ssc(device, enable_pav);
-
 	/* may be requested feature is not available on server,
 	 * therefore just report error and go ahead */
 	private = (struct dasd_eckd_private *) device->private;
 	DBF_EVENT_DEVID(DBF_WARNING, device->cdev, "PSF-SSC for SSID %04x "
 			"returned rc=%d", private->uid.ssid, rc);
-}
-
-static u32 get_fcx_max_data(struct dasd_device *device)
-{
-#if defined(CONFIG_64BIT)
-	int tpm, mdc;
-	int fcx_in_css, fcx_in_gneq, fcx_in_features;
-	struct dasd_eckd_private *private;
-
-	if (dasd_nofcx)
-		return 0;
-	/* is transport mode supported? */
-	private = (struct dasd_eckd_private *) device->private;
-	fcx_in_css = css_general_characteristics.fcx;
-	fcx_in_gneq = private->gneq->reserved2[7] & 0x04;
-	fcx_in_features = private->features.feature[40] & 0x80;
-	tpm = fcx_in_css && fcx_in_gneq && fcx_in_features;
-
-	if (!tpm)
-		return 0;
-
-	mdc = ccw_device_get_mdc(device->cdev, 0);
-	if (mdc < 0) {
-		dev_warn(&device->cdev->dev, "Detecting the maximum supported"
-			 " data size for zHPF requests failed\n");
-		return 0;
-	} else
-		return mdc * FCX_MAX_DATA_FACTOR;
-#else
-	return 0;
-#endif
+	/* RE-Read Configuration Data */
+	return dasd_eckd_read_conf(device);
 }
 
 /*
@@ -1359,20 +1084,8 @@ dasd_eckd_check_characteristics(struct dasd_device *device)
 {
 	struct dasd_eckd_private *private;
 	struct dasd_block *block;
-	struct dasd_uid temp_uid;
-	int is_known, rc, i;
-	int readonly;
-	unsigned long value;
+	int is_known, rc;
 
-	if (!ccw_device_is_pathgroup(device->cdev)) {
-		dev_warn(&device->cdev->dev,
-			 "A channel path group could not be established\n");
-		return -EIO;
-	}
-	if (!ccw_device_is_multipath(device->cdev)) {
-		dev_info(&device->cdev->dev,
-			 "The DASD is not operating in multipath mode\n");
-	}
 	private = (struct dasd_eckd_private *) device->private;
 	if (!private) {
 		private = kzalloc(sizeof(*private), GFP_KERNEL | GFP_DMA);
@@ -1397,25 +1110,13 @@ dasd_eckd_check_characteristics(struct dasd_device *device)
 	if (rc)
 		goto out_err1;
 
-	/* set default timeout */
-	device->default_expires = DASD_EXPIRES;
-	if (private->gneq) {
-		value = 1;
-		for (i = 0; i < private->gneq->timeout.value; i++)
-			value = 10 * value;
-		value = value * private->gneq->timeout.number;
-		/* do not accept useless values */
-		if (value != 0 && value <= DASD_EXPIRES_MAX)
-			device->default_expires = value;
-	}
-
-	/* Generate device unique id */
-	rc = dasd_eckd_generate_uid(device);
+	/* Generate device unique id and register in devmap */
+	rc = dasd_eckd_generate_uid(device, &private->uid);
 	if (rc)
 		goto out_err1;
+	dasd_set_uid(device->cdev, &private->uid);
 
-	dasd_eckd_get_uid(device, &temp_uid);
-	if (temp_uid.type == UA_BASE_DEVICE) {
+	if (private->uid.type == UA_BASE_DEVICE) {
 		block = dasd_alloc_block();
 		if (IS_ERR(block)) {
 			DBF_EVENT_DEVID(DBF_WARNING, device->cdev, "%s",
@@ -1434,21 +1135,12 @@ dasd_eckd_check_characteristics(struct dasd_device *device)
 		rc = is_known;
 		goto out_err2;
 	}
-	/*
-	 * dasd_eckd_validate_server is done on the first device that
-	 * is found for an LCU. All later other devices have to wait
-	 * for it, so they will read the correct feature codes.
-	 */
 	if (!is_known) {
-		dasd_eckd_validate_server(device);
-		dasd_alias_lcu_setup_complete(device);
-	} else
-		dasd_alias_wait_for_lcu_setup(device);
-
-	/* device may report different configuration data after LCU setup */
-	rc = dasd_eckd_read_conf(device);
-	if (rc)
-		goto out_err3;
+		/* new lcu found */
+		rc = dasd_eckd_validate_server(device); /* will switch pav on */
+		if (rc)
+			goto out_err3;
+	}
 
 	/* Read Feature Codes */
 	dasd_eckd_read_features(device);
@@ -1461,29 +1153,22 @@ dasd_eckd_check_characteristics(struct dasd_device *device)
 				"Read device characteristic failed, rc=%d", rc);
 		goto out_err3;
 	}
-	/* find the valid cylinder size */
+	/* find the vaild cylinder size */
 	if (private->rdc_data.no_cyl == LV_COMPAT_CYL &&
 	    private->rdc_data.long_no_cyl)
 		private->real_cyl = private->rdc_data.long_no_cyl;
 	else
 		private->real_cyl = private->rdc_data.no_cyl;
 
-	private->fcx_max_data = get_fcx_max_data(device);
-
-	readonly = dasd_device_is_ro(device);
-	if (readonly)
-		set_bit(DASD_FLAG_DEVICE_RO, &device->flags);
-
 	dev_info(&device->cdev->dev, "New DASD %04X/%02X (CU %04X/%02X) "
-		 "with %d cylinders, %d heads, %d sectors%s\n",
+		 "with %d cylinders, %d heads, %d sectors\n",
 		 private->rdc_data.dev_type,
 		 private->rdc_data.dev_model,
 		 private->rdc_data.cu_type,
 		 private->rdc_data.cu_model.model,
 		 private->real_cyl,
 		 private->rdc_data.trk_per_cyl,
-		 private->rdc_data.sec_per_trk,
-		 readonly ? ", read-only device" : "");
+		 private->rdc_data.sec_per_trk);
 	return 0;
 
 out_err3:
@@ -1566,27 +1251,10 @@ dasd_eckd_analysis_ccw(struct dasd_device *device)
 	cqr->block = NULL;
 	cqr->startdev = device;
 	cqr->memdev = device;
-	cqr->retries = 255;
+	cqr->retries = 0;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
 	return cqr;
-}
-
-/* differentiate between 'no record found' and any other error */
-static int dasd_eckd_analysis_evaluation(struct dasd_ccw_req *init_cqr)
-{
-	char *sense;
-	if (init_cqr->status == DASD_CQR_DONE)
-		return INIT_CQR_OK;
-	else if (init_cqr->status == DASD_CQR_NEED_ERP ||
-		 init_cqr->status == DASD_CQR_FAILED) {
-		sense = dasd_get_sense(&init_cqr->irb);
-		if (sense && (sense[1] & SNS1_NO_REC_FOUND))
-			return INIT_CQR_UNFORMATTED;
-		else
-			return INIT_CQR_ERROR;
-	} else
-		return INIT_CQR_ERROR;
 }
 
 /*
@@ -1596,74 +1264,53 @@ static int dasd_eckd_analysis_evaluation(struct dasd_ccw_req *init_cqr)
  * dasd_eckd_do_analysis again (if the devices has not been marked
  * for deletion in the meantime).
  */
-static void dasd_eckd_analysis_callback(struct dasd_ccw_req *init_cqr,
-					void *data)
+static void
+dasd_eckd_analysis_callback(struct dasd_ccw_req *init_cqr, void *data)
 {
 	struct dasd_eckd_private *private;
 	struct dasd_device *device;
 
 	device = init_cqr->startdev;
 	private = (struct dasd_eckd_private *) device->private;
-	private->init_cqr_status = dasd_eckd_analysis_evaluation(init_cqr);
+	private->init_cqr_status = init_cqr->status;
 	dasd_sfree_request(init_cqr, device);
 	dasd_kick_device(device);
 }
 
-static int dasd_eckd_start_analysis(struct dasd_block *block)
+static int
+dasd_eckd_start_analysis(struct dasd_block *block)
 {
+	struct dasd_eckd_private *private;
 	struct dasd_ccw_req *init_cqr;
 
+	private = (struct dasd_eckd_private *) block->base->private;
 	init_cqr = dasd_eckd_analysis_ccw(block->base);
 	if (IS_ERR(init_cqr))
 		return PTR_ERR(init_cqr);
 	init_cqr->callback = dasd_eckd_analysis_callback;
 	init_cqr->callback_data = NULL;
 	init_cqr->expires = 5*HZ;
-	/* first try without ERP, so we can later handle unformatted
-	 * devices as special case
-	 */
-	clear_bit(DASD_CQR_FLAGS_USE_ERP, &init_cqr->flags);
-	init_cqr->retries = 0;
 	dasd_add_request_head(init_cqr);
 	return -EAGAIN;
 }
 
-static int dasd_eckd_end_analysis(struct dasd_block *block)
+static int
+dasd_eckd_end_analysis(struct dasd_block *block)
 {
 	struct dasd_device *device;
 	struct dasd_eckd_private *private;
 	struct eckd_count *count_area;
 	unsigned int sb, blk_per_trk;
 	int status, i;
-	struct dasd_ccw_req *init_cqr;
 
 	device = block->base;
 	private = (struct dasd_eckd_private *) device->private;
 	status = private->init_cqr_status;
 	private->init_cqr_status = -1;
-	if (status == INIT_CQR_ERROR) {
-		/* try again, this time with full ERP */
-		init_cqr = dasd_eckd_analysis_ccw(device);
-		dasd_sleep_on(init_cqr);
-		status = dasd_eckd_analysis_evaluation(init_cqr);
-		dasd_sfree_request(init_cqr, device);
-	}
-
-	if (device->features & DASD_FEATURE_USERAW) {
-		block->bp_block = DASD_RAW_BLOCKSIZE;
-		blk_per_trk = DASD_RAW_BLOCK_PER_TRACK;
-		block->s2b_shift = 3;
-		goto raw;
-	}
-
-	if (status == INIT_CQR_UNFORMATTED) {
-		dev_warn(&device->cdev->dev, "The DASD is not formatted\n");
+	if (status != DASD_CQR_DONE) {
+		dev_warn(&device->cdev->dev,
+			    "The DASD is not formatted\n");
 		return -EMEDIUMTYPE;
-	} else if (status == INIT_CQR_ERROR) {
-		dev_err(&device->cdev->dev,
-			"Detecting the DASD disk layout failed because "
-			"of an I/O error\n");
-		return -EIO;
 	}
 
 	private->uses_cdl = 1;
@@ -1693,7 +1340,6 @@ static int dasd_eckd_end_analysis(struct dasd_block *block)
 			dev_warn(&device->cdev->dev,
 				 "Track 0 has no records following the VTOC\n");
 	}
-
 	if (count_area != NULL && count_area->kl == 0) {
 		/* we found notthing violating our disk layout */
 		if (dasd_check_blocksize(count_area->dl) == 0)
@@ -1709,8 +1355,6 @@ static int dasd_eckd_end_analysis(struct dasd_block *block)
 		block->s2b_shift++;
 
 	blk_per_trk = recs_per_track(&private->rdc_data, 0, block->bp_block);
-
-raw:
 	block->blocks = (private->real_cyl *
 			  private->rdc_data.trk_per_cyl *
 			  blk_per_trk);
@@ -1746,7 +1390,6 @@ static int dasd_eckd_ready_to_online(struct dasd_device *device)
 
 static int dasd_eckd_online_to_ready(struct dasd_device *device)
 {
-	cancel_work_sync(&device->reload_device);
 	return dasd_alias_remove_device(device);
 };
 
@@ -1959,7 +1602,8 @@ dasd_eckd_format_device(struct dasd_device * device,
 	}
 	fcp->startdev = device;
 	fcp->memdev = device;
-	fcp->retries = 256;
+	clear_bit(DASD_CQR_FLAGS_USE_ERP, &fcp->flags);
+	fcp->retries = 5;	/* set retry counter to enable default ERP */
 	fcp->buildclk = get_clock();
 	fcp->status = DASD_CQR_FILLED;
 	return fcp;
@@ -1971,7 +1615,6 @@ static void dasd_eckd_handle_terminated_request(struct dasd_ccw_req *cqr)
 	if (cqr->block && (cqr->startdev != cqr->block->base)) {
 		dasd_eckd_reset_ccw_to_base_io(cqr);
 		cqr->startdev = cqr->block->base;
-		cqr->lpm = cqr->block->base->path_data.opm;
 	}
 };
 
@@ -2000,68 +1643,60 @@ dasd_eckd_erp_postaction(struct dasd_ccw_req * cqr)
 	return dasd_default_erp_postaction;
 }
 
-static void dasd_eckd_check_for_device_change(struct dasd_device *device,
-					      struct dasd_ccw_req *cqr,
-					      struct irb *irb)
+
+static void dasd_eckd_handle_unsolicited_interrupt(struct dasd_device *device,
+						   struct irb *irb)
 {
 	char mask;
 	char *sense = NULL;
-	struct dasd_eckd_private *private;
 
-	private = (struct dasd_eckd_private *) device->private;
 	/* first of all check for state change pending interrupt */
 	mask = DEV_STAT_ATTENTION | DEV_STAT_DEV_END | DEV_STAT_UNIT_EXCEP;
 	if ((scsw_dstat(&irb->scsw) & mask) == mask) {
-		/* for alias only and not in offline processing*/
-		if (!device->block && private->lcu &&
-		    !test_bit(DASD_FLAG_OFFLINE, &device->flags)) {
-			/*
-			 * the state change could be caused by an alias
-			 * reassignment remove device from alias handling
-			 * to prevent new requests from being scheduled on
-			 * the wrong alias device
-			 */
-			dasd_alias_remove_device(device);
-
-			/* schedule worker to reload device */
-			dasd_reload_device(device);
-		}
 		dasd_generic_handle_state_change(device);
 		return;
 	}
 
-	sense = dasd_get_sense(irb);
-	if (!sense)
-		return;
-
 	/* summary unit check */
-	if ((sense[27] & DASD_SENSE_BIT_0) && (sense[7] == 0x0D) &&
-	    (scsw_dstat(&irb->scsw) & DEV_STAT_UNIT_CHECK)) {
+	if ((scsw_dstat(&irb->scsw) & DEV_STAT_UNIT_CHECK) &&
+	    (irb->ecw[7] == 0x0D)) {
 		dasd_alias_handle_summary_unit_check(device, irb);
 		return;
 	}
 
+	sense = dasd_get_sense(irb);
 	/* service information message SIM */
-	if (!cqr && !(sense[27] & DASD_SENSE_BIT_0) &&
+	if (sense && !(sense[27] & DASD_SENSE_BIT_0) &&
 	    ((sense[6] & DASD_SIM_SENSE) == DASD_SIM_SENSE)) {
 		dasd_3990_erp_handle_sim(device, sense);
+		dasd_schedule_device_bh(device);
 		return;
 	}
 
-	/* loss of device reservation is handled via base devices only
-	 * as alias devices may be used with several bases
-	 */
-	if (device->block && (sense[27] & DASD_SENSE_BIT_0) &&
-	    (sense[7] == 0x3F) &&
-	    (scsw_dstat(&irb->scsw) & DEV_STAT_UNIT_CHECK) &&
-	    test_bit(DASD_FLAG_IS_RESERVED, &device->flags)) {
-		if (device->features & DASD_FEATURE_FAILONSLCK)
-			set_bit(DASD_FLAG_LOCK_STOLEN, &device->flags);
-		clear_bit(DASD_FLAG_IS_RESERVED, &device->flags);
-		dev_err(&device->cdev->dev,
-			"The device reservation was lost\n");
+	if ((scsw_cc(&irb->scsw) == 1) &&
+	    (scsw_fctl(&irb->scsw) & SCSW_FCTL_START_FUNC) &&
+	    (scsw_actl(&irb->scsw) & SCSW_ACTL_START_PEND) &&
+	    (scsw_stctl(&irb->scsw) & SCSW_STCTL_STATUS_PEND)) {
+		/* fake irb do nothing, they are handled elsewhere */
+		dasd_schedule_device_bh(device);
+		return;
 	}
-}
+
+	if (!sense) {
+		/* just report other unsolicited interrupts */
+		DBF_DEV_EVENT(DBF_ERR, device, "%s",
+			    "unsolicited interrupt received");
+	} else {
+		DBF_DEV_EVENT(DBF_ERR, device, "%s",
+			    "unsolicited interrupt received "
+			    "(sense available)");
+		device->discipline->dump_sense_dbf(device, irb, "unsolicited");
+	}
+
+	dasd_schedule_device_bh(device);
+	return;
+};
+
 
 static struct dasd_ccw_req *dasd_eckd_build_cp_cmd_single(
 					       struct dasd_device *startdev,
@@ -2241,8 +1876,8 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_cmd_single(
 	cqr->startdev = startdev;
 	cqr->memdev = startdev;
 	cqr->block = block;
-	cqr->expires = startdev->default_expires * HZ;	/* default 5 minutes */
-	cqr->lpm = startdev->path_data.ppm;
+	cqr->expires = 5 * 60 * HZ;	/* 5 minutes */
+	cqr->lpm = private->path_data.ppm;
 	cqr->retries = 256;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
@@ -2262,6 +1897,7 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_cmd_track(
 					       unsigned int blk_per_trk,
 					       unsigned int blksize)
 {
+	struct dasd_eckd_private *private;
 	unsigned long *idaws;
 	struct dasd_ccw_req *cqr;
 	struct ccw1 *ccw;
@@ -2280,6 +1916,7 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_cmd_track(
 	unsigned int recoffs;
 
 	basedev = block->base;
+	private = (struct dasd_eckd_private *) basedev->private;
 	if (rq_data_dir(req) == READ)
 		cmd = DASD_ECKD_CCW_READ_TRACK_DATA;
 	else if (rq_data_dir(req) == WRITE)
@@ -2416,8 +2053,8 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_cmd_track(
 	cqr->startdev = startdev;
 	cqr->memdev = startdev;
 	cqr->block = block;
-	cqr->expires = startdev->default_expires * HZ;	/* default 5 minutes */
-	cqr->lpm = startdev->path_data.ppm;
+	cqr->expires = 5 * 60 * HZ;	/* 5 minutes */
+	cqr->lpm = private->path_data.ppm;
 	cqr->retries = 256;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
@@ -2552,7 +2189,8 @@ static int prepare_itcw(struct itcw *itcw,
 
 	dcw = itcw_add_dcw(itcw, pfx_cmd, 0,
 		     &pfxdata, sizeof(pfxdata), total_data_size);
-	return IS_ERR(dcw) ? PTR_ERR(dcw) : 0;
+
+	return rc;
 }
 
 static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
@@ -2568,6 +2206,7 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
 					       unsigned int blk_per_trk,
 					       unsigned int blksize)
 {
+	struct dasd_eckd_private *private;
 	struct dasd_ccw_req *cqr;
 	struct req_iterator iter;
 	struct bio_vec *bv;
@@ -2580,14 +2219,9 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
 	struct tidaw *last_tidaw = NULL;
 	int itcw_op;
 	size_t itcw_size;
-	u8 tidaw_flags;
-	unsigned int seg_len, part_len, len_to_track_end;
-	unsigned char new_track;
-	sector_t recid, trkid;
-	unsigned int offs;
-	unsigned int count, count_to_trk_end;
 
 	basedev = block->base;
+	private = (struct dasd_eckd_private *) basedev->private;
 	if (rq_data_dir(req) == READ) {
 		cmd = DASD_ECKD_CCW_READ_TRACK_DATA;
 		itcw_op = ITCW_OP_READ;
@@ -2600,22 +2234,27 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
 	/* trackbased I/O needs address all memory via TIDAWs,
 	 * not just for 64 bit addresses. This allows us to map
 	 * each segment directly to one tidaw.
-	 * In the case of write requests, additional tidaws may
-	 * be needed when a segment crosses a track boundary.
 	 */
 	trkcount = last_trk - first_trk + 1;
 	ctidaw = 0;
 	rq_for_each_segment(bv, req, iter) {
 		++ctidaw;
 	}
-	if (rq_data_dir(req) == WRITE)
-		ctidaw += (last_trk - first_trk);
 
 	/* Allocate the ccw request. */
 	itcw_size = itcw_calc_size(0, ctidaw, 0);
 	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 0, itcw_size, startdev);
 	if (IS_ERR(cqr))
 		return cqr;
+
+	cqr->cpmode = 1;
+	cqr->startdev = startdev;
+	cqr->memdev = startdev;
+	cqr->block = block;
+	cqr->expires = 100*HZ;
+	cqr->buildclk = get_clock();
+	cqr->status = DASD_CQR_FILLED;
+	cqr->retries = 10;
 
 	/* transfer length factor: how many bytes to read from the last track */
 	if (first_trk == last_trk)
@@ -2625,11 +2264,8 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
 	tlf *= blksize;
 
 	itcw = itcw_init(cqr->data, itcw_size, itcw_op, 0, ctidaw, 0);
-	if (IS_ERR(itcw)) {
-		dasd_sfree_request(cqr, startdev);
-		return ERR_PTR(-EINVAL);
-	}
 	cqr->cpaddr = itcw_get_tcw(itcw);
+
 	if (prepare_itcw(itcw, first_trk, last_trk,
 			 cmd, basedev, startdev,
 			 first_offs + 1,
@@ -2642,70 +2278,31 @@ static struct dasd_ccw_req *dasd_eckd_build_cp_tpm_track(
 		dasd_sfree_request(cqr, startdev);
 		return ERR_PTR(-EAGAIN);
 	}
-	len_to_track_end = 0;
+
 	/*
 	 * A tidaw can address 4k of memory, but must not cross page boundaries
 	 * We can let the block layer handle this by setting
 	 * blk_queue_segment_boundary to page boundaries and
 	 * blk_max_segment_size to page size when setting up the request queue.
-	 * For write requests, a TIDAW must not cross track boundaries, because
-	 * we have to set the CBC flag on the last tidaw for each track.
 	 */
-	if (rq_data_dir(req) == WRITE) {
-		new_track = 1;
-		recid = first_rec;
-		rq_for_each_segment(bv, req, iter) {
-			dst = page_address(bv->bv_page) + bv->bv_offset;
-			seg_len = bv->bv_len;
-			while (seg_len) {
-				if (new_track) {
-					trkid = recid;
-					offs = sector_div(trkid, blk_per_trk);
-					count_to_trk_end = blk_per_trk - offs;
-					count = min((last_rec - recid + 1),
-						    (sector_t)count_to_trk_end);
-					len_to_track_end = count * blksize;
-					recid += count;
-					new_track = 0;
-				}
-				part_len = min(seg_len, len_to_track_end);
-				seg_len -= part_len;
-				len_to_track_end -= part_len;
-				/* We need to end the tidaw at track end */
-				if (!len_to_track_end) {
-					new_track = 1;
-					tidaw_flags = TIDAW_FLAGS_INSERT_CBC;
-				} else
-					tidaw_flags = 0;
-				last_tidaw = itcw_add_tidaw(itcw, tidaw_flags,
-							    dst, part_len);
-				if (IS_ERR(last_tidaw))
-					return ERR_PTR(-EINVAL);
-				dst += part_len;
-			}
-		}
-	} else {
-		rq_for_each_segment(bv, req, iter) {
-			dst = page_address(bv->bv_page) + bv->bv_offset;
-			last_tidaw = itcw_add_tidaw(itcw, 0x00,
-						    dst, bv->bv_len);
-			if (IS_ERR(last_tidaw))
-				return ERR_PTR(-EINVAL);
-		}
+	rq_for_each_segment(bv, req, iter) {
+		dst = page_address(bv->bv_page) + bv->bv_offset;
+		last_tidaw = itcw_add_tidaw(itcw, 0x00, dst, bv->bv_len);
+		if (IS_ERR(last_tidaw))
+			return (struct dasd_ccw_req *)last_tidaw;
 	}
-	last_tidaw->flags |= TIDAW_FLAGS_LAST;
-	last_tidaw->flags &= ~TIDAW_FLAGS_INSERT_CBC;
+
+	last_tidaw->flags |= 0x80;
 	itcw_finalize(itcw);
 
 	if (blk_noretry_request(req) ||
 	    block->base->features & DASD_FEATURE_FAILFAST)
 		set_bit(DASD_CQR_FLAGS_FAILFAST, &cqr->flags);
-	cqr->cpmode = 1;
 	cqr->startdev = startdev;
 	cqr->memdev = startdev;
 	cqr->block = block;
-	cqr->expires = startdev->default_expires * HZ;	/* default 5 minutes */
-	cqr->lpm = startdev->path_data.ppm;
+	cqr->expires = 5 * 60 * HZ;	/* 5 minutes */
+	cqr->lpm = private->path_data.ppm;
 	cqr->retries = 256;
 	cqr->buildclk = get_clock();
 	cqr->status = DASD_CQR_FILLED;
@@ -2716,9 +2313,11 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 					       struct dasd_block *block,
 					       struct request *req)
 {
-	int cmdrtd, cmdwtd;
+	int tpm, cmdrtd, cmdwtd;
 	int use_prefix;
-	int fcx_multitrack;
+#if defined(CONFIG_64BIT)
+	int fcx_in_css, fcx_in_gneq, fcx_in_features;
+#endif
 	struct dasd_eckd_private *private;
 	struct dasd_device *basedev;
 	sector_t first_rec, last_rec;
@@ -2726,7 +2325,6 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 	unsigned int first_offs, last_offs;
 	unsigned int blk_per_trk, blksize;
 	int cdlspecial;
-	unsigned int data_size;
 	struct dasd_ccw_req *cqr;
 
 	basedev = block->base;
@@ -2745,11 +2343,15 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 	last_offs = sector_div(last_trk, blk_per_trk);
 	cdlspecial = (private->uses_cdl && first_rec < 2*blk_per_trk);
 
-	fcx_multitrack = private->features.feature[40] & 0x20;
-	data_size = blk_rq_bytes(req);
-	/* tpm write request add CBC data on each track boundary */
-	if (rq_data_dir(req) == WRITE)
-		data_size += (last_trk - first_trk) * 4;
+	/* is transport mode supported? */
+#if defined(CONFIG_64BIT)
+	fcx_in_css = css_general_characteristics.fcx;
+	fcx_in_gneq = private->gneq->reserved2[7] & 0x04;
+	fcx_in_features = private->features.feature[40] & 0x80;
+	tpm = fcx_in_css && fcx_in_gneq && fcx_in_features;
+#else
+	tpm = 0;
+#endif
 
 	/* is read track data and write track data in command mode supported? */
 	cmdrtd = private->features.feature[9] & 0x20;
@@ -2759,15 +2361,13 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 	cqr = NULL;
 	if (cdlspecial || dasd_page_cache) {
 		/* do nothing, just fall through to the cmd mode single case */
-	} else if ((data_size <= private->fcx_max_data)
-		   && (fcx_multitrack || (first_trk == last_trk))) {
+	} else if (!dasd_nofcx && tpm && (first_trk == last_trk)) {
 		cqr = dasd_eckd_build_cp_tpm_track(startdev, block, req,
 						    first_rec, last_rec,
 						    first_trk, last_trk,
 						    first_offs, last_offs,
 						    blk_per_trk, blksize);
-		if (IS_ERR(cqr) && (PTR_ERR(cqr) != -EAGAIN) &&
-		    (PTR_ERR(cqr) != -ENOMEM))
+		if (IS_ERR(cqr) && PTR_ERR(cqr) != -EAGAIN)
 			cqr = NULL;
 	} else if (use_prefix &&
 		   (((rq_data_dir(req) == READ) && cmdrtd) ||
@@ -2777,8 +2377,7 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 						   first_trk, last_trk,
 						   first_offs, last_offs,
 						   blk_per_trk, blksize);
-		if (IS_ERR(cqr) && (PTR_ERR(cqr) != -EAGAIN) &&
-		    (PTR_ERR(cqr) != -ENOMEM))
+		if (IS_ERR(cqr) && PTR_ERR(cqr) != -EAGAIN)
 			cqr = NULL;
 	}
 	if (!cqr)
@@ -2789,133 +2388,6 @@ static struct dasd_ccw_req *dasd_eckd_build_cp(struct dasd_device *startdev,
 						    blk_per_trk, blksize);
 	return cqr;
 }
-
-static struct dasd_ccw_req *dasd_raw_build_cp(struct dasd_device *startdev,
-					       struct dasd_block *block,
-					       struct request *req)
-{
-	unsigned long *idaws;
-	struct dasd_device *basedev;
-	struct dasd_ccw_req *cqr;
-	struct ccw1 *ccw;
-	struct req_iterator iter;
-	struct bio_vec *bv;
-	char *dst;
-	unsigned char cmd;
-	unsigned int trkcount;
-	unsigned int seg_len, len_to_track_end;
-	unsigned int first_offs;
-	unsigned int cidaw, cplength, datasize;
-	sector_t first_trk, last_trk;
-	unsigned int pfx_datasize;
-
-	/*
-	 * raw track access needs to be mutiple of 64k and on 64k boundary
-	 */
-	if ((blk_rq_pos(req) % DASD_RAW_SECTORS_PER_TRACK) != 0) {
-		cqr = ERR_PTR(-EINVAL);
-		goto out;
-	}
-	if (((blk_rq_pos(req) + blk_rq_sectors(req)) %
-	     DASD_RAW_SECTORS_PER_TRACK) != 0) {
-		cqr = ERR_PTR(-EINVAL);
-		goto out;
-	}
-
-	first_trk = blk_rq_pos(req) / DASD_RAW_SECTORS_PER_TRACK;
-	last_trk = (blk_rq_pos(req) + blk_rq_sectors(req) - 1) /
-		DASD_RAW_SECTORS_PER_TRACK;
-	trkcount = last_trk - first_trk + 1;
-	first_offs = 0;
-	basedev = block->base;
-
-	if (rq_data_dir(req) == READ)
-		cmd = DASD_ECKD_CCW_READ_TRACK;
-	else if (rq_data_dir(req) == WRITE)
-		cmd = DASD_ECKD_CCW_WRITE_FULL_TRACK;
-	else {
-		cqr = ERR_PTR(-EINVAL);
-		goto out;
-	}
-
-	/*
-	 * Raw track based I/O needs IDAWs for each page,
-	 * and not just for 64 bit addresses.
-	 */
-	cidaw = trkcount * DASD_RAW_BLOCK_PER_TRACK;
-
-	/* 1x prefix + one read/write ccw per track */
-	cplength = 1 + trkcount;
-
-	/*
-	 * struct PFX_eckd_data has up to 2 byte as extended parameter
-	 * this is needed for write full track and has to be mentioned
-	 * separately
-	 * add 8 instead of 2 to keep 8 byte boundary
-	 */
-	pfx_datasize = sizeof(struct PFX_eckd_data) + 8;
-
-	datasize = pfx_datasize + cidaw * sizeof(unsigned long long);
-
-	/* Allocate the ccw request. */
-	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, cplength,
-				   datasize, startdev);
-	if (IS_ERR(cqr))
-		goto out;
-	ccw = cqr->cpaddr;
-
-	if (prefix_LRE(ccw++, cqr->data, first_trk, last_trk, cmd,
-		       basedev, startdev, 1 /* format */, first_offs + 1,
-		       trkcount, 0, 0) == -EAGAIN) {
-		/* Clock not in sync and XRC is enabled.
-		 * Try again later.
-		 */
-		dasd_sfree_request(cqr, startdev);
-		cqr = ERR_PTR(-EAGAIN);
-		goto out;
-	}
-
-	idaws = (unsigned long *)(cqr->data + pfx_datasize);
-
-	len_to_track_end = 0;
-
-	rq_for_each_segment(bv, req, iter) {
-		dst = page_address(bv->bv_page) + bv->bv_offset;
-		seg_len = bv->bv_len;
-		if (!len_to_track_end) {
-			ccw[-1].flags |= CCW_FLAG_CC;
-			ccw->cmd_code = cmd;
-			/* maximum 3390 track size */
-			ccw->count = 57326;
-			/* 64k map to one track */
-			len_to_track_end = 65536;
-			ccw->cda = (__u32)(addr_t)idaws;
-			ccw->flags |= CCW_FLAG_IDA;
-			ccw->flags |= CCW_FLAG_SLI;
-			ccw++;
-		}
-		len_to_track_end -= seg_len;
-		idaws = idal_create_words(idaws, dst, seg_len);
-	}
-
-	if (blk_noretry_request(req) ||
-	    block->base->features & DASD_FEATURE_FAILFAST)
-		set_bit(DASD_CQR_FLAGS_FAILFAST, &cqr->flags);
-	cqr->startdev = startdev;
-	cqr->memdev = startdev;
-	cqr->block = block;
-	cqr->expires = startdev->default_expires * HZ;
-	cqr->lpm = startdev->path_data.ppm;
-	cqr->retries = 256;
-	cqr->buildclk = get_clock();
-	cqr->status = DASD_CQR_FILLED;
-
-	if (IS_ERR(cqr) && PTR_ERR(cqr) != -EAGAIN)
-		cqr = NULL;
-out:
-	return cqr;
-}
-
 
 static int
 dasd_eckd_free_cp(struct dasd_ccw_req *cqr, struct request *req)
@@ -3021,10 +2493,7 @@ static struct dasd_ccw_req *dasd_eckd_build_alias_cp(struct dasd_device *base,
 
 	spin_lock_irqsave(get_ccwdev_lock(startdev->cdev), flags);
 	private->count++;
-	if ((base->features & DASD_FEATURE_USERAW))
-		cqr = dasd_raw_build_cp(startdev, block, req);
-	else
-		cqr = dasd_eckd_build_cp(startdev, block, req);
+	cqr = dasd_eckd_build_cp(startdev, block, req);
 	if (IS_ERR(cqr))
 		private->count--;
 	spin_unlock_irqrestore(get_ccwdev_lock(startdev->cdev), flags);
@@ -3079,23 +2548,15 @@ dasd_eckd_release(struct dasd_device *device)
 	struct dasd_ccw_req *cqr;
 	int rc;
 	struct ccw1 *ccw;
-	int useglobal;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	useglobal = 0;
 	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1, 32, device);
 	if (IS_ERR(cqr)) {
-		mutex_lock(&dasd_reserve_mutex);
-		useglobal = 1;
-		cqr = &dasd_reserve_req->cqr;
-		memset(cqr, 0, sizeof(*cqr));
-		memset(&dasd_reserve_req->ccw, 0,
-		       sizeof(dasd_reserve_req->ccw));
-		cqr->cpaddr = &dasd_reserve_req->ccw;
-		cqr->data = &dasd_reserve_req->data;
-		cqr->magic = DASD_ECKD_MAGIC;
+		DBF_DEV_EVENT(DBF_WARNING, device, "%s",
+			    "Could not allocate initialization request");
+		return PTR_ERR(cqr);
 	}
 	ccw = cqr->cpaddr;
 	ccw->cmd_code = DASD_ECKD_CCW_RELEASE;
@@ -3112,13 +2573,8 @@ dasd_eckd_release(struct dasd_device *device)
 	cqr->status = DASD_CQR_FILLED;
 
 	rc = dasd_sleep_on_immediatly(cqr);
-	if (!rc)
-		clear_bit(DASD_FLAG_IS_RESERVED, &device->flags);
 
-	if (useglobal)
-		mutex_unlock(&dasd_reserve_mutex);
-	else
-		dasd_sfree_request(cqr, cqr->memdev);
+	dasd_sfree_request(cqr, cqr->memdev);
 	return rc;
 }
 
@@ -3134,23 +2590,15 @@ dasd_eckd_reserve(struct dasd_device *device)
 	struct dasd_ccw_req *cqr;
 	int rc;
 	struct ccw1 *ccw;
-	int useglobal;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	useglobal = 0;
 	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1, 32, device);
 	if (IS_ERR(cqr)) {
-		mutex_lock(&dasd_reserve_mutex);
-		useglobal = 1;
-		cqr = &dasd_reserve_req->cqr;
-		memset(cqr, 0, sizeof(*cqr));
-		memset(&dasd_reserve_req->ccw, 0,
-		       sizeof(dasd_reserve_req->ccw));
-		cqr->cpaddr = &dasd_reserve_req->ccw;
-		cqr->data = &dasd_reserve_req->data;
-		cqr->magic = DASD_ECKD_MAGIC;
+		DBF_DEV_EVENT(DBF_WARNING, device, "%s",
+			    "Could not allocate initialization request");
+		return PTR_ERR(cqr);
 	}
 	ccw = cqr->cpaddr;
 	ccw->cmd_code = DASD_ECKD_CCW_RESERVE;
@@ -3167,13 +2615,8 @@ dasd_eckd_reserve(struct dasd_device *device)
 	cqr->status = DASD_CQR_FILLED;
 
 	rc = dasd_sleep_on_immediatly(cqr);
-	if (!rc)
-		set_bit(DASD_FLAG_IS_RESERVED, &device->flags);
 
-	if (useglobal)
-		mutex_unlock(&dasd_reserve_mutex);
-	else
-		dasd_sfree_request(cqr, cqr->memdev);
+	dasd_sfree_request(cqr, cqr->memdev);
 	return rc;
 }
 
@@ -3188,23 +2631,15 @@ dasd_eckd_steal_lock(struct dasd_device *device)
 	struct dasd_ccw_req *cqr;
 	int rc;
 	struct ccw1 *ccw;
-	int useglobal;
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
-	useglobal = 0;
 	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1, 32, device);
 	if (IS_ERR(cqr)) {
-		mutex_lock(&dasd_reserve_mutex);
-		useglobal = 1;
-		cqr = &dasd_reserve_req->cqr;
-		memset(cqr, 0, sizeof(*cqr));
-		memset(&dasd_reserve_req->ccw, 0,
-		       sizeof(dasd_reserve_req->ccw));
-		cqr->cpaddr = &dasd_reserve_req->ccw;
-		cqr->data = &dasd_reserve_req->data;
-		cqr->magic = DASD_ECKD_MAGIC;
+		DBF_DEV_EVENT(DBF_WARNING, device, "%s",
+			    "Could not allocate initialization request");
+		return PTR_ERR(cqr);
 	}
 	ccw = cqr->cpaddr;
 	ccw->cmd_code = DASD_ECKD_CCW_SLCK;
@@ -3221,81 +2656,8 @@ dasd_eckd_steal_lock(struct dasd_device *device)
 	cqr->status = DASD_CQR_FILLED;
 
 	rc = dasd_sleep_on_immediatly(cqr);
-	if (!rc)
-		set_bit(DASD_FLAG_IS_RESERVED, &device->flags);
 
-	if (useglobal)
-		mutex_unlock(&dasd_reserve_mutex);
-	else
-		dasd_sfree_request(cqr, cqr->memdev);
-	return rc;
-}
-
-/*
- * SNID - Sense Path Group ID
- * This ioctl may be used in situations where I/O is stalled due to
- * a reserve, so if the normal dasd_smalloc_request fails, we use the
- * preallocated dasd_reserve_req.
- */
-static int dasd_eckd_snid(struct dasd_device *device,
-			  void __user *argp)
-{
-	struct dasd_ccw_req *cqr;
-	int rc;
-	struct ccw1 *ccw;
-	int useglobal;
-	struct dasd_snid_ioctl_data usrparm;
-
-	if (!capable(CAP_SYS_ADMIN))
-		return -EACCES;
-
-	if (copy_from_user(&usrparm, argp, sizeof(usrparm)))
-		return -EFAULT;
-
-	useglobal = 0;
-	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 1,
-				   sizeof(struct dasd_snid_data), device);
-	if (IS_ERR(cqr)) {
-		mutex_lock(&dasd_reserve_mutex);
-		useglobal = 1;
-		cqr = &dasd_reserve_req->cqr;
-		memset(cqr, 0, sizeof(*cqr));
-		memset(&dasd_reserve_req->ccw, 0,
-		       sizeof(dasd_reserve_req->ccw));
-		cqr->cpaddr = &dasd_reserve_req->ccw;
-		cqr->data = &dasd_reserve_req->data;
-		cqr->magic = DASD_ECKD_MAGIC;
-	}
-	ccw = cqr->cpaddr;
-	ccw->cmd_code = DASD_ECKD_CCW_SNID;
-	ccw->flags |= CCW_FLAG_SLI;
-	ccw->count = 12;
-	ccw->cda = (__u32)(addr_t) cqr->data;
-	cqr->startdev = device;
-	cqr->memdev = device;
-	clear_bit(DASD_CQR_FLAGS_USE_ERP, &cqr->flags);
-	set_bit(DASD_CQR_FLAGS_FAILFAST, &cqr->flags);
-	set_bit(DASD_CQR_ALLOW_SLOCK, &cqr->flags);
-	cqr->retries = 5;
-	cqr->expires = 10 * HZ;
-	cqr->buildclk = get_clock();
-	cqr->status = DASD_CQR_FILLED;
-	cqr->lpm = usrparm.path_mask;
-
-	rc = dasd_sleep_on_immediatly(cqr);
-	/* verify that I/O processing didn't modify the path mask */
-	if (!rc && usrparm.path_mask && (cqr->lpm != usrparm.path_mask))
-		rc = -EIO;
-	if (!rc) {
-		usrparm.data = *((struct dasd_snid_data *)cqr->data);
-		if (copy_to_user(argp, &usrparm, sizeof(usrparm)))
-			rc = -EFAULT;
-	}
-
-	if (useglobal)
-		mutex_unlock(&dasd_reserve_mutex);
-	else
-		dasd_sfree_request(cqr, cqr->memdev);
+	dasd_sfree_request(cqr, cqr->memdev);
 	return rc;
 }
 
@@ -3323,7 +2685,6 @@ dasd_eckd_performance(struct dasd_device *device, void __user *argp)
 	cqr->startdev = device;
 	cqr->memdev = device;
 	cqr->retries = 0;
-	clear_bit(DASD_CQR_FLAGS_USE_ERP, &cqr->flags);
 	cqr->expires = 10 * HZ;
 
 	/* Prepare for Read Subsystem Data */
@@ -3423,27 +2784,19 @@ static int dasd_symm_io(struct dasd_device *device, void __user *argp)
 	char *psf_data, *rssd_result;
 	struct dasd_ccw_req *cqr;
 	struct ccw1 *ccw;
-	char psf0, psf1;
 	int rc;
-
-	if (!capable(CAP_SYS_ADMIN) && !capable(CAP_SYS_RAWIO))
-		return -EACCES;
-	psf0 = psf1 = 0;
 
 	/* Copy parms from caller */
 	rc = -EFAULT;
 	if (copy_from_user(&usrparm, argp, sizeof(usrparm)))
 		goto out;
-	if (is_compat_task() || sizeof(long) == 4) {
-		/* Make sure pointers are sane even on 31 bit. */
+#ifndef CONFIG_64BIT
+	/* Make sure pointers are sane even on 31 bit. */
+	if ((usrparm.psf_data >> 32) != 0 || (usrparm.rssd_result >> 32) != 0) {
 		rc = -EINVAL;
-		if ((usrparm.psf_data >> 32) != 0)
-			goto out;
-		if ((usrparm.rssd_result >> 32) != 0)
-			goto out;
-		usrparm.psf_data &= 0x7fffffffULL;
-		usrparm.rssd_result &= 0x7fffffffULL;
+		goto out;
 	}
+#endif
 	/* alloc I/O data area */
 	psf_data = kzalloc(usrparm.psf_data_len, GFP_KERNEL | GFP_DMA);
 	rssd_result = kzalloc(usrparm.rssd_result_len, GFP_KERNEL | GFP_DMA);
@@ -3458,8 +2811,12 @@ static int dasd_symm_io(struct dasd_device *device, void __user *argp)
 			   (void __user *)(unsigned long) usrparm.psf_data,
 			   usrparm.psf_data_len))
 		goto out_free;
-	psf0 = psf_data[0];
-	psf1 = psf_data[1];
+
+	/* sanity check on syscall header */
+	if (psf_data[0] != 0x17 && psf_data[1] != 0xce) {
+		rc = -EINVAL;
+		goto out_free;
+	}
 
 	/* setup CCWs for PSF + RSSD */
 	cqr = dasd_smalloc_request(DASD_ECKD_MAGIC, 2 , 0, device);
@@ -3510,9 +2867,7 @@ out_free:
 	kfree(rssd_result);
 	kfree(psf_data);
 out:
-	DBF_DEV_EVENT(DBF_WARNING, device,
-		      "Symmetrix ioctl (0x%02x 0x%02x): rc=%d",
-		      (int) psf0, (int) psf1, rc);
+	DBF_DEV_EVENT(DBF_WARNING, device, "Symmetrix ioctl: rc=%d", rc);
 	return rc;
 }
 
@@ -3534,8 +2889,6 @@ dasd_eckd_ioctl(struct dasd_block *block, unsigned int cmd, void __user *argp)
 		return dasd_eckd_reserve(device);
 	case BIODASDSLCK:
 		return dasd_eckd_steal_lock(device);
-	case BIODASDSNID:
-		return dasd_eckd_snid(device, argp);
 	case BIODASDSYMMIO:
 		return dasd_symm_io(device, argp);
 	default:
@@ -3582,19 +2935,19 @@ dasd_eckd_dump_sense_dbf(struct dasd_device *device, struct irb *irb,
 			 char *reason)
 {
 	u64 *sense;
-	u64 *stat;
 
 	sense = (u64 *) dasd_get_sense(irb);
-	stat = (u64 *) &irb->scsw;
 	if (sense) {
-		DBF_DEV_EVENT(DBF_EMERG, device, "%s: %016llx %08x : "
-			      "%016llx %016llx %016llx %016llx",
-			      reason, *stat, *((u32 *) (stat + 1)),
-			      sense[0], sense[1], sense[2], sense[3]);
+		DBF_DEV_EVENT(DBF_EMERG, device,
+			      "%s: %s %02x%02x%02x %016llx %016llx %016llx "
+			      "%016llx", reason,
+			      scsw_is_tm(&irb->scsw) ? "t" : "c",
+			      scsw_cc(&irb->scsw), scsw_cstat(&irb->scsw),
+			      scsw_dstat(&irb->scsw), sense[0], sense[1],
+			      sense[2], sense[3]);
 	} else {
-		DBF_DEV_EVENT(DBF_EMERG, device, "%s: %016llx %08x : %s",
-			      reason, *stat, *((u32 *) (stat + 1)),
-			      "NO VALID SENSE");
+		DBF_DEV_EVENT(DBF_EMERG, device, "%s",
+			      "SORRY - NO VALID SENSE AVAILABLE\n");
 	}
 }
 
@@ -3620,12 +2973,9 @@ static void dasd_eckd_dump_sense_ccw(struct dasd_device *device,
 		      " I/O status report for device %s:\n",
 		      dev_name(&device->cdev->dev));
 	len += sprintf(page + len, KERN_ERR PRINTK_HEADER
-		       " in req: %p CC:%02X FC:%02X AC:%02X SC:%02X DS:%02X "
-		       "CS:%02X RC:%d\n",
-		       req, scsw_cc(&irb->scsw), scsw_fctl(&irb->scsw),
-		       scsw_actl(&irb->scsw), scsw_stctl(&irb->scsw),
-		       scsw_dstat(&irb->scsw), scsw_cstat(&irb->scsw),
-		       req ? req->intrc : 0);
+		       " in req: %p CS: 0x%02X DS: 0x%02X CC: 0x%02X RC: %d\n",
+		       req, scsw_cstat(&irb->scsw), scsw_dstat(&irb->scsw),
+		       scsw_cc(&irb->scsw), req ? req->intrc : 0);
 	len += sprintf(page + len, KERN_ERR PRINTK_HEADER
 		       " device %s: Failing CCW: %p\n",
 		       dev_name(&device->cdev->dev),
@@ -3710,8 +3060,10 @@ static void dasd_eckd_dump_sense_tcw(struct dasd_device *device,
 {
 	char *page;
 	int len, sl, sct, residual;
+
 	struct tsb *tsb;
-	u8 *sense, *rcq;
+	u8 *sense;
+
 
 	page = (char *) get_zeroed_page(GFP_ATOMIC);
 	if (page == NULL) {
@@ -3724,13 +3076,11 @@ static void dasd_eckd_dump_sense_tcw(struct dasd_device *device,
 		      " I/O status report for device %s:\n",
 		      dev_name(&device->cdev->dev));
 	len += sprintf(page + len, KERN_ERR PRINTK_HEADER
-		       " in req: %p CC:%02X FC:%02X AC:%02X SC:%02X DS:%02X "
-		       "CS:%02X fcxs:%02X schxs:%02X RC:%d\n",
-		       req, scsw_cc(&irb->scsw), scsw_fctl(&irb->scsw),
-		       scsw_actl(&irb->scsw), scsw_stctl(&irb->scsw),
-		       scsw_dstat(&irb->scsw), scsw_cstat(&irb->scsw),
-		       irb->scsw.tm.fcxs, irb->scsw.tm.schxs,
-		       req ? req->intrc : 0);
+		       " in req: %p CS: 0x%02X DS: 0x%02X CC: 0x%02X RC: %d "
+		       "fcxs: 0x%02X schxs: 0x%02X\n", req,
+		       scsw_cstat(&irb->scsw), scsw_dstat(&irb->scsw),
+		       scsw_cc(&irb->scsw), req->intrc,
+		       irb->scsw.tm.fcxs, irb->scsw.tm.schxs);
 	len += sprintf(page + len, KERN_ERR PRINTK_HEADER
 		       " device %s: Failing TCW: %p\n",
 		       dev_name(&device->cdev->dev),
@@ -3738,11 +3088,11 @@ static void dasd_eckd_dump_sense_tcw(struct dasd_device *device,
 
 	tsb = NULL;
 	sense = NULL;
-	if (irb->scsw.tm.tcw && (irb->scsw.tm.fcxs & 0x01))
+	if (irb->scsw.tm.tcw)
 		tsb = tcw_get_tsb(
 			(struct tcw *)(unsigned long)irb->scsw.tm.tcw);
 
-	if (tsb) {
+	if (tsb && (irb->scsw.tm.fcxs == 0x01)) {
 		len += sprintf(page + len, KERN_ERR PRINTK_HEADER
 			       " tsb->length %d\n", tsb->length);
 		len += sprintf(page + len, KERN_ERR PRINTK_HEADER
@@ -3777,15 +3127,12 @@ static void dasd_eckd_dump_sense_tcw(struct dasd_device *device,
 		case 2: /* ts_ddpc */
 			len += sprintf(page + len, KERN_ERR PRINTK_HEADER
 			       " tsb->tsa.ddpc.rc %d\n", tsb->tsa.ddpc.rc);
-			for (sl = 0; sl < 2; sl++) {
-				len += sprintf(page + len,
-					       KERN_ERR PRINTK_HEADER
-					       " tsb->tsa.ddpc.rcq %2d-%2d: ",
-					       (8 * sl), ((8 * sl) + 7));
-				rcq = tsb->tsa.ddpc.rcq;
+			len += sprintf(page + len, KERN_ERR PRINTK_HEADER
+			       " tsb->tsa.ddpc.rcq:  ");
+			for (sl = 0; sl < 16; sl++) {
 				for (sct = 0; sct < 8; sct++) {
 					len += sprintf(page + len, " %02x",
-						       rcq[8 * sl + sct]);
+						       tsb->tsa.ddpc.rcq[sl]);
 				}
 				len += sprintf(page + len, "\n");
 			}
@@ -3839,13 +3186,13 @@ static void dasd_eckd_dump_sense_tcw(struct dasd_device *device,
 static void dasd_eckd_dump_sense(struct dasd_device *device,
 				 struct dasd_ccw_req *req, struct irb *irb)
 {
-	if (scsw_is_tm(&irb->scsw))
+	if (req && scsw_is_tm(&req->irb.scsw))
 		dasd_eckd_dump_sense_tcw(device, req, irb);
 	else
 		dasd_eckd_dump_sense_ccw(device, req, irb);
 }
 
-static int dasd_eckd_pm_freeze(struct dasd_device *device)
+int dasd_eckd_pm_freeze(struct dasd_device *device)
 {
 	/*
 	 * the device should be disconnected from our LCU structure
@@ -3858,7 +3205,7 @@ static int dasd_eckd_pm_freeze(struct dasd_device *device)
 	return 0;
 }
 
-static int dasd_eckd_restore_device(struct dasd_device *device)
+int dasd_eckd_restore_device(struct dasd_device *device)
 {
 	struct dasd_eckd_private *private;
 	struct dasd_eckd_characteristics temp_rdc_data;
@@ -3873,31 +3220,26 @@ static int dasd_eckd_restore_device(struct dasd_device *device)
 	if (rc)
 		goto out_err;
 
-	dasd_eckd_get_uid(device, &temp_uid);
-	/* Generate device unique id */
-	rc = dasd_eckd_generate_uid(device);
-	spin_lock_irqsave(get_ccwdev_lock(device->cdev), flags);
+	/* Generate device unique id and register in devmap */
+	rc = dasd_eckd_generate_uid(device, &private->uid);
+	dasd_get_uid(device->cdev, &temp_uid);
 	if (memcmp(&private->uid, &temp_uid, sizeof(struct dasd_uid)) != 0)
 		dev_err(&device->cdev->dev, "The UID of the DASD has "
 			"changed\n");
-	spin_unlock_irqrestore(get_ccwdev_lock(device->cdev), flags);
 	if (rc)
 		goto out_err;
+	dasd_set_uid(device->cdev, &private->uid);
 
 	/* register lcu with alias handling, enable PAV if this is a new lcu */
 	is_known = dasd_alias_make_device_known_to_lcu(device);
 	if (is_known < 0)
 		return is_known;
 	if (!is_known) {
-		dasd_eckd_validate_server(device);
-		dasd_alias_lcu_setup_complete(device);
-	} else
-		dasd_alias_wait_for_lcu_setup(device);
-
-	/* RE-Read Configuration Data */
-	rc = dasd_eckd_read_conf(device);
-	if (rc)
-		goto out_err;
+		/* new lcu found */
+		rc = dasd_eckd_validate_server(device); /* will switch pav on */
+		if (rc)
+			goto out_err;
+	}
 
 	/* Read Feature Codes */
 	dasd_eckd_read_features(device);
@@ -3923,72 +3265,18 @@ out_err:
 	return -1;
 }
 
-static int dasd_eckd_reload_device(struct dasd_device *device)
-{
-	struct dasd_eckd_private *private;
-	int rc, old_base;
-	char print_uid[60];
-	struct dasd_uid uid;
-	unsigned long flags;
-
-	private = (struct dasd_eckd_private *) device->private;
-
-	spin_lock_irqsave(get_ccwdev_lock(device->cdev), flags);
-	old_base = private->uid.base_unit_addr;
-	spin_unlock_irqrestore(get_ccwdev_lock(device->cdev), flags);
-
-	/* Read Configuration Data */
-	rc = dasd_eckd_read_conf(device);
-	if (rc)
-		goto out_err;
-
-	rc = dasd_eckd_generate_uid(device);
-	if (rc)
-		goto out_err;
-	/*
-	 * update unit address configuration and
-	 * add device to alias management
-	 */
-	dasd_alias_update_add_device(device);
-
-	dasd_eckd_get_uid(device, &uid);
-
-	if (old_base != uid.base_unit_addr) {
-		if (strlen(uid.vduit) > 0)
-			snprintf(print_uid, sizeof(print_uid),
-				 "%s.%s.%04x.%02x.%s", uid.vendor, uid.serial,
-				 uid.ssid, uid.base_unit_addr, uid.vduit);
-		else
-			snprintf(print_uid, sizeof(print_uid),
-				 "%s.%s.%04x.%02x", uid.vendor, uid.serial,
-				 uid.ssid, uid.base_unit_addr);
-
-		dev_info(&device->cdev->dev,
-			 "An Alias device was reassigned to a new base device "
-			 "with UID: %s\n", print_uid);
-	}
-	return 0;
-
-out_err:
-	return -1;
-}
-
 static struct ccw_driver dasd_eckd_driver = {
-	.driver = {
-		.name	= "dasd-eckd",
-		.owner	= THIS_MODULE,
-	},
+	.name	     = "dasd-eckd",
+	.owner	     = THIS_MODULE,
 	.ids	     = dasd_eckd_ids,
 	.probe	     = dasd_eckd_probe,
 	.remove      = dasd_generic_remove,
 	.set_offline = dasd_generic_set_offline,
 	.set_online  = dasd_eckd_set_online,
 	.notify      = dasd_generic_notify,
-	.path_event  = dasd_generic_path_event,
 	.freeze      = dasd_generic_pm_freeze,
 	.thaw	     = dasd_generic_restore_device,
 	.restore     = dasd_generic_restore_device,
-	.uc_handler  = dasd_generic_uc_handler,
 };
 
 /*
@@ -4008,11 +3296,10 @@ static struct dasd_discipline dasd_eckd_discipline = {
 	.owner = THIS_MODULE,
 	.name = "ECKD",
 	.ebcname = "ECKD",
-	.max_blocks = 190,
+	.max_blocks = 240,
 	.check_device = dasd_eckd_check_characteristics,
 	.uncheck_device = dasd_eckd_uncheck_device,
 	.do_analysis = dasd_eckd_do_analysis,
-	.verify_path = dasd_eckd_verify_path,
 	.ready_to_online = dasd_eckd_ready_to_online,
 	.online_to_ready = dasd_eckd_online_to_ready,
 	.fill_geometry = dasd_eckd_fill_geometry,
@@ -4022,7 +3309,7 @@ static struct dasd_discipline dasd_eckd_discipline = {
 	.format_device = dasd_eckd_format_device,
 	.erp_action = dasd_eckd_erp_action,
 	.erp_postaction = dasd_eckd_erp_postaction,
-	.check_for_device_change = dasd_eckd_check_for_device_change,
+	.handle_unsolicited_interrupt = dasd_eckd_handle_unsolicited_interrupt,
 	.build_cp = dasd_eckd_build_alias_cp,
 	.free_cp = dasd_eckd_free_alias_cp,
 	.dump_sense = dasd_eckd_dump_sense,
@@ -4031,8 +3318,6 @@ static struct dasd_discipline dasd_eckd_discipline = {
 	.ioctl = dasd_eckd_ioctl,
 	.freeze = dasd_eckd_pm_freeze,
 	.restore = dasd_eckd_restore_device,
-	.reload = dasd_eckd_reload_device,
-	.get_uid = dasd_eckd_get_uid,
 };
 
 static int __init
@@ -4041,23 +3326,10 @@ dasd_eckd_init(void)
 	int ret;
 
 	ASCEBC(dasd_eckd_discipline.ebcname, 4);
-	dasd_reserve_req = kmalloc(sizeof(*dasd_reserve_req),
-				   GFP_KERNEL | GFP_DMA);
-	if (!dasd_reserve_req)
-		return -ENOMEM;
-	path_verification_worker = kmalloc(sizeof(*path_verification_worker),
-				   GFP_KERNEL | GFP_DMA);
-	if (!path_verification_worker) {
-		kfree(dasd_reserve_req);
-		return -ENOMEM;
-	}
 	ret = ccw_driver_register(&dasd_eckd_driver);
 	if (!ret)
 		wait_for_device_probe();
-	else {
-		kfree(path_verification_worker);
-		kfree(dasd_reserve_req);
-	}
+
 	return ret;
 }
 
@@ -4065,8 +3337,6 @@ static void __exit
 dasd_eckd_cleanup(void)
 {
 	ccw_driver_unregister(&dasd_eckd_driver);
-	kfree(path_verification_worker);
-	kfree(dasd_reserve_req);
 }
 
 module_init(dasd_eckd_init);

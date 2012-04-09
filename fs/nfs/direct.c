@@ -44,8 +44,6 @@
 #include <linux/file.h>
 #include <linux/pagemap.h>
 #include <linux/kref.h>
-#include <linux/slab.h>
-#include <linux/task_io_accounting_ops.h>
 
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
@@ -70,7 +68,6 @@ struct nfs_direct_req {
 
 	/* I/O parameters */
 	struct nfs_open_context	*ctx;		/* file open context info */
-	struct nfs_lock_context *l_ctx;		/* Lock context info */
 	struct kiocb *		iocb;		/* controlling i/o request */
 	struct inode *		inode;		/* target file of i/o */
 
@@ -162,7 +159,6 @@ static inline struct nfs_direct_req *nfs_direct_req_alloc(void)
 	INIT_LIST_HEAD(&dreq->rewrite_list);
 	dreq->iocb = NULL;
 	dreq->ctx = NULL;
-	dreq->l_ctx = NULL;
 	spin_lock_init(&dreq->lock);
 	atomic_set(&dreq->io_count, 0);
 	dreq->count = 0;
@@ -176,8 +172,6 @@ static void nfs_direct_req_free(struct kref *kref)
 {
 	struct nfs_direct_req *dreq = container_of(kref, struct nfs_direct_req, kref);
 
-	if (dreq->l_ctx != NULL)
-		nfs_put_lock_context(dreq->l_ctx);
 	if (dreq->ctx != NULL)
 		put_nfs_open_context(dreq->ctx);
 	kmem_cache_free(nfs_direct_cachep, dreq);
@@ -341,7 +335,6 @@ static ssize_t nfs_direct_read_schedule_segment(struct nfs_direct_req *dreq,
 		data->cred = msg.rpc_cred;
 		data->args.fh = NFS_FH(inode);
 		data->args.context = ctx;
-		data->args.lock_context = dreq->l_ctx;
 		data->args.offset = pos;
 		data->args.pgbase = pgbase;
 		data->args.pages = data->pagevec;
@@ -408,45 +401,38 @@ static ssize_t nfs_direct_read_schedule_iovec(struct nfs_direct_req *dreq,
 		pos += vec->iov_len;
 	}
 
-	/*
-	 * If no bytes were started, return the error, and let the
-	 * generic layer handle the completion.
-	 */
-	if (requested_bytes == 0) {
-		nfs_direct_req_release(dreq);
-		return result < 0 ? result : -EIO;
-	}
-
 	if (put_dreq(dreq))
 		nfs_direct_complete(dreq);
-	return 0;
+
+	if (requested_bytes != 0)
+		return 0;
+
+	if (result < 0)
+		return result;
+	return -EIO;
 }
 
 static ssize_t nfs_direct_read(struct kiocb *iocb, const struct iovec *iov,
 			       unsigned long nr_segs, loff_t pos)
 {
-	ssize_t result = -ENOMEM;
+	ssize_t result = 0;
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct nfs_direct_req *dreq;
 
 	dreq = nfs_direct_req_alloc();
-	if (dreq == NULL)
-		goto out;
+	if (!dreq)
+		return -ENOMEM;
 
 	dreq->inode = inode;
 	dreq->ctx = get_nfs_open_context(nfs_file_open_context(iocb->ki_filp));
-	dreq->l_ctx = nfs_get_lock_context(dreq->ctx);
-	if (dreq->l_ctx == NULL)
-		goto out_release;
 	if (!is_sync_kiocb(iocb))
 		dreq->iocb = iocb;
 
 	result = nfs_direct_read_schedule_iovec(dreq, iov, nr_segs, pos);
 	if (!result)
 		result = nfs_direct_wait(dreq);
-out_release:
 	nfs_direct_req_release(dreq);
-out:
+
 	return result;
 }
 
@@ -587,7 +573,6 @@ static void nfs_direct_commit_schedule(struct nfs_direct_req *dreq)
 	data->args.offset = 0;
 	data->args.count = 0;
 	data->args.context = dreq->ctx;
-	data->args.lock_context = dreq->l_ctx;
 	data->res.count = 0;
 	data->res.fattr = &data->fattr;
 	data->res.verf = &data->verf;
@@ -650,7 +635,8 @@ static void nfs_direct_write_result(struct rpc_task *task, void *calldata)
 {
 	struct nfs_write_data *data = calldata;
 
-	nfs_writeback_done(task, data);
+	if (nfs_writeback_done(task, data) != 0)
+		return;
 }
 
 /*
@@ -774,7 +760,6 @@ static ssize_t nfs_direct_write_schedule_segment(struct nfs_direct_req *dreq,
 		data->cred = msg.rpc_cred;
 		data->args.fh = NFS_FH(inode);
 		data->args.context = ctx;
-		data->args.lock_context = dreq->l_ctx;
 		data->args.offset = pos;
 		data->args.pgbase = pgbase;
 		data->args.pages = data->pagevec;
@@ -844,25 +829,22 @@ static ssize_t nfs_direct_write_schedule_iovec(struct nfs_direct_req *dreq,
 		pos += vec->iov_len;
 	}
 
-	/*
-	 * If no bytes were started, return the error, and let the
-	 * generic layer handle the completion.
-	 */
-	if (requested_bytes == 0) {
-		nfs_direct_req_release(dreq);
-		return result < 0 ? result : -EIO;
-	}
-
 	if (put_dreq(dreq))
 		nfs_direct_write_complete(dreq, dreq->inode);
-	return 0;
+
+	if (requested_bytes != 0)
+		return 0;
+
+	if (result < 0)
+		return result;
+	return -EIO;
 }
 
 static ssize_t nfs_direct_write(struct kiocb *iocb, const struct iovec *iov,
 				unsigned long nr_segs, loff_t pos,
 				size_t count)
 {
-	ssize_t result = -ENOMEM;
+	ssize_t result = 0;
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	struct nfs_direct_req *dreq;
 	size_t wsize = NFS_SERVER(inode)->wsize;
@@ -870,26 +852,22 @@ static ssize_t nfs_direct_write(struct kiocb *iocb, const struct iovec *iov,
 
 	dreq = nfs_direct_req_alloc();
 	if (!dreq)
-		goto out;
+		return -ENOMEM;
 	nfs_alloc_commit_data(dreq);
 
-	if (dreq->commit_data == NULL || count <= wsize)
+	if (dreq->commit_data == NULL || count < wsize)
 		sync = NFS_FILE_SYNC;
 
 	dreq->inode = inode;
 	dreq->ctx = get_nfs_open_context(nfs_file_open_context(iocb->ki_filp));
-	dreq->l_ctx = nfs_get_lock_context(dreq->ctx);
-	if (dreq->l_ctx == NULL)
-		goto out_release;
 	if (!is_sync_kiocb(iocb))
 		dreq->iocb = iocb;
 
 	result = nfs_direct_write_schedule_iovec(dreq, iov, nr_segs, pos, sync);
 	if (!result)
 		result = nfs_direct_wait(dreq);
-out_release:
 	nfs_direct_req_release(dreq);
-out:
+
 	return result;
 }
 
@@ -937,8 +915,6 @@ ssize_t nfs_file_direct_read(struct kiocb *iocb, const struct iovec *iov,
 	retval = nfs_sync_mapping(mapping);
 	if (retval)
 		goto out;
-
-	task_io_account_read(count);
 
 	retval = nfs_direct_read(iocb, iov, nr_segs, pos);
 	if (retval > 0)
@@ -1000,8 +976,6 @@ ssize_t nfs_file_direct_write(struct kiocb *iocb, const struct iovec *iov,
 	retval = nfs_sync_mapping(mapping);
 	if (retval)
 		goto out;
-
-	task_io_account_write(count);
 
 	retval = nfs_direct_write(iocb, iov, nr_segs, pos, count);
 

@@ -66,13 +66,13 @@ extern "C"
 typedef struct NvOdmTouchDeviceRec *NvOdmTouchDeviceHandle;
 
 
-// 20100402  LGE Touch Customization [START]
+// 20100402 joseph.jung@lge.com LGE Touch Customization [START]
 
 #ifdef CONFIG_MACH_STAR
 #define FEATURE_LGE_TOUCH_CUSTOMIZE
-//#define FEATURE_LGE_TOUCH_DUAL_SUPPORT	// 20101113  prevent chip damage, only use synaptics touch
+//#define FEATURE_LGE_TOUCH_DUAL_SUPPORT	// 20101113 joseph.jung@lge.com prevent chip damage, only use synaptics touch
 #define FEATURE_LGE_TOUCH_GRIP_SUPPRESSION
-//#define FEATURE_LGE_TOUCH_EXPAND_HIDDEN_ACTIVE_AREA
+#define FEATURE_LGE_TOUCH_EXPAND_HIDDEN_ACTIVE_AREA
 #define FEATURE_LGE_TOUCH_MOVING_IMPROVE
 #endif
 
@@ -91,30 +91,30 @@ typedef struct NvOdmTouchDeviceRec *NvOdmTouchDeviceHandle;
 #define NVODM_MAX_INPUT_COORDS				LGE_SUPPORT_FINGERS_NUM
 #else
 
-#define NVODM_MAX_INPUT_COORDS 5
+#define NVODM_MAX_INPUT_COORDS				5
 #endif /* FEATURE_LGE_TOUCH_CUSTOMIZE */
 
 
-// 20100718  grip suppression [START]
+// 20100718 joseph.jung@lge.com grip suppression [START]
 void setTouchGripSuppressionValue(int value);
 int getTouchGripSuppressionValue(void);
-// 20100718  grip suppression [END]
+// 20100718 joseph.jung@lge.com grip suppression [END]
 
-// 20100720  LCD Active area expansion [START]
+// 20100720 joseph.jung@lge.com LCD Active area expansion [START]
 #ifdef FEATURE_LGE_TOUCH_EXPAND_HIDDEN_ACTIVE_AREA
 #define TOUCH_LCD_ACTIVE_AREA_Y				(LGE_TOUCH_RESOLUTION_Y + 20)
 #else
 #define TOUCH_LCD_ACTIVE_AREA_Y				(LGE_TOUCH_RESOLUTION_Y)
 #endif
-// 20100720  LCD Active area expansion [END]
+// 20100720 joseph.jung@lge.com LCD Active area expansion [END]
 
-// 20100906  Touch F/W version [START]
+// 20100906 joseph.jung@lge.com Touch F/W version [START]
 void storeTouchFWversion(int value);
 int showTouchFWversion(void);
-// 20100906  Touch F/W version [END]
+// 20100906 joseph.jung@lge.com Touch F/W version [END]
 
 
-// 20100402  LGE Touch Customization [END]
+// 20100402 joseph.jung@lge.com LGE Touch Customization [END]
 
 
 
@@ -269,12 +269,12 @@ typedef struct
     NvU8 Pressure[NVODM_MAX_INPUT_COORDS];
     /// Indicates the relative coordinate information.
     NvS8 XYDelta[NVODM_MAX_INPUT_COORDS][2];
-// 20100405  LGE Touch Customization [START]
+// 20100405 joseph.jung@lge.com LGE Touch Customization [START]
 #ifdef FEATURE_LGE_TOUCH_CUSTOMIZE
 	// multi-touch finger state
 	NvU8 multi_fingerstate[NVODM_MAX_INPUT_COORDS];
 #endif /* FEATURE_LGE_TOUCH_CUSTOMIZE */
-// 20100405  LGE Touch Customization [END]
+// 20100405 joseph.jung@lge.com LGE Touch Customization [END]
 } NvOdmTouchAdditionalInfo;
 
 
@@ -295,7 +295,6 @@ typedef struct
     void* pextrainfo;
     /// Specifies the size of extended data.
     NvU32 extrainfosize;
-
 } NvOdmTouchCoordinateInfo;
 
 
@@ -337,7 +336,7 @@ typedef enum
  * @param hDevice A pointer to the handle of the touch pad.
  * @return NV_TRUE if successful, or NV_FALSE otherwise.
  */
-// 20100423  for Touch Interrupt Issue at booting [START]
+// 20100423 joseph.jung@lge.com for Touch Interrupt Issue at booting [START]
 #ifdef FEATURE_LGE_TOUCH_CUSTOMIZE
 NvBool
 NvOdmTouchDeviceOpen( NvOdmTouchDeviceHandle *hDevice, NvOdmOsSemaphoreHandle* hIntSema);
@@ -345,7 +344,7 @@ NvOdmTouchDeviceOpen( NvOdmTouchDeviceHandle *hDevice, NvOdmOsSemaphoreHandle* h
 NvBool
 NvOdmTouchDeviceOpen( NvOdmTouchDeviceHandle *hDevice);
 #endif /* FEATURE_LGE_TOUCH_CUSTOMIZE */
-// 20100423  for Touch Interrupt Issue at booting [END]
+// 20100423 joseph.jung@lge.com for Touch Interrupt Issue at booting [END]
 
 /**
  * Gets capabilities for the specified touch device.
@@ -462,10 +461,10 @@ NvBool
 NvOdmTouchGetCalibrationData(NvOdmTouchDeviceHandle hDevice, NvU32 NumOfCalibrationData, NvS32* pRawCoordBuffer);
 
 
-// 20101020  Interrupt Enable/Disable [START]
+// 20101020 joseph.jung@lge.com Interrupt Enable/Disable [START]
 void
 NvOdmTouchInterruptMask(NvOdmTouchDeviceHandle hDevice, NvBool mask);
-// 20101020  Interrupt Enable/Disable [END]
+// 20101020 joseph.jung@lge.com Interrupt Enable/Disable [END]
 
 #if defined(__cplusplus)
 }

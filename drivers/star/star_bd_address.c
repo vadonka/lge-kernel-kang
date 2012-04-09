@@ -31,7 +31,7 @@ char mBDAddr[13];
 static ssize_t bd_address_store(struct device *dev,struct device_attribute *attr,const char *buf, size_t count)
 {
     
-	sscanf(buf, "%s", mBDAddr);
+	sscanf(buf, "%s", &mBDAddr);
 
     return count;
 }
@@ -41,14 +41,10 @@ static ssize_t bd_address_store(struct device *dev,struct device_attribute *attr
     @date   2010.11.08
 */
 
-static ssize_t bd_address_show(struct device *dev,struct device_attribute *attr, char *buf)
+static ssize_t bd_address_show(struct device *dev,struct device_attribute *attr,const char *buf, size_t count)
 {
-	return sprintf(buf,"%c%c:%c%c:%c%c:%c%c:%c%c:%c%c\n",
-			mBDAddr[0], mBDAddr[1], mBDAddr[2],
-			mBDAddr[3], mBDAddr[4], mBDAddr[5],
-			mBDAddr[6], mBDAddr[7], mBDAddr[8],
-			mBDAddr[9], mBDAddr[10], mBDAddr[11]);
-	//return sprintf(buf, "%s\n", mBDAddr);
+   
+   return sprintf(buf, "%s\n", mBDAddr);
 }
 static DEVICE_ATTR(bdaddr_if, 0666, bd_address_show, bd_address_store);
 
@@ -58,7 +54,7 @@ static DEVICE_ATTR(bdaddr_if, 0666, bd_address_show, bd_address_store);
     @date   2010.11.11
 */
 
-static int __devexit bd_address_remove(struct platform_device *pdev)
+static int __exit bd_address_remove(struct platform_device *pdev)
 {
 	return 0;
 }
@@ -68,7 +64,7 @@ static int __devexit bd_address_remove(struct platform_device *pdev)
     @date   2010.11.11
 */
 
-static int __devinit bd_address_probe(struct platform_device *pdev)
+static int __init bd_address_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -103,7 +99,7 @@ static int bd_address_resume(struct platform_device *pdev)
 
 static struct platform_driver bd_address_driver = {
 	.probe		= bd_address_probe,
-	.remove		= __devexit_p(bd_address_remove),
+	.remove		= __exit_p(bd_address_remove),
 	.suspend	= bd_address_suspend,
 	.resume		= bd_address_resume,
 	.driver		= {

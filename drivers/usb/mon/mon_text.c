@@ -7,11 +7,9 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/usb.h>
-#include <linux/slab.h>
 #include <linux/time.h>
 #include <linux/mutex.h>
 #include <linux/debugfs.h>
-#include <linux/scatterlist.h>
 #include <asm/uaccess.h>
 
 #include "usb_mon.h"
@@ -139,8 +137,6 @@ static inline char mon_text_get_setup(struct mon_event_text *ep,
 static inline char mon_text_get_data(struct mon_event_text *ep, struct urb *urb,
     int len, char ev_type, struct mon_bus *mbus)
 {
-	void *src;
-
 	if (len <= 0)
 		return 'L';
 	if (len >= DATA_MAX)
@@ -154,22 +150,10 @@ static inline char mon_text_get_data(struct mon_event_text *ep, struct urb *urb,
 			return '>';
 	}
 
-	if (urb->num_sgs == 0) {
-		src = urb->transfer_buffer;
-		if (src == NULL)
-			return 'Z';	/* '0' would be not as pretty. */
-	} else {
-		struct scatterlist *sg = urb->sg;
+	if (urb->transfer_buffer == NULL)
+		return 'Z';	/* '0' would be not as pretty. */
 
-		if (PageHighMem(sg_page(sg)))
-			return 'D';
-
-		/* For the text interface we copy only the first sg buffer */
-		len = min_t(int, sg->length, len);
-		src = sg_virt(sg);
-	}
-
-	memcpy(ep->data, src, len);
+	memcpy(ep->data, urb->transfer_buffer, len);
 	return 0;
 }
 
@@ -179,7 +163,7 @@ static inline unsigned int mon_get_timestamp(void)
 	unsigned int stamp;
 
 	do_gettimeofday(&tval);
-	stamp = tval.tv_sec & 0xFFF;	/* 2^32 = 4294967296. Limit to 4096s. */
+	stamp = tval.tv_sec & 0xFFFF;	/* 2^32 = 4294967296. Limit to 4096s. */
 	stamp = stamp * 1000000 + tval.tv_usec;
 	return stamp;
 }
@@ -236,9 +220,6 @@ static void mon_text_event(struct mon_reader_text *rp, struct urb *urb,
 			fp++;
 			dp++;
 		}
-		/* Wasteful, but simple to understand: ISO 'C' is sparse. */
-		if (ev_type == 'C')
-			ep->length = urb->transfer_buffer_length;
 	}
 
 	ep->setup_flag = mon_text_get_setup(ep, urb, ev_type, rp->r.m_bus);
@@ -275,12 +256,12 @@ static void mon_text_error(void *data, struct urb *urb, int error)
 
 	ep->type = 'E';
 	ep->id = (unsigned long) urb;
-	ep->busnum = urb->dev->bus->busnum;
+	ep->busnum = 0;
 	ep->devnum = urb->dev->devnum;
 	ep->epnum = usb_endpoint_num(&urb->ep->desc);
 	ep->xfertype = usb_endpoint_type(&urb->ep->desc);
 	ep->is_in = usb_urb_dir_in(urb);
-	ep->tstamp = mon_get_timestamp();
+	ep->tstamp = 0;
 	ep->length = 0;
 	ep->status = error;
 

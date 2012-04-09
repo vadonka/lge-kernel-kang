@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
-#include <linux/slab.h>
 
 #include "dlm_internal.h"
 #include "lock.h"
@@ -257,12 +256,12 @@ static int print_format3_lock(struct seq_file *s, struct dlm_lkb *lkb,
 			lkb->lkb_status,
 			lkb->lkb_grmode,
 			lkb->lkb_rqmode,
-			lkb->lkb_last_bast.mode,
+			lkb->lkb_highbast,
 			rsb_lookup,
 			lkb->lkb_wait_type,
 			lkb->lkb_lvbseq,
 			(unsigned long long)ktime_to_ns(lkb->lkb_timestamp),
-			(unsigned long long)ktime_to_ns(lkb->lkb_last_bast_time));
+			(unsigned long long)ktime_to_ns(lkb->lkb_time_bast));
 	return rv;
 }
 
@@ -405,7 +404,7 @@ static void *table_seq_start(struct seq_file *seq, loff_t *pos)
 	if (bucket >= ls->ls_rsbtbl_size)
 		return NULL;
 
-	ri = kzalloc(sizeof(struct rsbtbl_iter), GFP_NOFS);
+	ri = kzalloc(sizeof(struct rsbtbl_iter), GFP_KERNEL);
 	if (!ri)
 		return NULL;
 	if (n == 0)
@@ -643,8 +642,7 @@ static ssize_t waiters_read(struct file *file, char __user *userbuf,
 static const struct file_operations waiters_fops = {
 	.owner   = THIS_MODULE,
 	.open    = waiters_open,
-	.read    = waiters_read,
-	.llseek  = default_llseek,
+	.read    = waiters_read
 };
 
 void dlm_delete_debug_file(struct dlm_ls *ls)

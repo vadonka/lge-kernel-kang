@@ -20,7 +20,6 @@
 #include <linux/device.h>
 #include <linux/mutex.h>
 #include <linux/interrupt.h>
-#include <linux/slab.h>
 #include <linux/sched.h>
 
 #include <linux/mtd/mtd.h>
@@ -66,32 +65,22 @@ struct flash_info {
 
 #define to_sst25l_flash(x) container_of(x, struct sst25l_flash, mtd)
 
-static struct flash_info __devinitdata sst25l_flash_info[] = {
+static struct flash_info __initdata sst25l_flash_info[] = {
 	{"sst25lf020a", 0xbf43, 256, 1024, 4096},
 	{"sst25lf040a",	0xbf44,	256, 2048, 4096},
 };
 
 static int sst25l_status(struct sst25l_flash *flash, int *status)
 {
-	struct spi_message m;
-	struct spi_transfer t;
-	unsigned char cmd_resp[2];
+	unsigned char command, response;
 	int err;
 
-	spi_message_init(&m);
-	memset(&t, 0, sizeof(struct spi_transfer));
-
-	cmd_resp[0] = SST25L_CMD_RDSR;
-	cmd_resp[1] = 0xff;
-	t.tx_buf = cmd_resp;
-	t.rx_buf = cmd_resp;
-	t.len = sizeof(cmd_resp);
-	spi_message_add_tail(&t, &m);
-	err = spi_sync(flash->spi, &m);
+	command = SST25L_CMD_RDSR;
+	err = spi_write_then_read(flash->spi, &command, 1, &response, 1);
 	if (err < 0)
 		return err;
 
-	*status = cmd_resp[1];
+	*status = response;
 	return 0;
 }
 
@@ -335,35 +324,36 @@ out:
 	return ret;
 }
 
-static struct flash_info *__devinit sst25l_match_device(struct spi_device *spi)
+static struct flash_info *__init sst25l_match_device(struct spi_device *spi)
 {
 	struct flash_info *flash_info = NULL;
-	struct spi_message m;
-	struct spi_transfer t;
-	unsigned char cmd_resp[6];
+	unsigned char command[4], response;
 	int i, err;
 	uint16_t id;
 
-	spi_message_init(&m);
-	memset(&t, 0, sizeof(struct spi_transfer));
-
-	cmd_resp[0] = SST25L_CMD_READ_ID;
-	cmd_resp[1] = 0;
-	cmd_resp[2] = 0;
-	cmd_resp[3] = 0;
-	cmd_resp[4] = 0xff;
-	cmd_resp[5] = 0xff;
-	t.tx_buf = cmd_resp;
-	t.rx_buf = cmd_resp;
-	t.len = sizeof(cmd_resp);
-	spi_message_add_tail(&t, &m);
-	err = spi_sync(spi, &m);
+	command[0] = SST25L_CMD_READ_ID;
+	command[1] = 0;
+	command[2] = 0;
+	command[3] = 0;
+	err = spi_write_then_read(spi, command, sizeof(command), &response, 1);
 	if (err < 0) {
-		dev_err(&spi->dev, "error reading device id\n");
+		dev_err(&spi->dev, "error reading device id msb\n");
 		return NULL;
 	}
 
-	id = (cmd_resp[4] << 8) | cmd_resp[5];
+	id = response << 8;
+
+	command[0] = SST25L_CMD_READ_ID;
+	command[1] = 0;
+	command[2] = 0;
+	command[3] = 1;
+	err = spi_write_then_read(spi, command, sizeof(command), &response, 1);
+	if (err < 0) {
+		dev_err(&spi->dev, "error reading device id lsb\n");
+		return NULL;
+	}
+
+	id |= response;
 
 	for (i = 0; i < ARRAY_SIZE(sst25l_flash_info); i++)
 		if (sst25l_flash_info[i].device_id == id)
@@ -375,14 +365,12 @@ static struct flash_info *__devinit sst25l_match_device(struct spi_device *spi)
 	return flash_info;
 }
 
-static int __devinit sst25l_probe(struct spi_device *spi)
+static int __init sst25l_probe(struct spi_device *spi)
 {
 	struct flash_info *flash_info;
 	struct sst25l_flash *flash;
 	struct flash_platform_data *data;
 	int ret, i;
-	struct mtd_partition *parts = NULL;
-	int nr_parts = 0;
 
 	flash_info = sst25l_match_device(spi);
 	if (!flash_info)
@@ -422,37 +410,57 @@ static int __devinit sst25l_probe(struct spi_device *spi)
 	      flash->mtd.erasesize, flash->mtd.erasesize / 1024,
 	      flash->mtd.numeraseregions);
 
+	if (flash->mtd.numeraseregions)
+		for (i = 0; i < flash->mtd.numeraseregions; i++)
+			DEBUG(MTD_DEBUG_LEVEL2,
+			      "mtd.eraseregions[%d] = { .offset = 0x%llx, "
+			      ".erasesize = 0x%.8x (%uKiB), "
+			      ".numblocks = %d }\n",
+			      i, (long long)flash->mtd.eraseregions[i].offset,
+			      flash->mtd.eraseregions[i].erasesize,
+			      flash->mtd.eraseregions[i].erasesize / 1024,
+			      flash->mtd.eraseregions[i].numblocks);
 
-	if (mtd_has_cmdlinepart()) {
-		static const char *part_probes[] = {"cmdlinepart", NULL};
+	if (mtd_has_partitions()) {
+		struct mtd_partition *parts = NULL;
+		int nr_parts = 0;
 
-		nr_parts = parse_mtd_partitions(&flash->mtd,
-						part_probes,
-						&parts, 0);
-	}
+		if (mtd_has_cmdlinepart()) {
+			static const char *part_probes[] =
+				{"cmdlinepart", NULL};
 
-	if (nr_parts <= 0 && data && data->parts) {
-		parts = data->parts;
-		nr_parts = data->nr_parts;
-	}
-
-	if (nr_parts > 0) {
-		for (i = 0; i < nr_parts; i++) {
-			DEBUG(MTD_DEBUG_LEVEL2, "partitions[%d] = "
-			      "{.name = %s, .offset = 0x%llx, "
-			      ".size = 0x%llx (%lldKiB) }\n",
-			      i, parts[i].name,
-			      (long long)parts[i].offset,
-			      (long long)parts[i].size,
-			      (long long)(parts[i].size >> 10));
+			nr_parts = parse_mtd_partitions(&flash->mtd,
+							part_probes,
+							&parts, 0);
 		}
 
-		flash->partitioned = 1;
-		return mtd_device_register(&flash->mtd, parts,
-					   nr_parts);
+		if (nr_parts <= 0 && data && data->parts) {
+			parts = data->parts;
+			nr_parts = data->nr_parts;
+		}
+
+		if (nr_parts > 0) {
+			for (i = 0; i < nr_parts; i++) {
+				DEBUG(MTD_DEBUG_LEVEL2, "partitions[%d] = "
+				      "{.name = %s, .offset = 0x%llx, "
+				      ".size = 0x%llx (%lldKiB) }\n",
+				      i, parts[i].name,
+				      (long long)parts[i].offset,
+				      (long long)parts[i].size,
+				      (long long)(parts[i].size >> 10));
+			}
+
+			flash->partitioned = 1;
+			return add_mtd_partitions(&flash->mtd,
+						  parts, nr_parts);
+		}
+
+	} else if (data->nr_parts) {
+		dev_warn(&spi->dev, "ignoring %d default partitions on %s\n",
+			 data->nr_parts, data->name);
 	}
 
-	ret = mtd_device_register(&flash->mtd, NULL, 0);
+	ret = add_mtd_device(&flash->mtd);
 	if (ret == 1) {
 		kfree(flash);
 		dev_set_drvdata(&spi->dev, NULL);
@@ -462,12 +470,15 @@ static int __devinit sst25l_probe(struct spi_device *spi)
 	return 0;
 }
 
-static int __devexit sst25l_remove(struct spi_device *spi)
+static int __exit sst25l_remove(struct spi_device *spi)
 {
 	struct sst25l_flash *flash = dev_get_drvdata(&spi->dev);
 	int ret;
 
-	ret = mtd_device_unregister(&flash->mtd);
+	if (mtd_has_partitions() && flash->partitioned)
+		ret = del_mtd_partitions(&flash->mtd);
+	else
+		ret = del_mtd_device(&flash->mtd);
 	if (ret == 0)
 		kfree(flash);
 	return ret;
@@ -480,7 +491,7 @@ static struct spi_driver sst25l_driver = {
 		.owner	= THIS_MODULE,
 	},
 	.probe		= sst25l_probe,
-	.remove		= __devexit_p(sst25l_remove),
+	.remove		= __exit_p(sst25l_remove),
 };
 
 static int __init sst25l_init(void)

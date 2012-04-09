@@ -24,6 +24,7 @@
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
@@ -533,9 +534,10 @@ static int __init platinumfb_setup(char *options)
 #define invalidate_cache(addr)
 #endif
 
-static int __devinit platinumfb_probe(struct platform_device* odev)
+static int __devinit platinumfb_probe(struct of_device* odev,
+				      const struct of_device_id *match)
 {
-	struct device_node	*dp = odev->dev.of_node;
+	struct device_node	*dp = odev->node;
 	struct fb_info		*info;
 	struct fb_info_platinum	*pinfo;
 	volatile __u8		*fbuffer;
@@ -645,7 +647,7 @@ static int __devinit platinumfb_probe(struct platform_device* odev)
 	return rc;
 }
 
-static int __devexit platinumfb_remove(struct platform_device* odev)
+static int __devexit platinumfb_remove(struct of_device* odev)
 {
 	struct fb_info		*info = dev_get_drvdata(&odev->dev);
 	struct fb_info_platinum	*pinfo = info->par;
@@ -676,13 +678,10 @@ static struct of_device_id platinumfb_match[] =
 	{},
 };
 
-static struct platform_driver platinum_driver = 
+static struct of_platform_driver platinum_driver = 
 {
-	.driver = {
-		.name = "platinumfb",
-		.owner = THIS_MODULE,
-		.of_match_table = platinumfb_match,
-	},
+	.name 		= "platinumfb",
+	.match_table	= platinumfb_match,
 	.probe		= platinumfb_probe,
 	.remove		= platinumfb_remove,
 };
@@ -696,14 +695,14 @@ static int __init platinumfb_init(void)
 		return -ENODEV;
 	platinumfb_setup(option);
 #endif
-	platform_driver_register(&platinum_driver);
+	of_register_platform_driver(&platinum_driver);
 
 	return 0;
 }
 
 static void __exit platinumfb_exit(void)
 {
-	platform_driver_unregister(&platinum_driver);
+	of_unregister_platform_driver(&platinum_driver);
 }
 
 MODULE_LICENSE("GPL");

@@ -23,7 +23,6 @@
  */
 
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
 #include <linux/mISDNhw.h>
@@ -111,7 +110,6 @@ set_debug(const char *val, struct kernel_param *kp)
 MODULE_AUTHOR("Karsten Keil");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION(SPEEDFAX_REV);
-MODULE_FIRMWARE("isdn/ISAR.BIN");
 module_param_call(debug, set_debug, param_get_uint, &debug, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(debug, "Speedfax debug mask");
 module_param(irqloops, uint, S_IRUGO | S_IWUSR);
@@ -484,7 +482,7 @@ sfax_remove_pci(struct pci_dev *pdev)
 	if (card)
 		release_card(card);
 	else
-		pr_debug("%s: drvdata already removed\n", __func__);
+		pr_debug("%s: drvdata allready removed\n", __func__);
 }
 
 static struct pci_device_id sfaxpci_ids[] __devinitdata = {

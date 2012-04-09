@@ -11,7 +11,6 @@
 
 #include <linux/module.h>
 #include <linux/types.h>
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -51,7 +50,7 @@ struct pxa2xx_flash_info {
 static const char *probes[] = { "RedBoot", "cmdlinepart", NULL };
 
 
-static int __devinit pxa2xx_flash_probe(struct platform_device *pdev)
+static int __init pxa2xx_flash_probe(struct platform_device *pdev)
 {
 	struct flash_platform_data *flash = pdev->dev.platform_data;
 	struct pxa2xx_flash_info *info;
@@ -63,10 +62,11 @@ static int __devinit pxa2xx_flash_probe(struct platform_device *pdev)
 	if (!res)
 		return -ENODEV;
 
-	info = kzalloc(sizeof(struct pxa2xx_flash_info), GFP_KERNEL);
+	info = kmalloc(sizeof(struct pxa2xx_flash_info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
+	memset(info, 0, sizeof(struct pxa2xx_flash_info));
 	info->map.name = (char *) flash->name;
 	info->map.bankwidth = flash->width;
 	info->map.phys = res->start;
@@ -104,18 +104,23 @@ static int __devinit pxa2xx_flash_probe(struct platform_device *pdev)
 	}
 	info->mtd->owner = THIS_MODULE;
 
+#ifdef CONFIG_MTD_PARTITIONS
 	ret = parse_mtd_partitions(info->mtd, probes, &parts, 0);
 
 	if (ret > 0) {
 		info->nr_parts = ret;
 		info->parts = parts;
 	}
+#endif
 
-	if (!info->nr_parts)
+	if (info->nr_parts) {
+		add_mtd_partitions(info->mtd, info->parts,
+				   info->nr_parts);
+	} else {
 		printk("Registering %s as whole device\n",
 		       info->map.name);
-
-	mtd_device_register(info->mtd, info->parts, info->nr_parts);
+		add_mtd_device(info->mtd);
+	}
 
 	platform_set_drvdata(pdev, info);
 	return 0;
@@ -127,7 +132,12 @@ static int __devexit pxa2xx_flash_remove(struct platform_device *dev)
 
 	platform_set_drvdata(dev, NULL);
 
-	mtd_device_unregister(info->mtd);
+#ifdef CONFIG_MTD_PARTITIONS
+	if (info->nr_parts)
+		del_mtd_partitions(info->mtd);
+	else
+#endif
+		del_mtd_device(info->mtd);
 
 	map_destroy(info->mtd);
 	iounmap(info->map.virt);

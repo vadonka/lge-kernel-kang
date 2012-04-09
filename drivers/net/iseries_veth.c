@@ -69,7 +69,6 @@
 #include <linux/mm.h>
 #include <linux/ethtool.h>
 #include <linux/if_ether.h>
-#include <linux/slab.h>
 
 #include <asm/abs_addr.h>
 #include <asm/iseries/mf.h>
@@ -385,7 +384,7 @@ static struct attribute *veth_cnx_default_attrs[] = {
 	NULL
 };
 
-static const struct sysfs_ops veth_cnx_sysfs_ops = {
+static struct sysfs_ops veth_cnx_sysfs_ops = {
 		.show = veth_cnx_attribute_show
 };
 
@@ -442,7 +441,7 @@ static struct attribute *veth_port_default_attrs[] = {
 	NULL
 };
 
-static const struct sysfs_ops veth_port_sysfs_ops = {
+static struct sysfs_ops veth_port_sysfs_ops = {
 	.show = veth_port_attribute_show
 };
 
@@ -605,10 +604,10 @@ static int veth_process_caps(struct veth_lpar_connection *cnx)
 	/* Convert timer to jiffies */
 	cnx->ack_timeout = remote_caps->ack_timeout * HZ / 1000000;
 
-	if ( (remote_caps->num_buffers == 0) ||
-	     (remote_caps->ack_threshold > VETH_MAX_ACKS_PER_MSG) ||
-	     (remote_caps->ack_threshold == 0) ||
-	     (cnx->ack_timeout == 0) ) {
+	if ( (remote_caps->num_buffers == 0)
+	     || (remote_caps->ack_threshold > VETH_MAX_ACKS_PER_MSG)
+	     || (remote_caps->ack_threshold == 0)
+	     || (cnx->ack_timeout == 0) ) {
 		veth_error("Received incompatible capabilities from LPAR %d.\n",
 				cnx->remote_lp);
 		return HvLpEvent_Rc_InvalidSubtypeData;
@@ -715,8 +714,8 @@ static void veth_statemachine(struct work_struct *work)
 		cnx->state |= VETH_STATE_OPEN;
 	}
 
-	if ( (cnx->state & VETH_STATE_OPEN) &&
-	     !(cnx->state & VETH_STATE_SENTMON) ) {
+	if ( (cnx->state & VETH_STATE_OPEN)
+	     && !(cnx->state & VETH_STATE_SENTMON) ) {
 		rc = veth_signalevent(cnx, VETH_EVENT_MONITOR,
 				      HvLpEvent_AckInd_DoAck,
 				      HvLpEvent_AckType_DeferredAck,
@@ -725,8 +724,8 @@ static void veth_statemachine(struct work_struct *work)
 		if (rc == HvLpEvent_Rc_Good) {
 			cnx->state |= VETH_STATE_SENTMON;
 		} else {
-			if ( (rc != HvLpEvent_Rc_PartitionDead) &&
-			     (rc != HvLpEvent_Rc_PathClosed) )
+			if ( (rc != HvLpEvent_Rc_PartitionDead)
+			     && (rc != HvLpEvent_Rc_PathClosed) )
 				veth_error("Error sending monitor to LPAR %d, "
 						"rc = %d\n", rlp, rc);
 
@@ -736,8 +735,8 @@ static void veth_statemachine(struct work_struct *work)
 		}
 	}
 
-	if ( (cnx->state & VETH_STATE_OPEN) &&
-	     !(cnx->state & VETH_STATE_SENTCAPS)) {
+	if ( (cnx->state & VETH_STATE_OPEN)
+	     && !(cnx->state & VETH_STATE_SENTCAPS)) {
 		u64 *rawcap = (u64 *)&cnx->local_caps;
 
 		rc = veth_signalevent(cnx, VETH_EVENT_CAP,
@@ -749,8 +748,8 @@ static void veth_statemachine(struct work_struct *work)
 		if (rc == HvLpEvent_Rc_Good) {
 			cnx->state |= VETH_STATE_SENTCAPS;
 		} else {
-			if ( (rc != HvLpEvent_Rc_PartitionDead) &&
-			     (rc != HvLpEvent_Rc_PathClosed) )
+			if ( (rc != HvLpEvent_Rc_PartitionDead)
+			     && (rc != HvLpEvent_Rc_PathClosed) )
 				veth_error("Error sending caps to LPAR %d, "
 						"rc = %d\n", rlp, rc);
 
@@ -760,8 +759,8 @@ static void veth_statemachine(struct work_struct *work)
 		}
 	}
 
-	if ((cnx->state & VETH_STATE_GOTCAPS) &&
-	    !(cnx->state & VETH_STATE_SENTCAPACK)) {
+	if ((cnx->state & VETH_STATE_GOTCAPS)
+	    && !(cnx->state & VETH_STATE_SENTCAPACK)) {
 		struct veth_cap_data *remote_caps = &cnx->remote_caps;
 
 		memcpy(remote_caps, &cnx->cap_event.u.caps_data,
@@ -784,9 +783,9 @@ static void veth_statemachine(struct work_struct *work)
 			goto cant_cope;
 	}
 
-	if ((cnx->state & VETH_STATE_GOTCAPACK) &&
-	    (cnx->state & VETH_STATE_GOTCAPS) &&
-	    !(cnx->state & VETH_STATE_READY)) {
+	if ((cnx->state & VETH_STATE_GOTCAPACK)
+	    && (cnx->state & VETH_STATE_GOTCAPS)
+	    && !(cnx->state & VETH_STATE_READY)) {
 		if (cnx->cap_ack_event.base_event.xRc == HvLpEvent_Rc_Good) {
 			/* Start the ACK timer */
 			cnx->ack_timer.expires = jiffies + cnx->ack_timeout;
@@ -819,8 +818,8 @@ static int veth_init_connection(u8 rlp)
 	struct veth_msg *msgs;
 	int i;
 
-	if ( (rlp == this_lp) ||
-	     ! HvLpConfig_doLpsCommunicateOnVirtualLan(this_lp, rlp) )
+	if ( (rlp == this_lp)
+	     || ! HvLpConfig_doLpsCommunicateOnVirtualLan(this_lp, rlp) )
 		return 0;
 
 	cnx = kzalloc(sizeof(*cnx), GFP_KERNEL);
@@ -885,8 +884,17 @@ static void veth_stop_connection(struct veth_lpar_connection *cnx)
 	veth_kick_statemachine(cnx);
 	spin_unlock_irq(&cnx->lock);
 
-	/* ensure the statemachine runs now and waits for its completion */
-	flush_delayed_work_sync(&cnx->statemachine_wq);
+	/* There's a slim chance the reset code has just queued the
+	 * statemachine to run in five seconds. If so we need to cancel
+	 * that and requeue the work to run now. */
+	if (cancel_delayed_work(&cnx->statemachine_wq)) {
+		spin_lock_irq(&cnx->lock);
+		veth_kick_statemachine(cnx);
+		spin_unlock_irq(&cnx->lock);
+	}
+
+	/* Wait for the state machine to run. */
+	flush_scheduled_work();
 }
 
 static void veth_destroy_connection(struct veth_lpar_connection *cnx)
@@ -950,18 +958,19 @@ static void veth_set_multicast_list(struct net_device *dev)
 	write_lock_irqsave(&port->mcast_gate, flags);
 
 	if ((dev->flags & IFF_PROMISC) || (dev->flags & IFF_ALLMULTI) ||
-			(netdev_mc_count(dev) > VETH_MAX_MCAST)) {
+			(dev->mc_count > VETH_MAX_MCAST)) {
 		port->promiscuous = 1;
 	} else {
-		struct netdev_hw_addr *ha;
+		struct dev_mc_list *dmi = dev->mc_list;
+		int i;
 
 		port->promiscuous = 0;
 
 		/* Update table */
 		port->num_mcast = 0;
 
-		netdev_for_each_mc_addr(ha, dev) {
-			u8 *addr = ha->addr;
+		for (i = 0; i < dev->mc_count; i++) {
+			u8 *addr = dmi->dmi_addr;
 			u64 xaddr = 0;
 
 			if (addr[0] & 0x01) {/* multicast address? */
@@ -969,6 +978,7 @@ static void veth_set_multicast_list(struct net_device *dev)
 				port->mcast_addr[port->num_mcast] = xaddr;
 				port->num_mcast++;
 			}
+			dmi = dmi->next;
 		}
 	}
 
@@ -1000,10 +1010,15 @@ static int veth_get_settings(struct net_device *dev, struct ethtool_cmd *ecmd)
 	return 0;
 }
 
+static u32 veth_get_link(struct net_device *dev)
+{
+	return 1;
+}
+
 static const struct ethtool_ops ops = {
 	.get_drvinfo = veth_get_drvinfo,
 	.get_settings = veth_get_settings,
-	.get_link = ethtool_op_get_link,
+	.get_link = veth_get_link,
 };
 
 static const struct net_device_ops veth_netdev_ops = {
@@ -1369,7 +1384,7 @@ static inline void veth_build_dma_list(struct dma_chunk *list,
 	unsigned long done;
 	int i = 1;
 
-	/* FIXME: skbs are contiguous in real addresses.  Do we
+	/* FIXME: skbs are continguous in real addresses.  Do we
 	 * really need to break it into PAGE_SIZE chunks, or can we do
 	 * it just at the granularity of iSeries real->absolute
 	 * mapping?  Indeed, given the way the allocator works, can we
@@ -1510,7 +1525,7 @@ static void veth_receive(struct veth_lpar_connection *cnx,
 
 		skb_put(skb, length);
 		skb->protocol = eth_type_trans(skb, dev);
-		skb_checksum_none_assert(skb);
+		skb->ip_summed = CHECKSUM_NONE;
 		netif_rx(skb);	/* send it up */
 		dev->stats.rx_packets++;
 		dev->stats.rx_bytes += length;
@@ -1523,8 +1538,8 @@ static void veth_receive(struct veth_lpar_connection *cnx,
 	cnx->pending_acks[cnx->num_pending_acks++] =
 		event->base_event.xCorrelationToken;
 
-	if ( (cnx->num_pending_acks >= cnx->remote_caps.ack_threshold) ||
-	     (cnx->num_pending_acks >= VETH_MAX_ACKS_PER_MSG) )
+	if ( (cnx->num_pending_acks >= cnx->remote_caps.ack_threshold)
+	     || (cnx->num_pending_acks >= VETH_MAX_ACKS_PER_MSG) )
 		veth_flush_acks(cnx);
 
 	spin_unlock_irqrestore(&cnx->lock, flags);
@@ -1591,7 +1606,7 @@ static int veth_probe(struct vio_dev *vdev, const struct vio_device_id *id)
 	}
 	veth_dev[i] = dev;
 
-	port = netdev_priv(dev);
+	port = (struct veth_port*)netdev_priv(dev);
 
 	/* Start the state machine on each connection on this vlan. If we're
 	 * the first dev to do so this will commence link negotiation */
@@ -1644,14 +1659,15 @@ static void __exit veth_module_cleanup(void)
 	/* Disconnect our "irq" to stop events coming from the Hypervisor. */
 	HvLpEvent_unregisterHandler(HvLpEvent_Type_VirtualLan);
 
+	/* Make sure any work queued from Hypervisor callbacks is finished. */
+	flush_scheduled_work();
+
 	for (i = 0; i < HVMAXARCHITECTEDLPS; ++i) {
 		cnx = veth_cnx[i];
 
 		if (!cnx)
 			continue;
 
-		/* Cancel work queued from Hypervisor callbacks */
-		cancel_delayed_work_sync(&cnx->statemachine_wq);
 		/* Remove the connection from sysfs */
 		kobject_del(&cnx->kobject);
 		/* Drop the driver's reference to the connection */

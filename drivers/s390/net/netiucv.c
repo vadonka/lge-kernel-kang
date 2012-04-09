@@ -113,9 +113,11 @@ static inline int iucv_dbf_passes(debug_info_t *dbf_grp, int level)
 #define IUCV_DBF_TEXT_(name, level, text...) \
 	do { \
 		if (iucv_dbf_passes(iucv_dbf_##name, level)) { \
-			char* __buf = get_cpu_var(iucv_dbf_txt_buf); \
-			sprintf(__buf, text); \
-			debug_text_event(iucv_dbf_##name, level, __buf); \
+			char* iucv_dbf_txt_buf = \
+					get_cpu_var(iucv_dbf_txt_buf); \
+			sprintf(iucv_dbf_txt_buf, text); \
+			debug_text_event(iucv_dbf_##name, level, \
+						iucv_dbf_txt_buf); \
 			put_cpu_var(iucv_dbf_txt_buf); \
 		} \
 	} while (0)
@@ -159,7 +161,7 @@ static void netiucv_pm_complete(struct device *);
 static int netiucv_pm_freeze(struct device *);
 static int netiucv_pm_restore_thaw(struct device *);
 
-static const struct dev_pm_ops netiucv_pm_ops = {
+static struct dev_pm_ops netiucv_pm_ops = {
 	.prepare = netiucv_pm_prepare,
 	.complete = netiucv_pm_complete,
 	.freeze = netiucv_pm_freeze,
@@ -565,7 +567,7 @@ static int netiucv_callback_connreq(struct iucv_path *path,
 	struct iucv_event ev;
 	int rc;
 
-	if (memcmp(iucvMagic, ipuser, 16))
+	if (memcmp(iucvMagic, ipuser, sizeof(ipuser)))
 		/* ipuser must match iucvMagic. */
 		return -EINVAL;
 	rc = -EINVAL;
@@ -1994,6 +1996,8 @@ static struct net_device *netiucv_init_netdevice(char *username)
 			   netiucv_setup_netdevice);
 	if (!dev)
 		return NULL;
+	if (dev_alloc_name(dev, dev->name) < 0)
+		goto out_netdev;
 
 	privptr = netdev_priv(dev);
 	privptr->fsm = init_fsm("netiucvdev", dev_state_names,

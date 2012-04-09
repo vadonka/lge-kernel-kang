@@ -19,7 +19,6 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/pagemap.h>
-#include <linux/gfp.h>
 #include <linux/swap.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
@@ -40,6 +39,8 @@
 #include <asm/tlb.h>
 
 #undef DEBUG
+
+DEFINE_PER_CPU(struct mmu_gather, mmu_gathers);
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux

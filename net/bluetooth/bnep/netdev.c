@@ -26,7 +26,6 @@
 */
 
 #include <linux/module.h>
-#include <linux/slab.h>
 
 #include <linux/socket.h>
 #include <linux/netdevice.h>
@@ -65,7 +64,7 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 	struct sk_buff *skb;
 	int size;
 
-	BT_DBG("%s mc_count %d", dev->name, netdev_mc_count(dev));
+	BT_DBG("%s mc_count %d", dev->name, dev->mc_count);
 
 	size = sizeof(*r) + (BNEP_MAX_MULTICAST_FILTERS + 1) * ETH_ALEN * 2;
 	skb  = alloc_skb(size, GFP_ATOMIC);
@@ -88,7 +87,7 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 		memcpy(__skb_put(skb, ETH_ALEN), dev->broadcast, ETH_ALEN);
 		r->len = htons(ETH_ALEN * 2);
 	} else {
-		struct netdev_hw_addr *ha;
+		struct dev_mc_list *dmi = dev->mc_list;
 		int i, len = skb->len;
 
 		if (dev->flags & IFF_BROADCAST) {
@@ -98,20 +97,16 @@ static void bnep_net_set_mc_list(struct net_device *dev)
 
 		/* FIXME: We should group addresses here. */
 
-		i = 0;
-		netdev_for_each_mc_addr(ha, dev) {
-			if (i == BNEP_MAX_MULTICAST_FILTERS)
-				break;
-			memcpy(__skb_put(skb, ETH_ALEN), ha->addr, ETH_ALEN);
-			memcpy(__skb_put(skb, ETH_ALEN), ha->addr, ETH_ALEN);
-
-			i++;
+		for (i = 0; i < dev->mc_count && i < BNEP_MAX_MULTICAST_FILTERS; i++) {
+			memcpy(__skb_put(skb, ETH_ALEN), dmi->dmi_addr, ETH_ALEN);
+			memcpy(__skb_put(skb, ETH_ALEN), dmi->dmi_addr, ETH_ALEN);
+			dmi = dmi->next;
 		}
 		r->len = htons(skb->len - len);
 	}
 
 	skb_queue_tail(&sk->sk_write_queue, skb);
-	wake_up_interruptible(sk_sleep(sk));
+	wake_up_interruptible(sk->sk_sleep);
 #endif
 }
 
@@ -195,11 +190,11 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	/*
 	 * We cannot send L2CAP packets from here as we are potentially in a bh.
 	 * So we have to queue them and wake up session thread which is sleeping
-	 * on the sk_sleep(sk).
+	 * on the sk->sk_sleep.
 	 */
 	dev->trans_start = jiffies;
 	skb_queue_tail(&sk->sk_write_queue, skb);
-	wake_up_interruptible(sk_sleep(sk));
+	wake_up_interruptible(sk->sk_sleep);
 
 	if (skb_queue_len(&sk->sk_write_queue) >= BNEP_TX_QUEUE_LEN) {
 		BT_DBG("tx queue is full");
@@ -212,21 +207,11 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
-static int bnep_validate_addr(struct net_device *dev)
-{
-	u8 *addr = dev->dev_addr;
-	/* Make sure the 6th byte is even */
-	if (addr[0] & 0x1) {
-		addr[0]--;
-	}
-	return eth_validate_addr(dev);
-}
-
 static const struct net_device_ops bnep_netdev_ops = {
 	.ndo_open            = bnep_net_open,
 	.ndo_stop            = bnep_net_close,
 	.ndo_start_xmit	     = bnep_net_xmit,
-	.ndo_validate_addr   = bnep_validate_addr,
+	.ndo_validate_addr   = eth_validate_addr,
 	.ndo_set_multicast_list = bnep_net_set_mc_list,
 	.ndo_set_mac_address = bnep_net_set_mac_addr,
 	.ndo_tx_timeout      = bnep_net_timeout,
@@ -241,7 +226,6 @@ void bnep_net_setup(struct net_device *dev)
 	dev->addr_len = ETH_ALEN;
 
 	ether_setup(dev);
-	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->netdev_ops = &bnep_netdev_ops;
 
 	dev->watchdog_timeo  = HZ * 2;

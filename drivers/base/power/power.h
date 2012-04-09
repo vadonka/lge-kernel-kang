@@ -12,10 +12,10 @@ static inline void pm_runtime_remove(struct device *dev) {}
 
 #ifdef CONFIG_PM_SLEEP
 
-/* kernel/power/main.c */
-extern int pm_async_enabled;
+/*
+ * main.c
+ */
 
-/* drivers/base/power/main.c */
 extern struct list_head dpm_list;	/* The active device list */
 
 static inline struct device *to_device(struct list_head *entry)
@@ -34,7 +34,6 @@ extern void device_pm_move_last(struct device *);
 
 static inline void device_pm_init(struct device *dev)
 {
-	spin_lock_init(&dev->power.lock);
 	pm_runtime_init(dev);
 }
 
@@ -58,18 +57,18 @@ static inline void device_pm_move_last(struct device *dev) {}
  * sysfs.c
  */
 
-extern int dpm_sysfs_add(struct device *dev);
-extern void dpm_sysfs_remove(struct device *dev);
-extern void rpm_sysfs_remove(struct device *dev);
-extern int wakeup_sysfs_add(struct device *dev);
-extern void wakeup_sysfs_remove(struct device *dev);
+extern int dpm_sysfs_add(struct device *);
+extern void dpm_sysfs_remove(struct device *);
 
 #else /* CONFIG_PM */
 
-static inline int dpm_sysfs_add(struct device *dev) { return 0; }
-static inline void dpm_sysfs_remove(struct device *dev) {}
-static inline void rpm_sysfs_remove(struct device *dev) {}
-static inline int wakeup_sysfs_add(struct device *dev) { return 0; }
-static inline void wakeup_sysfs_remove(struct device *dev) {}
+static inline int dpm_sysfs_add(struct device *dev)
+{
+	return 0;
+}
+
+static inline void dpm_sysfs_remove(struct device *dev)
+{
+}
 
 #endif

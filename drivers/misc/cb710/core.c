@@ -9,11 +9,11 @@
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
 #include <linux/idr.h>
 #include <linux/cb710.h>
-#include <linux/gfp.h>
 
 static DEFINE_IDA(cb710_ida);
 static DEFINE_SPINLOCK(cb710_ida_lock);
@@ -244,7 +244,6 @@ static int __devinit cb710_probe(struct pci_dev *pdev,
 	if (err)
 		return err;
 
-	spin_lock_init(&chip->irq_lock);
 	chip->pdev = pdev;
 	chip->iobase = pcim_iomap_table(pdev)[0];
 

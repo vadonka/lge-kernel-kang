@@ -308,7 +308,7 @@ static void ib_cache_event(struct ib_event_handler *handler,
 			INIT_WORK(&work->work, ib_cache_task);
 			work->device   = event->device;
 			work->port_num = event->element.port_num;
-			queue_work(ib_wq, &work->work);
+			schedule_work(&work->work);
 		}
 	}
 }
@@ -368,7 +368,7 @@ static void ib_cache_cleanup_one(struct ib_device *device)
 	int p;
 
 	ib_unregister_event_handler(&device->cache.event_handler);
-	flush_workqueue(ib_wq);
+	flush_scheduled_work();
 
 	for (p = 0; p <= end_port(device) - start_port(device); ++p) {
 		kfree(device->cache.pkey_cache[p]);

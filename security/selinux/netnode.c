@@ -31,7 +31,6 @@
 #include <linux/types.h>
 #include <linux/rcupdate.h>
 #include <linux/list.h>
-#include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/in.h>
 #include <linux/in6.h>
@@ -141,7 +140,6 @@ static struct sel_netnode *sel_netnode_find(const void *addr, u16 family)
 		break;
 	default:
 		BUG();
-		return NULL;
 	}
 
 	list_for_each_entry_rcu(node, &sel_netnode_hash[idx].list, list)
@@ -183,6 +181,8 @@ static void sel_netnode_insert(struct sel_netnode *node)
 	default:
 		BUG();
 	}
+
+	INIT_RCU_HEAD(&node->rcu);
 
 	/* we need to impose a limit on the growth of the hash table so check
 	 * this bucket to make sure it is within the specified bounds */

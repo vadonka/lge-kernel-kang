@@ -363,7 +363,7 @@
 #define AP20_GPIO_PBB6		AP20GPIOINFO('z'+ 2, 6)
 #define AP20_GPIO_PBB7		AP20GPIOINFO('z'+ 2, 7)
 
-
+#if defined (CONFIG_MODEM_MDM)
 #define STAR_WHISTLER			0
 #define STAR_FIRENZE			1
 #define STAR_REV_A			2
@@ -378,5 +378,5 @@
 #define STAR_TMUS_D                     11
 #define STAR_TMUS_E                     12
 #define STAR_TMUS_F                     13     
-
+#endif
 #endif

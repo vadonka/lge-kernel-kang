@@ -40,8 +40,8 @@
 #include "tegra_transport.h"
 
 static int tegra_i2s_rpc_hw_params(struct snd_pcm_substream *substream,
-				struct snd_pcm_hw_params *params,
-				struct snd_soc_dai *dai)
+				   struct snd_pcm_hw_params *params,
+				   struct snd_soc_dai *dai)
 {
 	switch (params_rate(params)) {
 	case 8000:
@@ -54,7 +54,7 @@ static int tegra_i2s_rpc_hw_params(struct snd_pcm_substream *substream,
 	case 48000:
 	case 88200:
 	case 96000:
-	return 0;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -104,7 +104,7 @@ struct snd_soc_dai tegra_i2s_rpc_dai[] = {
 			.channels_max = 2,
 			.rates = TEGRA_SAMPLE_RATES,
 			.formats = TEGRA_SAMPLE_FORMATS,
-	},
+		},
 		.ops = &tegra_dai_ops,
 	},
 };

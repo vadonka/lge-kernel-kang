@@ -14,6 +14,7 @@
 #include <asm/ptrace.h>
 #include <asm/setup.h>
 #include <asm/registers.h>
+#include <asm/segment.h>
 #include <asm/entry.h>
 #include <asm/current.h>
 
@@ -155,7 +156,7 @@ unsigned long get_wchan(struct task_struct *p);
 #  define task_regs(task) ((struct pt_regs *)task_tos(task) - 1)
 
 #  define task_pt_regs_plus_args(tsk) \
-	((void *)task_pt_regs(tsk))
+	(((void *)task_pt_regs(tsk)) - STATE_SAVE_ARG_SPACE)
 
 #  define task_sp(task)	(task_regs(task)->r1)
 #  define task_pc(task)	(task_regs(task)->pc)

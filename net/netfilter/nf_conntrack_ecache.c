@@ -18,7 +18,6 @@
 #include <linux/percpu.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
-#include <linux/slab.h>
 
 #include <net/netfilter/nf_conntrack.h>
 #include <net/netfilter/nf_conntrack_core.h>
@@ -26,10 +25,10 @@
 
 static DEFINE_MUTEX(nf_ct_ecache_mutex);
 
-struct nf_ct_event_notifier __rcu *nf_conntrack_event_cb __read_mostly;
+struct nf_ct_event_notifier *nf_conntrack_event_cb __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_event_cb);
 
-struct nf_exp_event_notifier __rcu *nf_expect_event_cb __read_mostly;
+struct nf_exp_event_notifier *nf_expect_event_cb __read_mostly;
 EXPORT_SYMBOL_GPL(nf_expect_event_cb);
 
 /* deliver cached events and clear cache entry - must be called with locally
@@ -63,9 +62,6 @@ void nf_ct_deliver_cached_events(struct nf_conn *ct)
 		 * this does not harm and it happens very rarely. */
 		unsigned long missed = e->missed;
 
-		if (!((events | missed) & e->ctmask))
-			goto out_unlock;
-
 		ret = notify->fcn(events | missed, &item);
 		if (unlikely(ret < 0 || missed)) {
 			spin_lock_bh(&ct->lock);
@@ -88,8 +84,7 @@ int nf_conntrack_register_notifier(struct nf_ct_event_notifier *new)
 	struct nf_ct_event_notifier *notify;
 
 	mutex_lock(&nf_ct_ecache_mutex);
-	notify = rcu_dereference_protected(nf_conntrack_event_cb,
-					   lockdep_is_held(&nf_ct_ecache_mutex));
+	notify = rcu_dereference(nf_conntrack_event_cb);
 	if (notify != NULL) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -109,8 +104,7 @@ void nf_conntrack_unregister_notifier(struct nf_ct_event_notifier *new)
 	struct nf_ct_event_notifier *notify;
 
 	mutex_lock(&nf_ct_ecache_mutex);
-	notify = rcu_dereference_protected(nf_conntrack_event_cb,
-					   lockdep_is_held(&nf_ct_ecache_mutex));
+	notify = rcu_dereference(nf_conntrack_event_cb);
 	BUG_ON(notify != new);
 	rcu_assign_pointer(nf_conntrack_event_cb, NULL);
 	mutex_unlock(&nf_ct_ecache_mutex);
@@ -123,8 +117,7 @@ int nf_ct_expect_register_notifier(struct nf_exp_event_notifier *new)
 	struct nf_exp_event_notifier *notify;
 
 	mutex_lock(&nf_ct_ecache_mutex);
-	notify = rcu_dereference_protected(nf_expect_event_cb,
-					   lockdep_is_held(&nf_ct_ecache_mutex));
+	notify = rcu_dereference(nf_expect_event_cb);
 	if (notify != NULL) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -144,8 +137,7 @@ void nf_ct_expect_unregister_notifier(struct nf_exp_event_notifier *new)
 	struct nf_exp_event_notifier *notify;
 
 	mutex_lock(&nf_ct_ecache_mutex);
-	notify = rcu_dereference_protected(nf_expect_event_cb,
-					   lockdep_is_held(&nf_ct_ecache_mutex));
+	notify = rcu_dereference(nf_expect_event_cb);
 	BUG_ON(notify != new);
 	rcu_assign_pointer(nf_expect_event_cb, NULL);
 	mutex_unlock(&nf_ct_ecache_mutex);
@@ -159,6 +151,7 @@ static int nf_ct_events_retry_timeout __read_mostly = 15*HZ;
 #ifdef CONFIG_SYSCTL
 static struct ctl_table event_sysctl_table[] = {
 	{
+		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "nf_conntrack_events",
 		.data		= &init_net.ct.sysctl_events,
 		.maxlen		= sizeof(unsigned int),
@@ -166,6 +159,7 @@ static struct ctl_table event_sysctl_table[] = {
 		.proc_handler	= proc_dointvec,
 	},
 	{
+		.ctl_name	= CTL_UNNUMBERED,
 		.procname	= "nf_conntrack_events_retry_timeout",
 		.data		= &init_net.ct.sysctl_events_retry_timeout,
 		.maxlen		= sizeof(unsigned int),

@@ -79,11 +79,11 @@
 #define gfs2_disk_hash2offset(h) (((u64)(h)) >> 1)
 #define gfs2_dir_offset2hash(p) ((u32)(((u64)(p)) << 1))
 
-struct qstr gfs2_qdot __read_mostly;
-struct qstr gfs2_qdotdot __read_mostly;
-
+typedef int (*leaf_call_t) (struct gfs2_inode *dip, u32 index, u32 len,
+			    u64 leaf_no, void *data);
 typedef int (*gfs2_dscan_t)(const struct gfs2_dirent *dent,
 			    const struct qstr *name, void *opaque);
+
 
 int gfs2_dir_get_new_buffer(struct gfs2_inode *ip, u64 block,
 			    struct buffer_head **bhp)
@@ -127,8 +127,8 @@ static int gfs2_dir_write_stuffed(struct gfs2_inode *ip, const char *buf,
 
 	gfs2_trans_add_bh(ip->i_gl, dibh, 1);
 	memcpy(dibh->b_data + offset + sizeof(struct gfs2_dinode), buf, size);
-	if (ip->i_inode.i_size < offset + size)
-		i_size_write(&ip->i_inode, offset + size);
+	if (ip->i_disksize < offset + size)
+		ip->i_disksize = offset + size;
 	ip->i_inode.i_mtime = ip->i_inode.i_ctime = CURRENT_TIME;
 	gfs2_dinode_out(ip, dibh->b_data);
 
@@ -225,8 +225,8 @@ out:
 	if (error)
 		return error;
 
-	if (ip->i_inode.i_size < offset + copied)
-		i_size_write(&ip->i_inode, offset + copied);
+	if (ip->i_disksize < offset + copied)
+		ip->i_disksize = offset + copied;
 	ip->i_inode.i_mtime = ip->i_inode.i_ctime = CURRENT_TIME;
 
 	gfs2_trans_add_bh(ip->i_gl, dibh, 1);
@@ -275,13 +275,12 @@ static int gfs2_dir_read_data(struct gfs2_inode *ip, char *buf, u64 offset,
 	unsigned int o;
 	int copied = 0;
 	int error = 0;
-	u64 disksize = i_size_read(&ip->i_inode);
 
-	if (offset >= disksize)
+	if (offset >= ip->i_disksize)
 		return 0;
 
-	if (offset + size > disksize)
-		size = disksize - offset;
+	if (offset + size > ip->i_disksize)
+		size = ip->i_disksize - offset;
 
 	if (!size)
 		return 0;
@@ -393,7 +392,7 @@ static int gfs2_dirent_find_space(const struct gfs2_dirent *dent,
 	unsigned totlen = be16_to_cpu(dent->de_rec_len);
 
 	if (gfs2_dirent_sentinel(dent))
-		actual = 0;
+		actual = GFS2_DIRENT_SIZE(0);
 	if (totlen - actual >= required)
 		return 1;
 	return 0;
@@ -524,6 +523,38 @@ static struct gfs2_dirent *gfs2_dirent_scan(struct inode *inode, void *buf,
 consist_inode:
 	gfs2_consist_inode(GFS2_I(inode));
 	return ERR_PTR(-EIO);
+}
+
+
+/**
+ * dirent_first - Return the first dirent
+ * @dip: the directory
+ * @bh: The buffer
+ * @dent: Pointer to list of dirents
+ *
+ * return first dirent whether bh points to leaf or stuffed dinode
+ *
+ * Returns: IS_LEAF, IS_DINODE, or -errno
+ */
+
+static int dirent_first(struct gfs2_inode *dip, struct buffer_head *bh,
+			struct gfs2_dirent **dent)
+{
+	struct gfs2_meta_header *h = (struct gfs2_meta_header *)bh->b_data;
+
+	if (be32_to_cpu(h->mh_type) == GFS2_METATYPE_LF) {
+		if (gfs2_meta_check(GFS2_SB(&dip->i_inode), bh))
+			return -EIO;
+		*dent = (struct gfs2_dirent *)(bh->b_data +
+					       sizeof(struct gfs2_leaf));
+		return IS_LEAF;
+	} else {
+		if (gfs2_metatype_check(GFS2_SB(&dip->i_inode), bh, GFS2_METATYPE_DI))
+			return -EIO;
+		*dent = (struct gfs2_dirent *)(bh->b_data +
+					       sizeof(struct gfs2_dinode));
+		return IS_DINODE;
+	}
 }
 
 static int dirent_check_reclen(struct gfs2_inode *dip,
@@ -728,7 +759,7 @@ static struct gfs2_dirent *gfs2_dirent_search(struct inode *inode,
 		unsigned hsize = 1 << ip->i_depth;
 		unsigned index;
 		u64 ln;
-		if (hsize * sizeof(u64) != i_size_read(inode)) {
+		if (hsize * sizeof(u64) != ip->i_disksize) {
 			gfs2_consist_inode(ip);
 			return ERR_PTR(-EIO);
 		}
@@ -880,7 +911,7 @@ static int dir_make_exhash(struct inode *inode)
 	for (x = sdp->sd_hash_ptrs; x--; lp++)
 		*lp = cpu_to_be64(bn);
 
-	i_size_write(inode, sdp->sd_sb.sb_bsize / 2);
+	dip->i_disksize = sdp->sd_sb.sb_bsize / 2;
 	gfs2_add_inode_blocks(&dip->i_inode, 1);
 	dip->i_diskflags |= GFS2_DIF_EXHASH;
 
@@ -956,12 +987,7 @@ static int dir_split_leaf(struct inode *inode, const struct qstr *name)
 	/* Change the pointers.
 	   Don't bother distinguishing stuffed from non-stuffed.
 	   This code is complicated enough already. */
-	lp = kmalloc(half_len * sizeof(__be64), GFP_NOFS);
-	if (!lp) {
-		error = -ENOMEM;
-		goto fail_brelse;
-	}
-
+	lp = kmalloc(half_len * sizeof(__be64), GFP_NOFS | __GFP_NOFAIL);
 	/*  Change the pointers  */
 	for (x = 0; x < half_len; x++)
 		lp[x] = cpu_to_be64(bn);
@@ -980,7 +1006,7 @@ static int dir_split_leaf(struct inode *inode, const struct qstr *name)
 	divider = (start + half_len) << (32 - dip->i_depth);
 
 	/*  Copy the entries  */
-	dent = (struct gfs2_dirent *)(obh->b_data + sizeof(struct gfs2_leaf));
+	dirent_first(dip, obh, &dent);
 
 	do {
 		next = dent;
@@ -1058,23 +1084,20 @@ static int dir_double_exhash(struct gfs2_inode *dip)
 	u64 *buf;
 	u64 *from, *to;
 	u64 block;
-	u64 disksize = i_size_read(&dip->i_inode);
 	int x;
 	int error = 0;
 
 	hsize = 1 << dip->i_depth;
-	if (hsize * sizeof(u64) != disksize) {
+	if (hsize * sizeof(u64) != dip->i_disksize) {
 		gfs2_consist_inode(dip);
 		return -EIO;
 	}
 
 	/*  Allocate both the "from" and "to" buffers in one big chunk  */
 
-	buf = kcalloc(3, sdp->sd_hash_bsize, GFP_NOFS);
-	if (!buf)
-		return -ENOMEM;
+	buf = kcalloc(3, sdp->sd_hash_bsize, GFP_NOFS | __GFP_NOFAIL);
 
-	for (block = disksize >> sdp->sd_hash_bsize_shift; block--;) {
+	for (block = dip->i_disksize >> sdp->sd_hash_bsize_shift; block--;) {
 		error = gfs2_dir_read_data(dip, (char *)buf,
 					    block * sdp->sd_hash_bsize,
 					    sdp->sd_hash_bsize, 1);
@@ -1240,25 +1263,6 @@ static int do_filldir_main(struct gfs2_inode *dip, u64 *offset,
 	return 0;
 }
 
-static void *gfs2_alloc_sort_buffer(unsigned size)
-{
-	void *ptr = NULL;
-
-	if (size < KMALLOC_MAX_SIZE)
-		ptr = kmalloc(size, GFP_NOFS | __GFP_NOWARN);
-	if (!ptr)
-		ptr = __vmalloc(size, GFP_NOFS, PAGE_KERNEL);
-	return ptr;
-}
-
-static void gfs2_free_sort_buffer(void *ptr)
-{
-	if (is_vmalloc_addr(ptr))
-		vfree(ptr);
-	else
-		kfree(ptr);
-}
-
 static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 			      filldir_t filldir, int *copied, unsigned *depth,
 			      u64 leaf_no)
@@ -1299,7 +1303,7 @@ static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 	 * 99 is the maximum number of entries that can fit in a single
 	 * leaf block.
 	 */
-	larr = gfs2_alloc_sort_buffer((leaves + entries + 99) * sizeof(void *));
+	larr = vmalloc((leaves + entries + 99) * sizeof(void *));
 	if (!larr)
 		goto out;
 	darr = (const struct gfs2_dirent **)(larr + leaves);
@@ -1310,7 +1314,7 @@ static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 	do {
 		error = get_leaf(ip, lfn, &bh);
 		if (error)
-			goto out_free;
+			goto out_kfree;
 		lf = (struct gfs2_leaf *)bh->b_data;
 		lfn = be64_to_cpu(lf->lf_next);
 		if (lf->lf_entries) {
@@ -1319,7 +1323,7 @@ static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 						gfs2_dirent_gather, NULL, &g);
 			error = PTR_ERR(dent);
 			if (IS_ERR(dent))
-				goto out_free;
+				goto out_kfree;
 			if (entries2 != g.offset) {
 				fs_warn(sdp, "Number of entries corrupt in dir "
 						"leaf %llu, entries2 (%u) != "
@@ -1328,7 +1332,7 @@ static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 					entries2, g.offset);
 					
 				error = -EIO;
-				goto out_free;
+				goto out_kfree;
 			}
 			error = 0;
 			larr[leaf++] = bh;
@@ -1340,10 +1344,10 @@ static int gfs2_dir_read_leaf(struct inode *inode, u64 *offset, void *opaque,
 	BUG_ON(entries2 != entries);
 	error = do_filldir_main(ip, offset, opaque, filldir, darr,
 				entries, copied);
-out_free:
+out_kfree:
 	for(i = 0; i < leaf; i++)
 		brelse(larr[i]);
-	gfs2_free_sort_buffer(larr);
+	vfree(larr);
 out:
 	return error;
 }
@@ -1372,7 +1376,7 @@ static int dir_e_read(struct inode *inode, u64 *offset, void *opaque,
 	unsigned depth = 0;
 
 	hsize = 1 << dip->i_depth;
-	if (hsize * sizeof(u64) != i_size_read(inode)) {
+	if (hsize * sizeof(u64) != dip->i_disksize) {
 		gfs2_consist_inode(dip);
 		return -EIO;
 	}
@@ -1597,7 +1601,7 @@ static int dir_new_leaf(struct inode *inode, const struct qstr *name)
  */
 
 int gfs2_dir_add(struct inode *inode, const struct qstr *name,
-		 const struct gfs2_inode *nip)
+		 const struct gfs2_inode *nip, unsigned type)
 {
 	struct gfs2_inode *ip = GFS2_I(inode);
 	struct buffer_head *bh;
@@ -1613,7 +1617,7 @@ int gfs2_dir_add(struct inode *inode, const struct qstr *name,
 				return PTR_ERR(dent);
 			dent = gfs2_init_dirent(inode, dent, name, bh);
 			gfs2_inum_out(nip, dent);
-			dent->de_type = cpu_to_be16(IF2DT(nip->i_inode.i_mode));
+			dent->de_type = cpu_to_be16(type);
 			if (ip->i_diskflags & GFS2_DIF_EXHASH) {
 				leaf = (struct gfs2_leaf *)bh->b_data;
 				be16_add_cpu(&leaf->lf_entries, 1);
@@ -1625,8 +1629,6 @@ int gfs2_dir_add(struct inode *inode, const struct qstr *name,
 			gfs2_trans_add_bh(ip->i_gl, bh, 1);
 			ip->i_entries++;
 			ip->i_inode.i_mtime = ip->i_inode.i_ctime = CURRENT_TIME;
-			if (S_ISDIR(nip->i_inode.i_mode))
-				inc_nlink(&ip->i_inode);
 			gfs2_dinode_out(ip, bh->b_data);
 			brelse(bh);
 			error = 0;
@@ -1671,9 +1673,8 @@ int gfs2_dir_add(struct inode *inode, const struct qstr *name,
  * Returns: 0 on success, error code on failure
  */
 
-int gfs2_dir_del(struct gfs2_inode *dip, const struct dentry *dentry)
+int gfs2_dir_del(struct gfs2_inode *dip, const struct qstr *name)
 {
-	const struct qstr *name = &dentry->d_name;
 	struct gfs2_dirent *dent, *prev = NULL;
 	struct buffer_head *bh;
 	int error;
@@ -1714,8 +1715,6 @@ int gfs2_dir_del(struct gfs2_inode *dip, const struct dentry *dentry)
 	gfs2_trans_add_bh(dip->i_gl, bh, 1);
 	dip->i_entries--;
 	dip->i_inode.i_mtime = dip->i_inode.i_ctime = CURRENT_TIME;
-	if (S_ISDIR(dentry->d_inode->i_mode))
-		drop_nlink(&dip->i_inode);
 	gfs2_dinode_out(dip, bh->b_data);
 	brelse(bh);
 	mark_inode_dirty(&dip->i_inode);
@@ -1770,20 +1769,94 @@ int gfs2_dir_mvino(struct gfs2_inode *dip, const struct qstr *filename,
 }
 
 /**
+ * foreach_leaf - call a function for each leaf in a directory
+ * @dip: the directory
+ * @lc: the function to call for each each
+ * @data: private data to pass to it
+ *
+ * Returns: errno
+ */
+
+static int foreach_leaf(struct gfs2_inode *dip, leaf_call_t lc, void *data)
+{
+	struct gfs2_sbd *sdp = GFS2_SB(&dip->i_inode);
+	struct buffer_head *bh;
+	struct gfs2_leaf *leaf;
+	u32 hsize, len;
+	u32 ht_offset, lp_offset, ht_offset_cur = -1;
+	u32 index = 0;
+	__be64 *lp;
+	u64 leaf_no;
+	int error = 0;
+
+	hsize = 1 << dip->i_depth;
+	if (hsize * sizeof(u64) != dip->i_disksize) {
+		gfs2_consist_inode(dip);
+		return -EIO;
+	}
+
+	lp = kmalloc(sdp->sd_hash_bsize, GFP_NOFS);
+	if (!lp)
+		return -ENOMEM;
+
+	while (index < hsize) {
+		lp_offset = index & (sdp->sd_hash_ptrs - 1);
+		ht_offset = index - lp_offset;
+
+		if (ht_offset_cur != ht_offset) {
+			error = gfs2_dir_read_data(dip, (char *)lp,
+						ht_offset * sizeof(__be64),
+						sdp->sd_hash_bsize, 1);
+			if (error != sdp->sd_hash_bsize) {
+				if (error >= 0)
+					error = -EIO;
+				goto out;
+			}
+			ht_offset_cur = ht_offset;
+		}
+
+		leaf_no = be64_to_cpu(lp[lp_offset]);
+		if (leaf_no) {
+			error = get_leaf(dip, leaf_no, &bh);
+			if (error)
+				goto out;
+			leaf = (struct gfs2_leaf *)bh->b_data;
+			len = 1 << (dip->i_depth - be16_to_cpu(leaf->lf_depth));
+			brelse(bh);
+
+			error = lc(dip, index, len, leaf_no, data);
+			if (error)
+				goto out;
+
+			index = (index & ~(len - 1)) + len;
+		} else
+			index++;
+	}
+
+	if (index != hsize) {
+		gfs2_consist_inode(dip);
+		error = -EIO;
+	}
+
+out:
+	kfree(lp);
+
+	return error;
+}
+
+/**
  * leaf_dealloc - Deallocate a directory leaf
  * @dip: the directory
  * @index: the hash table offset in the directory
  * @len: the number of pointers to this leaf
  * @leaf_no: the leaf number
- * @leaf_bh: buffer_head for the starting leaf
- * last_dealloc: 1 if this is the final dealloc for the leaf, else 0
+ * @data: not used
  *
  * Returns: errno
  */
 
 static int leaf_dealloc(struct gfs2_inode *dip, u32 index, u32 len,
-			u64 leaf_no, struct buffer_head *leaf_bh,
-			int last_dealloc)
+			u64 leaf_no, void *data)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(&dip->i_inode);
 	struct gfs2_leaf *tmp_leaf;
@@ -1815,18 +1888,14 @@ static int leaf_dealloc(struct gfs2_inode *dip, u32 index, u32 len,
 		goto out_qs;
 
 	/*  Count the number of leaves  */
-	bh = leaf_bh;
 
 	for (blk = leaf_no; blk; blk = nblk) {
-		if (blk != leaf_no) {
-			error = get_leaf(dip, blk, &bh);
-			if (error)
-				goto out_rlist;
-		}
+		error = get_leaf(dip, blk, &bh);
+		if (error)
+			goto out_rlist;
 		tmp_leaf = (struct gfs2_leaf *)bh->b_data;
 		nblk = be64_to_cpu(tmp_leaf->lf_next);
-		if (blk != leaf_no)
-			brelse(bh);
+		brelse(bh);
 
 		gfs2_rlist_add(sdp, &rlist, blk);
 		l_blocks++;
@@ -1850,18 +1919,13 @@ static int leaf_dealloc(struct gfs2_inode *dip, u32 index, u32 len,
 	if (error)
 		goto out_rg_gunlock;
 
-	bh = leaf_bh;
-
 	for (blk = leaf_no; blk; blk = nblk) {
-		if (blk != leaf_no) {
-			error = get_leaf(dip, blk, &bh);
-			if (error)
-				goto out_end_trans;
-		}
+		error = get_leaf(dip, blk, &bh);
+		if (error)
+			goto out_end_trans;
 		tmp_leaf = (struct gfs2_leaf *)bh->b_data;
 		nblk = be64_to_cpu(tmp_leaf->lf_next);
-		if (blk != leaf_no)
-			brelse(bh);
+		brelse(bh);
 
 		gfs2_free_meta(dip, blk, 1);
 		gfs2_add_inode_blocks(&dip->i_inode, -1);
@@ -1879,10 +1943,6 @@ static int leaf_dealloc(struct gfs2_inode *dip, u32 index, u32 len,
 		goto out_end_trans;
 
 	gfs2_trans_add_bh(dip->i_gl, dibh, 1);
-	/* On the last dealloc, make this a regular file in case we crash.
-	   (We don't want to free these blocks a second time.)  */
-	if (last_dealloc)
-		dip->i_inode.i_mode = S_IFREG;
 	gfs2_dinode_out(dip, dibh->b_data);
 	brelse(dibh);
 
@@ -1916,67 +1976,29 @@ int gfs2_dir_exhash_dealloc(struct gfs2_inode *dip)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(&dip->i_inode);
 	struct buffer_head *bh;
-	struct gfs2_leaf *leaf;
-	u32 hsize, len;
-	u32 ht_offset, lp_offset, ht_offset_cur = -1;
-	u32 index = 0, next_index;
-	__be64 *lp;
-	u64 leaf_no;
-	int error = 0, last;
+	int error;
 
-	hsize = 1 << dip->i_depth;
-	if (hsize * sizeof(u64) != i_size_read(&dip->i_inode)) {
-		gfs2_consist_inode(dip);
-		return -EIO;
+	/* Dealloc on-disk leaves to FREEMETA state */
+	error = foreach_leaf(dip, leaf_dealloc, NULL);
+	if (error)
+		return error;
+
+	/* Make this a regular file in case we crash.
+	   (We don't want to free these blocks a second time.)  */
+
+	error = gfs2_trans_begin(sdp, RES_DINODE, 0);
+	if (error)
+		return error;
+
+	error = gfs2_meta_inode_buffer(dip, &bh);
+	if (!error) {
+		gfs2_trans_add_bh(dip->i_gl, bh, 1);
+		((struct gfs2_dinode *)bh->b_data)->di_mode =
+						cpu_to_be32(S_IFREG);
+		brelse(bh);
 	}
 
-	lp = kmalloc(sdp->sd_hash_bsize, GFP_NOFS);
-	if (!lp)
-		return -ENOMEM;
-
-	while (index < hsize) {
-		lp_offset = index & (sdp->sd_hash_ptrs - 1);
-		ht_offset = index - lp_offset;
-
-		if (ht_offset_cur != ht_offset) {
-			error = gfs2_dir_read_data(dip, (char *)lp,
-						ht_offset * sizeof(__be64),
-						sdp->sd_hash_bsize, 1);
-			if (error != sdp->sd_hash_bsize) {
-				if (error >= 0)
-					error = -EIO;
-				goto out;
-			}
-			ht_offset_cur = ht_offset;
-		}
-
-		leaf_no = be64_to_cpu(lp[lp_offset]);
-		if (leaf_no) {
-			error = get_leaf(dip, leaf_no, &bh);
-			if (error)
-				goto out;
-			leaf = (struct gfs2_leaf *)bh->b_data;
-			len = 1 << (dip->i_depth - be16_to_cpu(leaf->lf_depth));
-
-			next_index = (index & ~(len - 1)) + len;
-			last = ((next_index >= hsize) ? 1 : 0);
-			error = leaf_dealloc(dip, index, len, leaf_no, bh,
-					     last);
-			brelse(bh);
-			if (error)
-				goto out;
-			index = next_index;
-		} else
-			index++;
-	}
-
-	if (index != hsize) {
-		gfs2_consist_inode(dip);
-		error = -EIO;
-	}
-
-out:
-	kfree(lp);
+	gfs2_trans_end(sdp);
 
 	return error;
 }

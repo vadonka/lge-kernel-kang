@@ -11,7 +11,6 @@
 #include <linux/mount.h>
 #include <linux/namei.h>
 #include <linux/nfs_fs.h>
-#include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/sunrpc/clnt.h>
 #include <linux/vfs.h>
@@ -54,29 +53,33 @@ Elong:
 /*
  * Determine the mount path as a string
  */
-static char *nfs4_path(struct dentry *dentry, char *buffer, ssize_t buflen)
+static char *nfs4_path(const struct vfsmount *mnt_parent,
+		       const struct dentry *dentry,
+		       char *buffer, ssize_t buflen)
 {
-	char *limit;
-	char *path = nfs_path(&limit, dentry, buffer, buflen);
-	if (!IS_ERR(path)) {
-		char *colon = strchr(path, ':');
-		if (colon && colon < limit)
-			path = colon + 1;
-	}
-	return path;
+	const char *srvpath;
+
+	srvpath = strchr(mnt_parent->mnt_devname, ':');
+	if (srvpath)
+		srvpath++;
+	else
+		srvpath = mnt_parent->mnt_devname;
+
+	return nfs_path(srvpath, mnt_parent->mnt_root, dentry, buffer, buflen);
 }
 
 /*
  * Check that fs_locations::fs_root [RFC3530 6.3] is a prefix for what we
  * believe to be the server path to this dentry
  */
-static int nfs4_validate_fspath(struct dentry *dentry,
+static int nfs4_validate_fspath(const struct vfsmount *mnt_parent,
+				const struct dentry *dentry,
 				const struct nfs4_fs_locations *locations,
 				char *page, char *page2)
 {
 	const char *path, *fs_path;
 
-	path = nfs4_path(dentry, page, PAGE_SIZE);
+	path = nfs4_path(mnt_parent, dentry, page, PAGE_SIZE);
 	if (IS_ERR(path))
 		return PTR_ERR(path);
 
@@ -111,7 +114,6 @@ static struct vfsmount *try_location(struct nfs_clone_mount *mountdata,
 				     char *page, char *page2,
 				     const struct nfs4_fs_location *location)
 {
-	const size_t addr_bufsize = sizeof(struct sockaddr_storage);
 	struct vfsmount *mnt = ERR_PTR(-ENOENT);
 	char *mnt_path;
 	unsigned int maxbuflen;
@@ -123,12 +125,9 @@ static struct vfsmount *try_location(struct nfs_clone_mount *mountdata,
 	mountdata->mnt_path = mnt_path;
 	maxbuflen = mnt_path - 1 - page2;
 
-	mountdata->addr = kmalloc(addr_bufsize, GFP_KERNEL);
-	if (mountdata->addr == NULL)
-		return ERR_PTR(-ENOMEM);
-
 	for (s = 0; s < location->nservers; s++) {
 		const struct nfs4_string *buf = &location->servers[s];
+		struct sockaddr_storage addr;
 
 		if (buf->len <= 0 || buf->len >= maxbuflen)
 			continue;
@@ -137,10 +136,11 @@ static struct vfsmount *try_location(struct nfs_clone_mount *mountdata,
 			continue;
 
 		mountdata->addrlen = nfs_parse_server_name(buf->data, buf->len,
-				mountdata->addr, addr_bufsize);
+				(struct sockaddr *)&addr, sizeof(addr));
 		if (mountdata->addrlen == 0)
 			continue;
 
+		mountdata->addr = (struct sockaddr *)&addr;
 		rpc_set_port(mountdata->addr, NFS_PORT);
 
 		memcpy(page2, buf->data, buf->len);
@@ -155,24 +155,25 @@ static struct vfsmount *try_location(struct nfs_clone_mount *mountdata,
 		if (!IS_ERR(mnt))
 			break;
 	}
-	kfree(mountdata->addr);
 	return mnt;
 }
 
 /**
  * nfs_follow_referral - set up mountpoint when hitting a referral on moved error
+ * @mnt_parent - mountpoint of parent directory
  * @dentry - parent directory
  * @locations - array of NFSv4 server location information
  *
  */
-static struct vfsmount *nfs_follow_referral(struct dentry *dentry,
+static struct vfsmount *nfs_follow_referral(const struct vfsmount *mnt_parent,
+					    const struct dentry *dentry,
 					    const struct nfs4_fs_locations *locations)
 {
 	struct vfsmount *mnt = ERR_PTR(-ENOENT);
 	struct nfs_clone_mount mountdata = {
-		.sb = dentry->d_sb,
+		.sb = mnt_parent->mnt_sb,
 		.dentry = dentry,
-		.authflavor = NFS_SB(dentry->d_sb)->client->cl_auth->au_flavor,
+		.authflavor = NFS_SB(mnt_parent->mnt_sb)->client->cl_auth->au_flavor,
 	};
 	char *page = NULL, *page2 = NULL;
 	int loc, error;
@@ -192,7 +193,7 @@ static struct vfsmount *nfs_follow_referral(struct dentry *dentry,
 		goto out;
 
 	/* Ensure fs path is a prefix of current dentry path */
-	error = nfs4_validate_fspath(dentry, locations, page, page2);
+	error = nfs4_validate_fspath(mnt_parent, dentry, locations, page, page2);
 	if (error < 0) {
 		mnt = ERR_PTR(error);
 		goto out;
@@ -220,9 +221,10 @@ out:
 /*
  * nfs_do_refmount - handle crossing a referral on server
  * @dentry - dentry of referral
+ * @nd - nameidata info
  *
  */
-struct vfsmount *nfs_do_refmount(struct dentry *dentry)
+struct vfsmount *nfs_do_refmount(const struct vfsmount *mnt_parent, struct dentry *dentry)
 {
 	struct vfsmount *mnt = ERR_PTR(-ENOMEM);
 	struct dentry *parent;
@@ -255,7 +257,7 @@ struct vfsmount *nfs_do_refmount(struct dentry *dentry)
 	    fs_locations->fs_path.ncomponents <= 0)
 		goto out_free;
 
-	mnt = nfs_follow_referral(dentry, fs_locations);
+	mnt = nfs_follow_referral(mnt_parent, dentry, fs_locations);
 out_free:
 	__free_page(page);
 	kfree(fs_locations);

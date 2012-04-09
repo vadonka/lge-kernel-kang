@@ -37,25 +37,67 @@
 #endif
 
 #ifdef __KERNEL__
-#include <asm/asm.h>
+
+#include <linux/list.h>
+#include <linux/spinlock.h>
+#include <linux/lockdep.h>
+
+struct rwsem_waiter;
+
+extern asmregparm struct rw_semaphore *
+ rwsem_down_read_failed(struct rw_semaphore *sem);
+extern asmregparm struct rw_semaphore *
+ rwsem_down_write_failed(struct rw_semaphore *sem);
+extern asmregparm struct rw_semaphore *
+ rwsem_wake(struct rw_semaphore *);
+extern asmregparm struct rw_semaphore *
+ rwsem_downgrade_wake(struct rw_semaphore *sem);
 
 /*
- * The bias values and the counter type limits the number of
- * potential readers/writers to 32767 for 32 bits and 2147483647
- * for 64 bits.
+ * the semaphore definition
  */
 
-#ifdef CONFIG_X86_64
-# define RWSEM_ACTIVE_MASK		0xffffffffL
-#else
-# define RWSEM_ACTIVE_MASK		0x0000ffffL
-#endif
-
-#define RWSEM_UNLOCKED_VALUE		0x00000000L
-#define RWSEM_ACTIVE_BIAS		0x00000001L
-#define RWSEM_WAITING_BIAS		(-RWSEM_ACTIVE_MASK-1)
+#define RWSEM_UNLOCKED_VALUE		0x00000000
+#define RWSEM_ACTIVE_BIAS		0x00000001
+#define RWSEM_ACTIVE_MASK		0x0000ffff
+#define RWSEM_WAITING_BIAS		(-0x00010000)
 #define RWSEM_ACTIVE_READ_BIAS		RWSEM_ACTIVE_BIAS
 #define RWSEM_ACTIVE_WRITE_BIAS		(RWSEM_WAITING_BIAS + RWSEM_ACTIVE_BIAS)
+
+struct rw_semaphore {
+	signed long		count;
+	spinlock_t		wait_lock;
+	struct list_head	wait_list;
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	struct lockdep_map dep_map;
+#endif
+};
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+# define __RWSEM_DEP_MAP_INIT(lockname) , .dep_map = { .name = #lockname }
+#else
+# define __RWSEM_DEP_MAP_INIT(lockname)
+#endif
+
+
+#define __RWSEM_INITIALIZER(name)				\
+{								\
+	RWSEM_UNLOCKED_VALUE, __SPIN_LOCK_UNLOCKED((name).wait_lock), \
+	LIST_HEAD_INIT((name).wait_list) __RWSEM_DEP_MAP_INIT(name) \
+}
+
+#define DECLARE_RWSEM(name)					\
+	struct rw_semaphore name = __RWSEM_INITIALIZER(name)
+
+extern void __init_rwsem(struct rw_semaphore *sem, const char *name,
+			 struct lock_class_key *key);
+
+#define init_rwsem(sem)						\
+do {								\
+	static struct lock_class_key __key;			\
+								\
+	__init_rwsem((sem), #sem, &__key);			\
+} while (0)
 
 /*
  * lock for reading
@@ -63,8 +105,8 @@
 static inline void __down_read(struct rw_semaphore *sem)
 {
 	asm volatile("# beginning down_read\n\t"
-		     LOCK_PREFIX _ASM_INC "(%1)\n\t"
-		     /* adds 0x00000001 */
+		     LOCK_PREFIX "  incl      (%%eax)\n\t"
+		     /* adds 0x00000001, returns the old value */
 		     "  jns        1f\n"
 		     "  call call_rwsem_down_read_failed\n"
 		     "1:\n\t"
@@ -79,14 +121,14 @@ static inline void __down_read(struct rw_semaphore *sem)
  */
 static inline int __down_read_trylock(struct rw_semaphore *sem)
 {
-	long result, tmp;
+	__s32 result, tmp;
 	asm volatile("# beginning __down_read_trylock\n\t"
-		     "  mov          %0,%1\n\t"
+		     "  movl      %0,%1\n\t"
 		     "1:\n\t"
-		     "  mov          %1,%2\n\t"
-		     "  add          %3,%2\n\t"
+		     "  movl	     %1,%2\n\t"
+		     "  addl      %3,%2\n\t"
 		     "  jle	     2f\n\t"
-		     LOCK_PREFIX "  cmpxchg  %2,%0\n\t"
+		     LOCK_PREFIX "  cmpxchgl  %2,%0\n\t"
 		     "  jnz	     1b\n\t"
 		     "2:\n\t"
 		     "# ending __down_read_trylock\n\t"
@@ -101,18 +143,20 @@ static inline int __down_read_trylock(struct rw_semaphore *sem)
  */
 static inline void __down_write_nested(struct rw_semaphore *sem, int subclass)
 {
-	long tmp;
+	int tmp;
+
+	tmp = RWSEM_ACTIVE_WRITE_BIAS;
 	asm volatile("# beginning down_write\n\t"
-		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
-		     /* adds 0xffff0001, returns the old value */
-		     "  test      %1,%1\n\t"
+		     LOCK_PREFIX "  xadd      %%edx,(%%eax)\n\t"
+		     /* subtract 0x0000ffff, returns the old value */
+		     "  testl     %%edx,%%edx\n\t"
 		     /* was the count 0 before? */
 		     "  jz        1f\n"
 		     "  call call_rwsem_down_write_failed\n"
 		     "1:\n"
 		     "# ending down_write"
 		     : "+m" (sem->count), "=d" (tmp)
-		     : "a" (sem), "1" (RWSEM_ACTIVE_WRITE_BIAS)
+		     : "a" (sem), "1" (tmp)
 		     : "memory", "cc");
 }
 
@@ -126,8 +170,9 @@ static inline void __down_write(struct rw_semaphore *sem)
  */
 static inline int __down_write_trylock(struct rw_semaphore *sem)
 {
-	long ret = cmpxchg(&sem->count, RWSEM_UNLOCKED_VALUE,
-			   RWSEM_ACTIVE_WRITE_BIAS);
+	signed long ret = cmpxchg(&sem->count,
+				  RWSEM_UNLOCKED_VALUE,
+				  RWSEM_ACTIVE_WRITE_BIAS);
 	if (ret == RWSEM_UNLOCKED_VALUE)
 		return 1;
 	return 0;
@@ -138,16 +183,16 @@ static inline int __down_write_trylock(struct rw_semaphore *sem)
  */
 static inline void __up_read(struct rw_semaphore *sem)
 {
-	long tmp;
+	__s32 tmp = -RWSEM_ACTIVE_READ_BIAS;
 	asm volatile("# beginning __up_read\n\t"
-		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
+		     LOCK_PREFIX "  xadd      %%edx,(%%eax)\n\t"
 		     /* subtracts 1, returns the old value */
 		     "  jns        1f\n\t"
-		     "  call call_rwsem_wake\n" /* expects old value in %edx */
+		     "  call call_rwsem_wake\n"
 		     "1:\n"
 		     "# ending __up_read\n"
 		     : "+m" (sem->count), "=d" (tmp)
-		     : "a" (sem), "1" (-RWSEM_ACTIVE_READ_BIAS)
+		     : "a" (sem), "1" (tmp)
 		     : "memory", "cc");
 }
 
@@ -156,17 +201,18 @@ static inline void __up_read(struct rw_semaphore *sem)
  */
 static inline void __up_write(struct rw_semaphore *sem)
 {
-	long tmp;
 	asm volatile("# beginning __up_write\n\t"
-		     LOCK_PREFIX "  xadd      %1,(%2)\n\t"
-		     /* subtracts 0xffff0001, returns the old value */
-		     "  jns        1f\n\t"
-		     "  call call_rwsem_wake\n" /* expects old value in %edx */
+		     "  movl      %2,%%edx\n\t"
+		     LOCK_PREFIX "  xaddl     %%edx,(%%eax)\n\t"
+		     /* tries to transition
+			0xffff0001 -> 0x00000000 */
+		     "  jz       1f\n"
+		     "  call call_rwsem_wake\n"
 		     "1:\n\t"
 		     "# ending __up_write\n"
-		     : "+m" (sem->count), "=d" (tmp)
-		     : "a" (sem), "1" (-RWSEM_ACTIVE_WRITE_BIAS)
-		     : "memory", "cc");
+		     : "+m" (sem->count)
+		     : "a" (sem), "i" (-RWSEM_ACTIVE_WRITE_BIAS)
+		     : "memory", "cc", "edx");
 }
 
 /*
@@ -175,42 +221,44 @@ static inline void __up_write(struct rw_semaphore *sem)
 static inline void __downgrade_write(struct rw_semaphore *sem)
 {
 	asm volatile("# beginning __downgrade_write\n\t"
-		     LOCK_PREFIX _ASM_ADD "%2,(%1)\n\t"
-		     /*
-		      * transitions 0xZZZZ0001 -> 0xYYYY0001 (i386)
-		      *     0xZZZZZZZZ00000001 -> 0xYYYYYYYY00000001 (x86_64)
-		      */
+		     LOCK_PREFIX "  addl      %2,(%%eax)\n\t"
+		     /* transitions 0xZZZZ0001 -> 0xYYYY0001 */
 		     "  jns       1f\n\t"
 		     "  call call_rwsem_downgrade_wake\n"
 		     "1:\n\t"
 		     "# ending __downgrade_write\n"
 		     : "+m" (sem->count)
-		     : "a" (sem), "er" (-RWSEM_WAITING_BIAS)
+		     : "a" (sem), "i" (-RWSEM_WAITING_BIAS)
 		     : "memory", "cc");
 }
 
 /*
  * implement atomic add functionality
  */
-static inline void rwsem_atomic_add(long delta, struct rw_semaphore *sem)
+static inline void rwsem_atomic_add(int delta, struct rw_semaphore *sem)
 {
-	asm volatile(LOCK_PREFIX _ASM_ADD "%1,%0"
+	asm volatile(LOCK_PREFIX "addl %1,%0"
 		     : "+m" (sem->count)
-		     : "er" (delta));
+		     : "ir" (delta));
 }
 
 /*
  * implement exchange and add functionality
  */
-static inline long rwsem_atomic_update(long delta, struct rw_semaphore *sem)
+static inline int rwsem_atomic_update(int delta, struct rw_semaphore *sem)
 {
-	long tmp = delta;
+	int tmp = delta;
 
 	asm volatile(LOCK_PREFIX "xadd %0,%1"
 		     : "+r" (tmp), "+m" (sem->count)
 		     : : "memory");
 
 	return tmp + delta;
+}
+
+static inline int rwsem_is_locked(struct rw_semaphore *sem)
+{
+	return (sem->count != 0);
 }
 
 #endif /* __KERNEL__ */

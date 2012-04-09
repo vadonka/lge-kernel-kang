@@ -16,10 +16,8 @@
 #include <linux/list.h>
 #include <linux/timer.h>
 #include <linux/init.h>
-#include <linux/gpio.h>
 #include <linux/clk.h>
 #include <linux/sysdev.h>
-#include <linux/syscore_ops.h>
 #include <linux/serial_core.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
@@ -41,11 +39,6 @@
 #include <plat/devs.h>
 #include <plat/clock.h>
 #include <plat/pll.h>
-#include <plat/pm.h>
-
-#include <plat/gpio-core.h>
-#include <plat/gpio-cfg.h>
-#include <plat/gpio-cfg-helpers.h>
 
 /* Initial IO mappings */
 
@@ -72,9 +65,6 @@ void __init s3c2410_init_uarts(struct s3c2410_uartcfg *cfg, int no)
 
 void __init s3c2410_map_io(void)
 {
-	s3c24xx_gpiocfg_default.set_pull = s3c_gpio_setpull_1up;
-	s3c24xx_gpiocfg_default.get_pull = s3c_gpio_getpull_1up;
-
 	iotable_init(s3c2410_iodesc, ARRAY_SIZE(s3c2410_iodesc));
 }
 
@@ -169,9 +159,6 @@ core_initcall(s3c2410a_core_init);
 int __init s3c2410_init(void)
 {
 	printk("S3C2410: Initialising architecture\n");
-
-	register_syscore_ops(&s3c2410_pm_syscore_ops);
-	register_syscore_ops(&s3c24xx_irq_syscore_ops);
 
 	return sysdev_register(&s3c2410_sysdev);
 }

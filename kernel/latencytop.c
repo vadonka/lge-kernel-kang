@@ -56,6 +56,7 @@
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/list.h>
+#include <linux/slab.h>
 #include <linux/stacktrace.h>
 
 static DEFINE_SPINLOCK(latency_lock);
@@ -153,7 +154,7 @@ static inline void store_stacktrace(struct task_struct *tsk,
 }
 
 /**
- * __account_scheduler_latency - record an occurred latency
+ * __account_scheduler_latency - record an occured latency
  * @tsk - the task struct of the task hitting the latency
  * @usecs - the duration of the latency in microseconds
  * @inter - 1 if the sleep was interruptible, 0 if uninterruptible
@@ -194,7 +195,14 @@ __account_scheduler_latency(struct task_struct *tsk, int usecs, int inter)
 
 	account_global_scheduler_latency(tsk, &lat);
 
-	for (i = 0; i < tsk->latency_record_count; i++) {
+	/*
+	 * short term hack; if we're > 32 we stop; future we recycle:
+	 */
+	tsk->latency_record_count++;
+	if (tsk->latency_record_count >= LT_SAVECOUNT)
+		goto out_unlock;
+
+	for (i = 0; i < LT_SAVECOUNT; i++) {
 		struct latency_record *mylat;
 		int same = 1;
 
@@ -220,14 +228,8 @@ __account_scheduler_latency(struct task_struct *tsk, int usecs, int inter)
 		}
 	}
 
-	/*
-	 * short term hack; if we're > 32 we stop; future we recycle:
-	 */
-	if (tsk->latency_record_count >= LT_SAVECOUNT)
-		goto out_unlock;
-
 	/* Allocated a new one: */
-	i = tsk->latency_record_count++;
+	i = tsk->latency_record_count;
 	memcpy(&tsk->latency_record[i], &lat, sizeof(struct latency_record));
 
 out_unlock:
@@ -241,19 +243,24 @@ static int lstats_show(struct seq_file *m, void *v)
 	seq_puts(m, "Latency Top version : v0.1\n");
 
 	for (i = 0; i < MAXLR; i++) {
-		struct latency_record *lr = &latency_record[i];
-
-		if (lr->backtrace[0]) {
+		if (latency_record[i].backtrace[0]) {
 			int q;
-			seq_printf(m, "%i %lu %lu",
-				   lr->count, lr->time, lr->max);
+			seq_printf(m, "%i %lu %lu ",
+				latency_record[i].count,
+				latency_record[i].time,
+				latency_record[i].max);
 			for (q = 0; q < LT_BACKTRACEDEPTH; q++) {
-				unsigned long bt = lr->backtrace[q];
-				if (!bt)
+				char sym[KSYM_SYMBOL_LEN];
+				char *c;
+				if (!latency_record[i].backtrace[q])
 					break;
-				if (bt == ULONG_MAX)
+				if (latency_record[i].backtrace[q] == ULONG_MAX)
 					break;
-				seq_printf(m, " %ps", (void *)bt);
+				sprint_symbol(sym, latency_record[i].backtrace[q]);
+				c = strchr(sym, '+');
+				if (c)
+					*c = 0;
+				seq_printf(m, "%s ", sym);
 			}
 			seq_printf(m, "\n");
 		}

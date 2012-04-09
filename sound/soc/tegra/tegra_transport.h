@@ -106,7 +106,7 @@ typedef struct NvFxTransportMessageResultRec {
 typedef struct NvFxTransportMessageMixerOpenRec {
 	NVFXTRANSPORT_MESSAGE_VARS;
 	NvAudioFxMixerHandle* phMixer;
-// 20110223, , media server restart 2
+// 20110223, lake.kim@lge.com, media server restart 2
 	NvError* pReturnError;
 
 } NvFxTransportMessageMixerOpen;
@@ -115,10 +115,10 @@ typedef struct NvFxTransportMessageResultMixerOpenRec {
 	NVFXTRANSPORT_MESSAGE_RESULT_VARS;
 	NvAudioFxMixerHandle hMixer;
 	NvAudioFxMixerHandle* phMixer;
-// 20110223, , media server restart 2 [start]
+// 20110223, lake.kim@lge.com, media server restart 2 [start]
 	NvError ReturnError;
 	NvError* pReturnError;
-// 20110223, , media server restart 2 [end]
+// 20110223, lake.kim@lge.com, media server restart 2 [end]
 } NvFxTransportMessageResultMixerOpen;
 
 
@@ -425,17 +425,12 @@ struct tegra_audio_data {
 	NvAudioFxObjectHandle i2s1_rec_split;
 	NvAudioFxObjectHandle i2s2_rec_split;
 	NvAudioFxObjectHandle mroute;
+	NvAudioFxIoDevice mi2s1_device_available;
 	NvAudioFxIoDevice mspdif_device_available;
 	int spdif_plugin;
 	int i2s1volume;
 	int device_id;
 	struct mutex lock;
-};
-
-struct tegra_audio_state_t {
-	NvAudioFxIoDevice devices_available;
-	NvAudioFxMode audio_mode;
-	struct mutex mutex_lock;
 };
 
 int tegra_audiofx_init(struct tegra_audio_data* tegra_snd_cx);

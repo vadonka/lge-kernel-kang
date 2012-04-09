@@ -7,7 +7,7 @@
  *    (c) 2008 Steven Toth <stoth@linuxtv.org>
  *      - CX23885/7/8 support
  *
- *  Includes parts from the ivtv driver <http://sourceforge.net/projects/ivtv/>
+ *  Includes parts from the ivtv driver( http://ivtv.sourceforge.net/),
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -31,13 +31,12 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/firmware.h>
-#include <linux/slab.h>
+#include <linux/smp_lock.h>
 #include <media/v4l2-common.h>
 #include <media/v4l2-ioctl.h>
 #include <media/cx2341x.h>
 
 #include "cx23885.h"
-#include "cx23885-ioctl.h"
 
 #define CX23885_FIRM_IMAGE_SIZE 376836
 #define CX23885_FIRM_IMAGE_NAME "v4l-cx23885-enc.fw"
@@ -319,7 +318,7 @@ static int mc417_wait_ready(struct cx23885_dev *dev)
 	}
 }
 
-int mc417_register_write(struct cx23885_dev *dev, u16 address, u32 value)
+static int mc417_register_write(struct cx23885_dev *dev, u16 address, u32 value)
 {
 	u32 regval;
 
@@ -383,7 +382,7 @@ int mc417_register_write(struct cx23885_dev *dev, u16 address, u32 value)
 	return mc417_wait_ready(dev);
 }
 
-int mc417_register_read(struct cx23885_dev *dev, u16 address, u32 *value)
+static int mc417_register_read(struct cx23885_dev *dev, u16 address, u32 *value)
 {
 	int retval;
 	u32 regval;
@@ -681,7 +680,7 @@ static char *cmd_to_str(int cmd)
 	case CX2341X_ENC_SET_VIDEO_ID:
 		return  "SET_VIDEO_ID";
 	case CX2341X_ENC_SET_PCR_ID:
-		return  "SET_PCR_ID";
+		return  "SET_PCR_PID";
 	case CX2341X_ENC_SET_FRAME_RATE:
 		return  "SET_FRAME_RATE";
 	case CX2341X_ENC_SET_FRAME_SIZE:
@@ -693,7 +692,7 @@ static char *cmd_to_str(int cmd)
 	case CX2341X_ENC_SET_ASPECT_RATIO:
 		return  "SET_ASPECT_RATIO";
 	case CX2341X_ENC_SET_DNR_FILTER_MODE:
-		return  "SET_DNR_FILTER_MODE";
+		return  "SET_DNR_FILTER_PROPS";
 	case CX2341X_ENC_SET_DNR_FILTER_PROPS:
 		return  "SET_DNR_FILTER_PROPS";
 	case CX2341X_ENC_SET_CORING_LEVELS:
@@ -1355,7 +1354,7 @@ static int vidioc_querycap(struct file *file, void  *priv,
 	struct cx23885_dev *dev = fh->dev;
 	struct cx23885_tsport  *tsport = &dev->ts1;
 
-	strlcpy(cap->driver, dev->name, sizeof(cap->driver));
+	strcpy(cap->driver, dev->name);
 	strlcpy(cap->card, cx23885_boards[tsport->dev->board].name,
 		sizeof(cap->card));
 	sprintf(cap->bus_info, "PCI:%s", pci_name(dev->pci));
@@ -1568,15 +1567,34 @@ static int vidioc_queryctrl(struct file *file, void *priv,
 
 static int mpeg_open(struct file *file)
 {
-	struct cx23885_dev *dev = video_drvdata(file);
+	int minor = video_devdata(file)->minor;
+	struct cx23885_dev *h, *dev = NULL;
+	struct list_head *list;
 	struct cx23885_fh *fh;
 
 	dprintk(2, "%s()\n", __func__);
 
+	lock_kernel();
+	list_for_each(list, &cx23885_devlist) {
+		h = list_entry(list, struct cx23885_dev, devlist);
+		if (h->v4l_device &&
+		    h->v4l_device->minor == minor) {
+			dev = h;
+			break;
+		}
+	}
+
+	if (dev == NULL) {
+		unlock_kernel();
+		return -ENODEV;
+	}
+
 	/* allocate + initialize per filehandle data */
 	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
-	if (!fh)
+	if (NULL == fh) {
+		unlock_kernel();
 		return -ENOMEM;
+	}
 
 	file->private_data = fh;
 	fh->dev      = dev;
@@ -1586,7 +1604,9 @@ static int mpeg_open(struct file *file)
 			    V4L2_BUF_TYPE_VIDEO_CAPTURE,
 			    V4L2_FIELD_INTERLACED,
 			    sizeof(struct cx23885_buffer),
-			    fh, NULL);
+			    fh);
+	unlock_kernel();
+
 	return 0;
 }
 
@@ -1704,17 +1724,13 @@ static const struct v4l2_ioctl_ops mpeg_ioctl_ops = {
 	.vidioc_log_status	 = vidioc_log_status,
 	.vidioc_querymenu	 = vidioc_querymenu,
 	.vidioc_queryctrl	 = vidioc_queryctrl,
-	.vidioc_g_chip_ident	 = cx23885_g_chip_ident,
-#ifdef CONFIG_VIDEO_ADV_DEBUG
-	.vidioc_g_register	 = cx23885_g_register,
-	.vidioc_s_register	 = cx23885_s_register,
-#endif
 };
 
 static struct video_device cx23885_mpeg_template = {
 	.name          = "cx23885",
 	.fops          = &mpeg_fops,
 	.ioctl_ops     = &mpeg_ioctl_ops,
+	.minor         = -1,
 	.tvnorms       = CX23885_NORMS,
 	.current_norm  = V4L2_STD_NTSC_M,
 };
@@ -1724,7 +1740,7 @@ void cx23885_417_unregister(struct cx23885_dev *dev)
 	dprintk(1, "%s()\n", __func__);
 
 	if (dev->v4l_device) {
-		if (video_is_registered(dev->v4l_device))
+		if (-1 != dev->v4l_device->minor)
 			video_unregister_device(dev->v4l_device);
 		else
 			video_device_release(dev->v4l_device);
@@ -1781,7 +1797,6 @@ int cx23885_417_register(struct cx23885_dev *dev)
 	/* Allocate and initialize V4L video device */
 	dev->v4l_device = cx23885_video_dev_alloc(tsport,
 		dev->pci, &cx23885_mpeg_template, "mpeg");
-	video_set_drvdata(dev->v4l_device, dev);
 	err = video_register_device(dev->v4l_device,
 		VFL_TYPE_GRABBER, -1);
 	if (err < 0) {
@@ -1789,8 +1804,8 @@ int cx23885_417_register(struct cx23885_dev *dev)
 		return err;
 	}
 
-	printk(KERN_INFO "%s: registered device %s [mpeg]\n",
-	       dev->name, video_device_node_name(dev->v4l_device));
+	printk(KERN_INFO "%s: registered device video%d [mpeg]\n",
+	       dev->name, dev->v4l_device->num);
 
 	return 0;
 }

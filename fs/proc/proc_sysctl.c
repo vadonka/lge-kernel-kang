@@ -5,7 +5,6 @@
 #include <linux/sysctl.h>
 #include <linux/proc_fs.h>
 #include <linux/security.h>
-#include <linux/namei.h>
 #include "internal.h"
 
 static const struct dentry_operations proc_sys_dentry_operations;
@@ -24,14 +23,13 @@ static struct inode *proc_sys_make_inode(struct super_block *sb,
 	if (!inode)
 		goto out;
 
-	inode->i_ino = get_next_ino();
-
 	sysctl_head_get(head);
 	ei = PROC_I(inode);
 	ei->sysctl = head;
 	ei->sysctl_entry = table;
 
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_flags |= S_PRIVATE; /* tell selinux to ignore this inode */
 	inode->i_mode = table->mode;
 	if (!table->child) {
 		inode->i_mode |= S_IFREG;
@@ -50,7 +48,7 @@ out:
 static struct ctl_table *find_in_table(struct ctl_table *p, struct qstr *name)
 {
 	int len;
-	for ( ; p->procname; p++) {
+	for ( ; p->ctl_name || p->procname; p++) {
 
 		if (!p->procname)
 			continue;
@@ -120,7 +118,7 @@ static struct dentry *proc_sys_lookup(struct inode *dir, struct dentry *dentry,
 		goto out;
 
 	err = NULL;
-	d_set_d_op(dentry, &proc_sys_dentry_operations);
+	dentry->d_op = &proc_sys_dentry_operations;
 	d_add(dentry, inode);
 
 out:
@@ -201,7 +199,7 @@ static int proc_sys_fill_cache(struct file *filp, void *dirent,
 				dput(child);
 				return -ENOMEM;
 			} else {
-				d_set_d_op(child, &proc_sys_dentry_operations);
+				child->d_op = &proc_sys_dentry_operations;
 				d_add(child, inode);
 			}
 		} else {
@@ -220,7 +218,7 @@ static int scan(struct ctl_table_header *head, ctl_table *table,
 		void *dirent, filldir_t filldir)
 {
 
-	for (; table->procname; table++, (*pos)++) {
+	for (; table->ctl_name || table->procname; table++, (*pos)++) {
 		int res;
 
 		/* Can't do anything without a proc name */
@@ -294,7 +292,7 @@ out:
 	return ret;
 }
 
-static int proc_sys_permission(struct inode *inode, int mask,unsigned int flags)
+static int proc_sys_permission(struct inode *inode, int mask)
 {
 	/*
 	 * sysctl entries that are not writeable,
@@ -331,19 +329,10 @@ static int proc_sys_setattr(struct dentry *dentry, struct iattr *attr)
 		return -EPERM;
 
 	error = inode_change_ok(inode, attr);
-	if (error)
-		return error;
+	if (!error)
+		error = inode_setattr(inode, attr);
 
-	if ((attr->ia_valid & ATTR_SIZE) &&
-	    attr->ia_size != i_size_read(inode)) {
-		error = vmtruncate(inode, attr->ia_size);
-		if (error)
-			return error;
-	}
-
-	setattr_copy(inode, attr);
-	mark_inode_dirty(inode);
-	return 0;
+	return error;
 }
 
 static int proc_sys_getattr(struct vfsmount *mnt, struct dentry *dentry, struct kstat *stat)
@@ -366,7 +355,6 @@ static int proc_sys_getattr(struct vfsmount *mnt, struct dentry *dentry, struct 
 static const struct file_operations proc_sys_file_operations = {
 	.read		= proc_sys_read,
 	.write		= proc_sys_write,
-	.llseek		= default_llseek,
 };
 
 static const struct file_operations proc_sys_dir_file_operations = {
@@ -389,33 +377,23 @@ static const struct inode_operations proc_sys_dir_operations = {
 
 static int proc_sys_revalidate(struct dentry *dentry, struct nameidata *nd)
 {
-	if (nd->flags & LOOKUP_RCU)
-		return -ECHILD;
 	return !PROC_I(dentry->d_inode)->sysctl->unregistering;
 }
 
-static int proc_sys_delete(const struct dentry *dentry)
+static int proc_sys_delete(struct dentry *dentry)
 {
 	return !!PROC_I(dentry->d_inode)->sysctl->unregistering;
 }
 
-static int proc_sys_compare(const struct dentry *parent,
-		const struct inode *pinode,
-		const struct dentry *dentry, const struct inode *inode,
-		unsigned int len, const char *str, const struct qstr *name)
+static int proc_sys_compare(struct dentry *dir, struct qstr *qstr,
+			    struct qstr *name)
 {
-	struct ctl_table_header *head;
-	/* Although proc doesn't have negative dentries, rcu-walk means
-	 * that inode here can be NULL */
-	/* AV: can it, indeed? */
-	if (!inode)
+	struct dentry *dentry = container_of(qstr, struct dentry, d_name);
+	if (qstr->len != name->len)
 		return 1;
-	if (name->len != len)
+	if (memcmp(qstr->name, name->name, name->len))
 		return 1;
-	if (memcmp(name->name, str, len))
-		return 1;
-	head = rcu_dereference(PROC_I(inode)->sysctl);
-	return !head || !sysctl_is_seen(head);
+	return !sysctl_is_seen(PROC_I(dentry->d_inode)->sysctl);
 }
 
 static const struct dentry_operations proc_sys_dentry_operations = {

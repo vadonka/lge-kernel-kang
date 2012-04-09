@@ -11,52 +11,60 @@
  *
  */
 
-#ifdef CONFIG_OF_DEVICE
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/mod_devicetable.h>
 #include <linux/pm.h>
 #include <linux/of_device.h>
-#include <linux/platform_device.h>
 
-/**
- * of_platform_driver - Legacy of-aware driver for platform devices.
- *
- * An of_platform_driver driver is attached to a basic platform_device on
- * the ibm ebus (ibmebus_bus_type).
+/*
+ * The of_platform_bus_type is a bus type used by drivers that do not
+ * attach to a macio or similar bus but still use OF probing
+ * mechanism
+ */
+extern struct bus_type of_platform_bus_type;
+
+/*
+ * An of_platform_driver driver is attached to a basic of_device on
+ * the "platform bus" (of_platform_bus_type).
  */
 struct of_platform_driver
 {
-	int	(*probe)(struct platform_device* dev,
-			 const struct of_device_id *match);
-	int	(*remove)(struct platform_device* dev);
+	const char		*name;
+	const struct of_device_id	*match_table;
+	struct module		*owner;
 
-	int	(*suspend)(struct platform_device* dev, pm_message_t state);
-	int	(*resume)(struct platform_device* dev);
-	int	(*shutdown)(struct platform_device* dev);
+	int	(*probe)(struct of_device* dev,
+			 const struct of_device_id *match);
+	int	(*remove)(struct of_device* dev);
+
+	int	(*suspend)(struct of_device* dev, pm_message_t state);
+	int	(*resume)(struct of_device* dev);
+	int	(*shutdown)(struct of_device* dev);
 
 	struct device_driver	driver;
 };
 #define	to_of_platform_driver(drv) \
 	container_of(drv,struct of_platform_driver, driver)
 
+extern int of_register_driver(struct of_platform_driver *drv,
+			      struct bus_type *bus);
+extern void of_unregister_driver(struct of_platform_driver *drv);
+
 /* Platform drivers register/unregister */
-extern struct platform_device *of_device_alloc(struct device_node *np,
-					 const char *bus_id,
-					 struct device *parent);
-extern struct platform_device *of_find_device_by_node(struct device_node *np);
+static inline int of_register_platform_driver(struct of_platform_driver *drv)
+{
+	return of_register_driver(drv, &of_platform_bus_type);
+}
+static inline void of_unregister_platform_driver(struct of_platform_driver *drv)
+{
+	of_unregister_driver(drv);
+}
 
-#if !defined(CONFIG_SPARC) /* SPARC has its own device registration method */
-/* Platform devices and busses creation */
-extern struct platform_device *of_platform_device_create(struct device_node *np,
-						   const char *bus_id,
-						   struct device *parent);
+#include <asm/of_platform.h>
 
-extern int of_platform_bus_probe(struct device_node *root,
-				 const struct of_device_id *matches,
-				 struct device *parent);
-#endif /* !CONFIG_SPARC */
+extern struct of_device *of_find_device_by_node(struct device_node *np);
 
-#endif /* CONFIG_OF_DEVICE */
+extern int of_bus_type_init(struct bus_type *bus, const char *name);
 
 #endif	/* _LINUX_OF_PLATFORM_H */

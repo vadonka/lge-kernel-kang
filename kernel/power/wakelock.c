@@ -40,6 +40,9 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define WAKE_LOCK_AUTO_EXPIRE            (1U << 10)
 #define WAKE_LOCK_PREVENTING_SUSPEND     (1U << 11)
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+extern void star_watchdog_disable();
+
 static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
 static struct list_head active_wake_locks[WAKE_LOCK_TYPE_COUNT];
@@ -48,12 +51,6 @@ struct workqueue_struct *suspend_work_queue;
 struct wake_lock main_wake_lock;
 suspend_state_t requested_suspend_state = PM_SUSPEND_MEM;
 static struct wake_lock unknown_wakeup;
-static struct wake_lock suspend_backoff_lock;
-
-#define SUSPEND_BACKOFF_THRESHOLD	10
-#define SUSPEND_BACKOFF_INTERVAL	10000
-
-static unsigned suspend_short_count;
 
 #ifdef CONFIG_WAKELOCK_STAT
 static struct wake_lock deleted_wake_locks;
@@ -66,15 +63,19 @@ int get_expired_time(struct wake_lock *lock, ktime_t *expire_time)
 	struct timespec kt;
 	struct timespec tomono;
 	struct timespec delta;
-	struct timespec sleep;
+	unsigned long seq;
 	long timeout;
 
 	if (!(lock->flags & WAKE_LOCK_AUTO_EXPIRE))
 		return 0;
-	get_xtime_and_monotonic_and_sleep_offset(&kt, &tomono, &sleep);
-	timeout = lock->expires - jiffies;
-	if (timeout > 0)
-		return 0;
+	do {
+		seq = read_seqbegin(&xtime_lock);
+		timeout = lock->expires - jiffies;
+		if (timeout > 0)
+			return 0;
+		kt = current_kernel_time();
+		tomono = wall_to_monotonic;
+	} while (read_seqretry(&xtime_lock, seq));
 	jiffies_to_timespec(-timeout, &delta);
 	set_normalized_timespec(&ts, kt.tv_sec + tomono.tv_sec - delta.tv_sec,
 				kt.tv_nsec + tomono.tv_nsec - delta.tv_nsec);
@@ -224,7 +225,7 @@ static void print_active_locks(int type)
 				pr_info("wake lock %s, expired\n", lock->name);
 		} else {
 			pr_info("active wake lock %s\n", lock->name);
-			if (!(debug_mask & DEBUG_EXPIRE))
+			if (!debug_mask & DEBUG_EXPIRE)
 				print_expired = false;
 		}
 	}
@@ -255,24 +256,16 @@ long has_wake_lock(int type)
 	unsigned long irqflags;
 	spin_lock_irqsave(&list_lock, irqflags);
 	ret = has_wake_lock_locked(type);
-	if (ret && (debug_mask & DEBUG_WAKEUP) && type == WAKE_LOCK_SUSPEND)
+	if (ret && (debug_mask & DEBUG_SUSPEND) && type == WAKE_LOCK_SUSPEND)
 		print_active_locks(type);
 	spin_unlock_irqrestore(&list_lock, irqflags);
 	return ret;
-}
-
-static void suspend_backoff(void)
-{
-	pr_info("suspend: too many immediate wakeups, back off\n");
-	wake_lock_timeout(&suspend_backoff_lock,
-			  msecs_to_jiffies(SUSPEND_BACKOFF_INTERVAL));
 }
 
 static void suspend(struct work_struct *work)
 {
 	int ret;
 	int entry_event_num;
-	struct timespec ts_entry, ts_exit;
 
 	if (has_wake_lock(WAKE_LOCK_SUSPEND)) {
 		if (debug_mask & DEBUG_SUSPEND)
@@ -284,30 +277,21 @@ static void suspend(struct work_struct *work)
 	sys_sync();
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("suspend: enter suspend\n");
-	getnstimeofday(&ts_entry);
 	ret = pm_suspend(requested_suspend_state);
-	getnstimeofday(&ts_exit);
-
 	if (debug_mask & DEBUG_EXIT_SUSPEND) {
+		struct timespec ts;
 		struct rtc_time tm;
-		rtc_time_to_tm(ts_exit.tv_sec, &tm);
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
 		pr_info("suspend: exit suspend, ret = %d "
 			"(%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n", ret,
 			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-			tm.tm_hour, tm.tm_min, tm.tm_sec, ts_exit.tv_nsec);
+			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 	}
-
-	if (ts_exit.tv_sec - ts_entry.tv_sec <= 1) {
-		++suspend_short_count;
-
-		if (suspend_short_count == SUSPEND_BACKOFF_THRESHOLD) {
-			suspend_backoff();
-			suspend_short_count = 0;
-		}
-	} else {
-		suspend_short_count = 0;
-	}
-
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03	
+	printk("[LOG] star_watchdog_disable() called at suspend() \n");
+	star_watchdog_disable();
+	
 	if (current_event_num == entry_event_num) {
 		if (debug_mask & DEBUG_SUSPEND)
 			pr_info("suspend: pm_suspend returned with no event\n");
@@ -338,8 +322,13 @@ static int power_suspend_late(struct device *dev)
 {
 	int ret = has_wake_lock(WAKE_LOCK_SUSPEND) ? -EAGAIN : 0;
 #ifdef CONFIG_WAKELOCK_STAT
-	wait_for_wakeup = !ret;
+	wait_for_wakeup = 1;
 #endif
+
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+	printk("[LOG] star_watchdog_disable() called at power_suspend_late() \n");
+	star_watchdog_disable();
+
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("power_suspend_late return %d\n", ret);
 	return ret;
@@ -581,7 +570,7 @@ static int active_wakelock_stats_show(struct seq_file *m, void *unused)
 				seq_printf(m, "wake lock %s, expired\n", lock->name);
 		} else {
 			seq_printf(m, "active wake lock %s\n", lock->name);
-			if (!(debug_mask & DEBUG_EXPIRE))
+			if (!debug_mask & DEBUG_EXPIRE)
 				print_expired = false;
 		}
 	}
@@ -622,8 +611,6 @@ static int __init wakelocks_init(void)
 	wake_lock_init(&main_wake_lock, WAKE_LOCK_SUSPEND, "main");
 	wake_lock(&main_wake_lock);
 	wake_lock_init(&unknown_wakeup, WAKE_LOCK_SUSPEND, "unknown_wakeups");
-	wake_lock_init(&suspend_backoff_lock, WAKE_LOCK_SUSPEND,
-		       "suspend_backoff");
 
 	ret = platform_device_register(&power_device);
 	if (ret) {
@@ -657,7 +644,6 @@ err_suspend_work_queue:
 err_platform_driver_register:
 	platform_device_unregister(&power_device);
 err_platform_device_register:
-	wake_lock_destroy(&suspend_backoff_lock);
 	wake_lock_destroy(&unknown_wakeup);
 	wake_lock_destroy(&main_wake_lock);
 #ifdef CONFIG_WAKELOCK_STAT
@@ -674,7 +660,6 @@ static void  __exit wakelocks_exit(void)
 	destroy_workqueue(suspend_work_queue);
 	platform_driver_unregister(&power_driver);
 	platform_device_unregister(&power_device);
-	wake_lock_destroy(&suspend_backoff_lock);
 	wake_lock_destroy(&unknown_wakeup);
 	wake_lock_destroy(&main_wake_lock);
 #ifdef CONFIG_WAKELOCK_STAT

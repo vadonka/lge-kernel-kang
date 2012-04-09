@@ -29,7 +29,6 @@
 #include <linux/platform_device.h>
 #include <linux/delay.h>
 #include <linux/io.h>
-#include <linux/slab.h>
 #include <asm/uaccess.h>
 
 #include <mach/nvrm_linux.h>
@@ -57,7 +56,7 @@ struct tegra_i2c_dev {
 static int tegra_i2c_lock(struct tegra_i2c_bus *i2c_bus)
 {
 	if (likely(i2c_bus->bus_lock == &i2c_bus->adapter.bus_lock))
-	return 0;
+		return 0;
 
 	if (in_atomic() || irqs_disabled()) {
 		if (!mutex_trylock(i2c_bus->bus_lock))
@@ -117,7 +116,7 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap,
 		dev_err(i2c_dev->dev, "allocate transaction array failed\n");
 		rc = -ENOMEM;
 		goto clean;
-		}
+	}
 
 	if (len) {
 		data = kzalloc_stack(len, onstack_data);
@@ -125,7 +124,7 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap,
 			dev_err(i2c_dev->dev, "allocate data array failed\n");
 			rc = -ENOMEM;
 			goto clean;
-	}
+		}
 	}
 
 	cpy = data;
@@ -133,16 +132,16 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap,
 	for (i=0; i<num; i++) {
 		if (msgs[i].flags & I2C_M_NOSTART) {
 			rm_tx[i].Flags |= NVRM_I2C_NOSTOP;
-	}
+		}
 		if (msgs[i].flags & I2C_M_IGNORE_NAK) {
 			rm_tx[i].Flags |= NVRM_I2C_NOACK;
-}
+		}
 		if (msgs[i].flags & I2C_M_RD) {
 			rm_tx[i].Flags |= NVRM_I2C_READ;
 		} else {
 			rm_tx[i].Flags |= NVRM_I2C_WRITE;
 			memcpy(cpy, msgs[i].buf, msgs[i].len);
-	}
+		}
 		cpy += msgs[i].len;
 		rm_tx[i].NumBytes = msgs[i].len;
 		rm_tx[i].Address = msgs[i].addr << 1;
@@ -174,12 +173,12 @@ static int tegra_i2c_xfer(struct i2c_adapter *adap,
 			"address 0x%x\n", i2c_bus->adapter.nr, msgs[0].addr);
 		rc = -ENXIO;
 		break;
-}
+	}
 
 	num = i;
 
 	cpy = data;
-	for (i = 0; i < num; i++) {
+	for (i=0; i<num; i++) {
 		if (rm_tx[i].Flags & NVRM_I2C_READ)
 			memcpy(msgs[i].buf, cpy, msgs[i].len);
 		cpy += msgs[i].len;
@@ -265,10 +264,10 @@ static int tegra_i2c_probe(struct platform_device *pdev)
 		i2c_bus->adapter.dev.parent = &pdev->dev;
 		i2c_bus->adapter.nr = plat->adapter_nr + i;
 		ret = i2c_add_numbered_adapter(&i2c_bus->adapter);
-	if (ret) {
+		if (ret) {
 			dev_err(&pdev->dev, "failed to add adapter %d\n", i);
 			goto err;
-	}
+		}
 		i2c_dev->bus_count++;
 	}
 

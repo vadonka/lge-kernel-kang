@@ -36,15 +36,12 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/dma-mapping.h>
-#include <linux/slab.h>
-#include <linux/prefetch.h>
 #include <net/arp.h>
 #include "common.h"
 #include "regs.h"
 #include "sge_defs.h"
 #include "t3_cpl.h"
 #include "firmware_exports.h"
-#include "cxgb3_offload.h"
 
 #define USE_GTS 0
 
@@ -119,7 +116,7 @@ struct rx_sw_desc {                /* SW state per Rx descriptor */
 		struct sk_buff *skb;
 		struct fl_pg_chunk pg_chunk;
 	};
-	DEFINE_DMA_UNMAP_ADDR(dma_addr);
+	DECLARE_PCI_UNMAP_ADDR(dma_addr);
 };
 
 struct rsp_desc {		/* response queue descriptor */
@@ -199,16 +196,20 @@ static inline void refill_rspq(struct adapter *adapter,
 /**
  *	need_skb_unmap - does the platform need unmapping of sk_buffs?
  *
- *	Returns true if the platform needs sk_buff unmapping.  The compiler
- *	optimizes away unnecessary code if this returns true.
+ *	Returns true if the platfrom needs sk_buff unmapping.  The compiler
+ *	optimizes away unecessary code if this returns true.
  */
 static inline int need_skb_unmap(void)
 {
-#ifdef CONFIG_NEED_DMA_MAP_STATE
-	return 1;
-#else
-	return 0;
-#endif
+	/*
+	 * This structure is used to tell if the platfrom needs buffer
+	 * unmapping by checking if DECLARE_PCI_UNMAP_ADDR defines anything.
+	 */
+	struct dummy {
+		DECLARE_PCI_UNMAP_ADDR(addr);
+	};
+
+	return sizeof(struct dummy) != 0;
 }
 
 /**
@@ -297,10 +298,8 @@ static void free_tx_desc(struct adapter *adapter, struct sge_txq *q,
 		if (d->skb) {	/* an SGL is present */
 			if (need_unmap)
 				unmap_skb(d->skb, q, cidx, pdev);
-			if (d->eop) {
+			if (d->eop)
 				kfree_skb(d->skb);
-				d->skb = NULL;
-			}
 		}
 		++d;
 		if (++cidx == q->size) {
@@ -362,7 +361,7 @@ static void clear_rx_desc(struct pci_dev *pdev, const struct sge_fl *q,
 		put_page(d->pg_chunk.page);
 		d->pg_chunk.page = NULL;
 	} else {
-		pci_unmap_single(pdev, dma_unmap_addr(d, dma_addr),
+		pci_unmap_single(pdev, pci_unmap_addr(d, dma_addr),
 				 q->buf_size, PCI_DMA_FROMDEVICE);
 		kfree_skb(d->skb);
 		d->skb = NULL;
@@ -418,7 +417,7 @@ static inline int add_one_rx_buf(void *va, unsigned int len,
 	if (unlikely(pci_dma_mapping_error(pdev, mapping)))
 		return -ENOMEM;
 
-	dma_unmap_addr_set(sd, dma_addr, mapping);
+	pci_unmap_addr_set(sd, dma_addr, mapping);
 
 	d->addr_lo = cpu_to_be32(mapping);
 	d->addr_hi = cpu_to_be32((u64) mapping >> 32);
@@ -481,7 +480,6 @@ static inline void ring_fl_db(struct adapter *adap, struct sge_fl *q)
 {
 	if (q->pend_cred >= q->credits / 4) {
 		q->pend_cred = 0;
-		wmb();
 		t3_write_reg(adap, A_SG_KDOORBELL, V_EGRCNTX(q->cntxt_id));
 	}
 }
@@ -514,7 +512,7 @@ nomem:				q->alloc_failed++;
 				break;
 			}
 			mapping = sd->pg_chunk.mapping + sd->pg_chunk.offset;
-			dma_unmap_addr_set(sd, dma_addr, mapping);
+			pci_unmap_addr_set(sd, dma_addr, mapping);
 
 			add_one_rx_chunk(mapping, d, q->gen);
 			pci_dma_sync_single_for_device(adap->pdev, mapping,
@@ -790,11 +788,11 @@ static struct sk_buff *get_packet(struct adapter *adap, struct sge_fl *fl,
 		if (likely(skb != NULL)) {
 			__skb_put(skb, len);
 			pci_dma_sync_single_for_cpu(adap->pdev,
-					    dma_unmap_addr(sd, dma_addr), len,
+					    pci_unmap_addr(sd, dma_addr), len,
 					    PCI_DMA_FROMDEVICE);
 			memcpy(skb->data, sd->skb->data, len);
 			pci_dma_sync_single_for_device(adap->pdev,
-					    dma_unmap_addr(sd, dma_addr), len,
+					    pci_unmap_addr(sd, dma_addr), len,
 					    PCI_DMA_FROMDEVICE);
 		} else if (!drop_thres)
 			goto use_orig_buf;
@@ -809,7 +807,7 @@ recycle:
 		goto recycle;
 
 use_orig_buf:
-	pci_unmap_single(adap->pdev, dma_unmap_addr(sd, dma_addr),
+	pci_unmap_single(adap->pdev, pci_unmap_addr(sd, dma_addr),
 			 fl->buf_size, PCI_DMA_FROMDEVICE);
 	skb = sd->skb;
 	skb_put(skb, len);
@@ -842,7 +840,7 @@ static struct sk_buff *get_packet_pg(struct adapter *adap, struct sge_fl *fl,
 	struct sk_buff *newskb, *skb;
 	struct rx_sw_desc *sd = &fl->sdesc[fl->cidx];
 
-	dma_addr_t dma_addr = dma_unmap_addr(sd, dma_addr);
+	dma_addr_t dma_addr = pci_unmap_addr(sd, dma_addr);
 
 	newskb = skb = q->pg_skb;
 	if (!skb && (len <= SGE_RX_COPY_THRES)) {
@@ -1148,7 +1146,7 @@ static void write_tx_pkt_wr(struct adapter *adap, struct sk_buff *skb,
 	cpl->len = htonl(skb->len);
 	cntrl = V_TXPKT_INTF(pi->port_id);
 
-	if (vlan_tx_tag_present(skb))
+	if (vlan_tx_tag_present(skb) && pi->vlan_grp)
 		cntrl |= F_TXPKT_VLAN_VLD | V_TXPKT_VLAN(vlan_tx_tag_get(skb));
 
 	tso_info = V_LSO_MSS(skb_shinfo(skb)->gso_size);
@@ -1262,7 +1260,7 @@ netdev_tx_t t3_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (should_restart_tx(q) &&
 		    test_and_clear_bit(TXQ_ETH, &qs->txq_stopped)) {
 			q->restarts++;
-			netif_tx_start_queue(txq);
+			netif_tx_wake_queue(txq);
 		}
 	}
 
@@ -1282,12 +1280,12 @@ netdev_tx_t t3_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		qs->port_stats[SGE_PSTAT_TX_CSUM]++;
 	if (skb_shinfo(skb)->gso_size)
 		qs->port_stats[SGE_PSTAT_TSO]++;
-	if (vlan_tx_tag_present(skb))
+	if (vlan_tx_tag_present(skb) && pi->vlan_grp)
 		qs->port_stats[SGE_PSTAT_VLANINS]++;
 
 	/*
 	 * We do not use Tx completion interrupts to free DMAd Tx packets.
-	 * This is good for performance but means that we rely on new Tx
+	 * This is good for performamce but means that we rely on new Tx
 	 * packets arriving to run the destructors of completed packets,
 	 * which open up space in their sockets' send queues.  Sometimes
 	 * we do not get such new packets causing Tx to stall.  A single
@@ -1948,9 +1946,10 @@ static void restart_tx(struct sge_qset *qs)
  *	Check if the ARP request is probing the private IP address
  *	dedicated to iSCSI, generate an ARP reply if so.
  */
-static void cxgb3_arp_process(struct port_info *pi, struct sk_buff *skb)
+static void cxgb3_arp_process(struct adapter *adapter, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
+	struct port_info *pi;
 	struct arphdr *arp;
 	unsigned char *arp_ptr;
 	unsigned char *sha;
@@ -1973,30 +1972,18 @@ static void cxgb3_arp_process(struct port_info *pi, struct sk_buff *skb)
 	arp_ptr += dev->addr_len;
 	memcpy(&tip, arp_ptr, sizeof(tip));
 
+	pi = netdev_priv(dev);
 	if (tip != pi->iscsi_ipv4addr)
 		return;
 
 	arp_send(ARPOP_REPLY, ETH_P_ARP, sip, dev, tip, sha,
-		 pi->iscsic.mac_addr, sha);
+		 dev->dev_addr, sha);
 
 }
 
 static inline int is_arp(struct sk_buff *skb)
 {
 	return skb->protocol == htons(ETH_P_ARP);
-}
-
-static void cxgb3_process_iscsi_prov_pack(struct port_info *pi,
-					struct sk_buff *skb)
-{
-	if (is_arp(skb)) {
-		cxgb3_arp_process(pi, skb);
-		return;
-	}
-
-	if (pi->iscsic.recv)
-		pi->iscsic.recv(pi, skb);
-
 }
 
 /**
@@ -2020,13 +2007,13 @@ static void rx_eth(struct adapter *adap, struct sge_rspq *rq,
 	skb_pull(skb, sizeof(*p) + pad);
 	skb->protocol = eth_type_trans(skb, adap->port[p->iff]);
 	pi = netdev_priv(skb->dev);
-	if ((skb->dev->features & NETIF_F_RXCSUM) && p->csum_valid &&
+	if ((pi->rx_offload & T3_RX_CSUM) && p->csum_valid &&
 	    p->csum == htons(0xffff) && !p->fragment) {
 		qs->port_stats[SGE_PSTAT_RX_CSUM_GOOD]++;
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	} else
-		skb_checksum_none_assert(skb);
-	skb_record_rx_queue(skb, qs - &adap->sge.qs[pi->first_qset]);
+		skb->ip_summed = CHECKSUM_NONE;
+	skb_record_rx_queue(skb, qs - &adap->sge.qs[0]);
 
 	if (unlikely(p->vlan_valid)) {
 		struct vlan_group *grp = pi->vlan_grp;
@@ -2037,12 +2024,13 @@ static void rx_eth(struct adapter *adap, struct sge_rspq *rq,
 				vlan_gro_receive(&qs->napi, grp,
 						 ntohs(p->vlan), skb);
 			else {
-				if (unlikely(pi->iscsic.flags)) {
+				if (unlikely(pi->iscsi_ipv4addr &&
+				    is_arp(skb))) {
 					unsigned short vtag = ntohs(p->vlan) &
 								VLAN_VID_MASK;
 					skb->dev = vlan_group_get_device(grp,
 									 vtag);
-					cxgb3_process_iscsi_prov_pack(pi, skb);
+					cxgb3_arp_process(adap, skb);
 				}
 				__vlan_hwaccel_rx(skb, grp, ntohs(p->vlan),
 					  	  rq->polling);
@@ -2053,8 +2041,8 @@ static void rx_eth(struct adapter *adap, struct sge_rspq *rq,
 		if (lro)
 			napi_gro_receive(&qs->napi, skb);
 		else {
-			if (unlikely(pi->iscsic.flags))
-				cxgb3_process_iscsi_prov_pack(pi, skb);
+			if (unlikely(pi->iscsi_ipv4addr && is_arp(skb)))
+				cxgb3_arp_process(adap, skb);
 			netif_receive_skb(skb);
 		}
 	} else
@@ -2081,7 +2069,6 @@ static void lro_add_page(struct adapter *adap, struct sge_qset *qs,
 			 struct sge_fl *fl, int len, int complete)
 {
 	struct rx_sw_desc *sd = &fl->sdesc[fl->cidx];
-	struct port_info *pi = netdev_priv(qs->netdev);
 	struct sk_buff *skb = NULL;
 	struct cpl_rx_pkt *cpl;
 	struct skb_frag_struct *rx_frag;
@@ -2096,7 +2083,7 @@ static void lro_add_page(struct adapter *adap, struct sge_qset *qs,
 	fl->credits--;
 
 	pci_dma_sync_single_for_cpu(adap->pdev,
-				    dma_unmap_addr(sd, dma_addr),
+				    pci_unmap_addr(sd, dma_addr),
 				    fl->buf_size - SGE_PG_RSVD,
 				    PCI_DMA_FROMDEVICE);
 
@@ -2119,18 +2106,11 @@ static void lro_add_page(struct adapter *adap, struct sge_qset *qs,
 
 	if (!nr_frags) {
 		offset = 2 + sizeof(struct cpl_rx_pkt);
-		cpl = qs->lro_va = sd->pg_chunk.va + 2;
-
-		if ((qs->netdev->features & NETIF_F_RXCSUM) &&
-		     cpl->csum_valid && cpl->csum == htons(0xffff)) {
-			skb->ip_summed = CHECKSUM_UNNECESSARY;
-			qs->port_stats[SGE_PSTAT_RX_CSUM_GOOD]++;
-		} else
-			skb->ip_summed = CHECKSUM_NONE;
-	} else
-		cpl = qs->lro_va;
-
+		qs->lro_va = sd->pg_chunk.va + 2;
+	}
 	len -= offset;
+
+	prefetch(qs->lro_va);
 
 	rx_frag += nr_frags;
 	rx_frag->page = sd->pg_chunk.page;
@@ -2145,9 +2125,12 @@ static void lro_add_page(struct adapter *adap, struct sge_qset *qs,
 	if (!complete)
 		return;
 
-	skb_record_rx_queue(skb, qs - &adap->sge.qs[pi->first_qset]);
+	skb->ip_summed = CHECKSUM_UNNECESSARY;
+	cpl = qs->lro_va;
 
 	if (unlikely(cpl->vlan_valid)) {
+		struct net_device *dev = qs->netdev;
+		struct port_info *pi = netdev_priv(dev);
 		struct vlan_group *grp = pi->vlan_grp;
 
 		if (likely(grp != NULL)) {
@@ -2286,17 +2269,13 @@ static int process_responses(struct adapter *adap, struct sge_qset *qs,
 	q->next_holdoff = q->holdoff_tmr;
 
 	while (likely(budget_left && is_new_response(r, q))) {
-		int packet_complete, eth, ethpad = 2;
-		int lro = !!(qs->netdev->features & NETIF_F_GRO);
+		int packet_complete, eth, ethpad = 2, lro = qs->lro_enabled;
 		struct sk_buff *skb = NULL;
-		u32 len, flags;
-		__be32 rss_hi, rss_lo;
+		u32 len, flags = ntohl(r->flags);
+		__be32 rss_hi = *(const __be32 *)r,
+		       rss_lo = r->rss_hdr.rss_hash_val;
 
-		rmb();
 		eth = r->rss_hdr.opcode == CPL_RX_PKT;
-		rss_hi = *(const __be32 *)r;
-		rss_lo = r->rss_hdr.rss_hash_val;
-		flags = ntohl(r->flags);
 
 		if (unlikely(flags & F_RSPD_ASYNC_NOTIF)) {
 			skb = alloc_skb(AN_PKT_SIZE, GFP_ATOMIC);
@@ -2507,10 +2486,7 @@ static int process_pure_responses(struct adapter *adap, struct sge_qset *qs,
 			refill_rspq(adap, q, q->credits);
 			q->credits = 0;
 		}
-		if (!is_new_response(r, q))
-			break;
-		rmb();
-	} while (is_pure_response(r));
+	} while (is_new_response(r, q) && is_pure_response(r));
 
 	if (sleeping)
 		check_ring_db(adap, qs, sleeping);
@@ -2544,7 +2520,6 @@ static inline int handle_responses(struct adapter *adap, struct sge_rspq *q)
 
 	if (!is_new_response(r, q))
 		return -1;
-	rmb();
 	if (is_pure_response(r) && process_pure_responses(adap, qs, r) == 0) {
 		t3_write_reg(adap, A_SG_GTS, V_RSPQ(q->cntxt_id) |
 			     V_NEWTIMER(q->holdoff_tmr) | V_NEWINDEX(q->cidx));
@@ -2558,7 +2533,7 @@ static inline int handle_responses(struct adapter *adap, struct sge_rspq *q)
  * The MSI-X interrupt handler for an SGE response queue for the non-NAPI case
  * (i.e., response queue serviced in hard interrupt).
  */
-static irqreturn_t t3_sge_intr_msix(int irq, void *cookie)
+irqreturn_t t3_sge_intr_msix(int irq, void *cookie)
 {
 	struct sge_qset *qs = cookie;
 	struct adapter *adap = qs->adap;
@@ -2843,13 +2818,8 @@ void t3_sge_err_intr_handler(struct adapter *adapter)
 	}
 
 	if (status & (F_HIPIODRBDROPERR | F_LOPIODRBDROPERR))
-		queue_work(cxgb3_wq, &adapter->db_drop_task);
-
-	if (status & (F_HIPRIORITYDBFULL | F_LOPRIORITYDBFULL))
-		queue_work(cxgb3_wq, &adapter->db_full_task);
-
-	if (status & (F_HIPRIORITYDBEMPTY | F_LOPRIORITYDBEMPTY))
-		queue_work(cxgb3_wq, &adapter->db_empty_task);
+		CH_ALERT(adapter, "SGE dropped %s priority doorbell\n",
+			 status & F_HIPIODRBDROPERR ? "high" : "lo");
 
 	t3_write_reg(adapter, A_SG_INT_CAUSE, status);
 	if (status &  SGE_FATALERR)
@@ -3323,4 +3293,41 @@ void t3_sge_prep(struct adapter *adap, struct sge_params *p)
 	}
 
 	spin_lock_init(&adap->sge.reg_lock);
+}
+
+/**
+ *	t3_get_desc - dump an SGE descriptor for debugging purposes
+ *	@qs: the queue set
+ *	@qnum: identifies the specific queue (0..2: Tx, 3:response, 4..5: Rx)
+ *	@idx: the descriptor index in the queue
+ *	@data: where to dump the descriptor contents
+ *
+ *	Dumps the contents of a HW descriptor of an SGE queue.  Returns the
+ *	size of the descriptor.
+ */
+int t3_get_desc(const struct sge_qset *qs, unsigned int qnum, unsigned int idx,
+		unsigned char *data)
+{
+	if (qnum >= 6)
+		return -EINVAL;
+
+	if (qnum < 3) {
+		if (!qs->txq[qnum].desc || idx >= qs->txq[qnum].size)
+			return -EINVAL;
+		memcpy(data, &qs->txq[qnum].desc[idx], sizeof(struct tx_desc));
+		return sizeof(struct tx_desc);
+	}
+
+	if (qnum == 3) {
+		if (!qs->rspq.desc || idx >= qs->rspq.size)
+			return -EINVAL;
+		memcpy(data, &qs->rspq.desc[idx], sizeof(struct rsp_desc));
+		return sizeof(struct rsp_desc);
+	}
+
+	qnum -= 4;
+	if (!qs->fl[qnum].desc || idx >= qs->fl[qnum].size)
+		return -EINVAL;
+	memcpy(data, &qs->fl[qnum].desc[idx], sizeof(struct rx_desc));
+	return sizeof(struct rx_desc);
 }

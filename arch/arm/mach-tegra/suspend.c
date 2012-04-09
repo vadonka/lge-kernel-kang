@@ -29,7 +29,6 @@
 #include <linux/interrupt.h>
 #include <linux/clk.h>
 #include <linux/err.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/suspend.h>
 
@@ -44,13 +43,13 @@
 #include <mach/irqs.h>
 #include <mach/nvrm_linux.h>
 #include <mach/pmc.h>
-#include <mach/suspend.h>
 
 #include <nvrm_memmgr.h>
 #include <nvrm_power_private.h>
 #include "nvrm/core/common/nvrm_message.h"
+//Applying Nvidia Patches [ Start ]
 #include "nvrm_module.h"
-
+//Applying Nvidia Patches [ End ]
 #include "power.h"
 #include "board.h"
 
@@ -71,8 +70,6 @@ struct suspend_context
 volatile struct suspend_context tegra_sctx;
 bool core_lock_on = false;
 
-unsigned long save_avp_resume_addr = 0;
-
 #ifdef CONFIG_HOTPLUG_CPU
 extern void tegra_board_nvodm_suspend(void);
 extern void tegra_board_nvodm_resume(void);
@@ -80,7 +77,7 @@ extern void tegra_board_nvodm_resume(void);
 static void __iomem *pmc = IO_ADDRESS(TEGRA_PMC_BASE);
 static void __iomem *clk_rst = IO_ADDRESS(TEGRA_CLK_RESET_BASE);
 static void __iomem *flow_ctrl = IO_ADDRESS(TEGRA_FLOW_CTRL_BASE);
-static void __iomem *evp_reset = IO_ADDRESS(TEGRA_EXCEPTION_VECTORS_BASE) + 0x100;
+static void __iomem *evp_reset = IO_ADDRESS(TEGRA_EXCEPTION_VECTORS_BASE)+0x100;
 static void __iomem *tmrus = IO_ADDRESS(TEGRA_TMRUS_BASE);
 #endif
 
@@ -205,6 +202,7 @@ static void set_power_timers(unsigned long us_on, unsigned long us_off)
  *   disable periodic IRQs used for DVFS to prevent suspend wakeups
  *   disable coresight debug interface
  *
+ *
  */
 static noinline void restore_cpu_complex(bool wait_plls)
 {
@@ -235,7 +233,7 @@ static noinline void restore_cpu_complex(bool wait_plls)
 	writel(tegra_sctx.twd_load, twd_base + 0);
 
 	gic_dist_restore(0);
-	irq_get_chip(IRQ_LOCALTIMER)->irq_unmask(&irq_to_desc(IRQ_LOCALTIMER)->irq_data);
+	get_irq_chip(IRQ_LOCALTIMER)->unmask(IRQ_LOCALTIMER);
 
 	if(tegra_nvrm_lp2_persist())
 		enable_irq(INT_SYS_STATS_MON);
@@ -260,6 +258,7 @@ static noinline void suspend_cpu_complex(void)
 
 	tegra_sctx.twd_ctrl = readl(twd_base + 0x8);
 	tegra_sctx.twd_load = readl(twd_base + 0);
+	local_timer_stop();
 
 	reg = readl(flow_ctrl + FLOW_CTRL_CPU_CSR);
 	/* clear any pending events, set the WFE bitmap to specify just
@@ -415,6 +414,8 @@ static u8 *iram_save = NULL;
 static unsigned int iram_save_size = 0;
 static void __iomem *iram_code = IO_ADDRESS(TEGRA_IRAM_CODE_AREA);
 static void __iomem *iram_avp_resume = IO_ADDRESS(TEGRA_IRAM_BASE);
+//Applying Nvidia Patches [ Start ]
+static unsigned long avp_resume_address = 0;
 
 #define TEGRA_AVP_RESET_VECTOR_ADDR	\
 		(IO_ADDRESS(TEGRA_EXCEPTION_VECTORS_BASE) + 0x200)
@@ -455,7 +456,7 @@ int tegra_avp_resume(unsigned long reset_addr)
 
 	return ret;
 }
-
+//Applying Nvidia Patches [ End ]
 static void tegra_suspend_dram(bool lp0_ok)
 {
 	static unsigned long cpu_timer_32k = 0;
@@ -499,6 +500,12 @@ static void tegra_suspend_dram(bool lp0_ok)
 	} else {
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP0);
 
+        //20110213, cs77.ha@lge.com, sched_clock mismatch issue after deepsleep [START]
+        #if defined(CONFIG_MACH_STAR)
+        tegra_lp0_sched_clock_clear();
+        #endif
+        //20110213, cs77.ha@lge.com, sched_clock mismatch issue after deepsleep [END]
+
 		mode |= TEGRA_POWER_CPU_PWRREQ_OE;
 		mode |= TEGRA_POWER_PWRREQ_OE;
 		mode |= TEGRA_POWER_EFFECT_LP0;
@@ -519,13 +526,13 @@ static void tegra_suspend_dram(bool lp0_ok)
 	tegra_setup_wakepads(lp0_ok);
 	suspend_cpu_complex();
 	flush_cache_all();
-	outer_disable();
+	outer_shutdown();
 
 	__cortex_a9_save(mode);
 	restore_cpu_complex(false);
 
 	writel(orig, evp_reset);
-	outer_enable();
+	outer_restart();
 	writel(on_timer, pmc + PMC_CPUPWRGOOD_TIMER);
 	writel(off_timer, pmc + PMC_CPUPWROFF_TIMER);
 
@@ -667,13 +674,16 @@ static int tegra_suspend_prepare_late(void)
 		       __func__, e);
 		return -EIO;
 	}
+//Applying Nvidia Patches [ Start ]
+	/* store avp resume address that AVP firmware wrote
+	 * in 1st word of IRAM */
+	avp_resume_address = *((unsigned long *)iram_avp_resume);
+	rmb();
 
 	/* write 0 to PMC_SCRATCH39 so that AVP halts after WB0 resume
 	 * we resume AVP after the basic resume on CPU is done */
 	writel(0, pmc + PMC_SCRATCH39);
-	save_avp_resume_addr = *((volatile unsigned int *)iram_avp_resume);
-	rmb();
-
+//Applying Nvidia Patches [ End ]
 #endif
 	disable_irq(INT_SYS_STATS_MON);
 	return tegra_iovmm_suspend();
@@ -681,8 +691,9 @@ static int tegra_suspend_prepare_late(void)
 
 static void tegra_suspend_wake(void)
 {
+//Applying Nvidia Patches [ Start ]
 	int ret = 0;
-
+//Applying Nvidia Patches [ End ]
 	tegra_iovmm_resume();
 	enable_irq(INT_SYS_STATS_MON);
 
@@ -696,9 +707,11 @@ static void tegra_suspend_wake(void)
 	}
 	tegra_board_nvodm_resume();
 #endif
-	ret = tegra_avp_resume(save_avp_resume_addr);
+//Applying Nvidia Patches [ Start ]
+	ret = tegra_avp_resume(avp_resume_address);
 	if (ret < 0)
 		pr_err("%s: AVP failed to resume\n", __func__);
+//Applying Nvidia Patches [ End ]
 }
 
 extern void __init lp0_suspend_init(void);
@@ -733,7 +746,6 @@ static int tegra_suspend_enter(suspend_state_t state)
 		tegra_irq_suspend();
 		tegra_dma_suspend();
 		tegra_pinmux_suspend();
-                tegra_timer_suspend();
 		tegra_gpio_suspend();
 		tegra_clk_suspend();
 
@@ -741,17 +753,13 @@ static int tegra_suspend_enter(suspend_state_t state)
 		mc_data[1] = readl(mc + MC_SECURITY_SIZE);
 	}
 
-	/*
 	for_each_irq_desc(irq, desc) {
-		if (irqd_is_wakeup_set(&desc->irq_data) &&
-		    (desc->istate & IRQS_SUSPENDED)) {
-			irq_get_chip(irq)->irq_unmask(&desc->irq_data);
+		if ((desc->status & IRQ_WAKEUP) &&
+		    (desc->status & IRQ_SUSPENDED)) {
+			get_irq_chip(irq)->unmask(irq);
 		}
 	}
-	*/
-	
-	unmask_wakeup_suspended_irqs();
-	
+
 	if (!pdata->dram_suspend || !iram_save) {
 		/* lie about the power state so that the RM restarts DVFS */
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP1);
@@ -759,15 +767,12 @@ static int tegra_suspend_enter(suspend_state_t state)
 	} else
 		tegra_suspend_dram(lp0_ok);
 
-	/*
 	for_each_irq_desc(irq, desc) {
-		if (irqd_is_wakeup_set(&desc->irq_data) &&
-		    (desc->istate & IRQS_SUSPENDED)) {
-			irq_get_chip(irq)->irq_mask(&desc->irq_data);
+		if ((desc->status & IRQ_WAKEUP) &&
+		    (desc->status & IRQ_SUSPENDED)) {
+			get_irq_chip(irq)->mask(irq);
 		}
 	}
-	*/
-	mask_wakeup_suspended_irqs();
 
 	/* Clear DPD sample */
 	writel(0x0, pmc + PMC_DPD_SAMPLE);
@@ -778,7 +783,6 @@ static int tegra_suspend_enter(suspend_state_t state)
 
 		tegra_clk_resume();
 		tegra_gpio_resume();
-		tegra_timer_resume();
 		tegra_pinmux_resume();
 		tegra_dma_resume();
 		tegra_irq_resume();

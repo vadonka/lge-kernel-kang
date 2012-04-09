@@ -18,7 +18,6 @@
  */
 
 #include <linux/pci.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
 #include <asm/irq.h>
@@ -225,7 +224,7 @@ static u32 iop13xx_atue_cfg_address(struct pci_bus *bus, int devfn, int where)
 /* This routine checks the status of the last configuration cycle.  If an error
  * was detected it returns >0, else it returns a 0.  The errors being checked
  * are parity, master abort, target abort (master and target).  These types of
- * errors occur during a config cycle where there is no device, like during
+ * errors occure during a config cycle where there is no device, like during
  * the discovery stage.
  */
 static int iop13xx_atux_pci_status(int clear)
@@ -332,7 +331,7 @@ static struct pci_ops iop13xx_atux_ops = {
 /* This routine checks the status of the last configuration cycle.  If an error
  * was detected it returns >0, else it returns a 0.  The errors being checked
  * are parity, master abort, target abort (master and target).  These types of
- * errors occur during a config cycle where there is no device, like during
+ * errors occure during a config cycle where there is no device, like during
  * the discovery stage.
  */
 static int iop13xx_atue_pci_status(int clear)
@@ -987,7 +986,7 @@ void __init iop13xx_pci_init(void)
 		iop13xx_atux_setup();
 	}
 
-	hook_fault_code(16+6, iop13xx_pci_abort, SIGBUS, 0,
+	hook_fault_code(16+6, iop13xx_pci_abort, SIGBUS,
 			"imprecise external abort");
 }
 

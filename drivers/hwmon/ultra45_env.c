@@ -234,7 +234,8 @@ static const struct attribute_group env_group = {
 	.attrs = env_attributes,
 };
 
-static int __devinit env_probe(struct platform_device *op)
+static int __devinit env_probe(struct of_device *op,
+			       const struct of_device_id *match)
 {
 	struct env *p = kzalloc(sizeof(*p), GFP_KERNEL);
 	int err = -ENOMEM;
@@ -258,7 +259,7 @@ static int __devinit env_probe(struct platform_device *op)
 		goto out_sysfs_remove_group;
 	}
 
-	platform_set_drvdata(op, p);
+	dev_set_drvdata(&op->dev, p);
 	err = 0;
 
 out:
@@ -275,9 +276,9 @@ out_free:
 	goto out;
 }
 
-static int __devexit env_remove(struct platform_device *op)
+static int __devexit env_remove(struct of_device *op)
 {
-	struct env *p = platform_get_drvdata(op);
+	struct env *p = dev_get_drvdata(&op->dev);
 
 	if (p) {
 		sysfs_remove_group(&op->dev.kobj, &env_group);
@@ -298,24 +299,21 @@ static const struct of_device_id env_match[] = {
 };
 MODULE_DEVICE_TABLE(of, env_match);
 
-static struct platform_driver env_driver = {
-	.driver = {
-		.name = "ultra45_env",
-		.owner = THIS_MODULE,
-		.of_match_table = env_match,
-	},
+static struct of_platform_driver env_driver = {
+	.name		= "ultra45_env",
+	.match_table	= env_match,
 	.probe		= env_probe,
 	.remove		= __devexit_p(env_remove),
 };
 
 static int __init env_init(void)
 {
-	return platform_driver_register(&env_driver);
+	return of_register_driver(&env_driver, &of_bus_type);
 }
 
 static void __exit env_exit(void)
 {
-	platform_driver_unregister(&env_driver);
+	of_unregister_driver(&env_driver);
 }
 
 module_init(env_init);

@@ -752,7 +752,7 @@ int fix_alignment(struct pt_regs *regs)
 
 #ifdef CONFIG_SPE
 	if ((instr >> 26) == 0x4) {
-		PPC_WARN_ALIGNMENT(spe, regs);
+		PPC_WARN_EMULATED(spe);
 		return emulate_spe(regs, reg, instr);
 	}
 #endif
@@ -815,7 +815,7 @@ int fix_alignment(struct pt_regs *regs)
 			flags |= SPLT;
 			nb = 8;
 		}
-		PPC_WARN_ALIGNMENT(vsx, regs);
+		PPC_WARN_EMULATED(vsx);
 		return emulate_vsx(addr, reg, areg, regs, flags, nb, elsize);
 	}
 #endif
@@ -823,7 +823,7 @@ int fix_alignment(struct pt_regs *regs)
 	 * the exception of DCBZ which is handled as a special case here
 	 */
 	if (instr == DCBZ) {
-		PPC_WARN_ALIGNMENT(dcbz, regs);
+		PPC_WARN_EMULATED(dcbz);
 		return emulate_dcbz(regs, addr);
 	}
 	if (unlikely(nb == 0))
@@ -833,7 +833,7 @@ int fix_alignment(struct pt_regs *regs)
 	 * function
 	 */
 	if (flags & M) {
-		PPC_WARN_ALIGNMENT(multiple, regs);
+		PPC_WARN_EMULATED(multiple);
 		return emulate_multiple(regs, addr, reg, nb,
 					flags, instr, swiz);
 	}
@@ -854,11 +854,11 @@ int fix_alignment(struct pt_regs *regs)
 
 	/* Special case for 16-byte FP loads and stores */
 	if (nb == 16) {
-		PPC_WARN_ALIGNMENT(fp_pair, regs);
+		PPC_WARN_EMULATED(fp_pair);
 		return emulate_fp_pair(addr, reg, flags);
 	}
 
-	PPC_WARN_ALIGNMENT(unaligned, regs);
+	PPC_WARN_EMULATED(unaligned);
 
 	/* If we are loading, get the data from user space, else
 	 * get it from register values
@@ -889,7 +889,7 @@ int fix_alignment(struct pt_regs *regs)
 #ifdef CONFIG_PPC_FPU
 			preempt_disable();
 			enable_kernel_fp();
-			cvt_df(&data.dd, (float *)&data.v[4]);
+			cvt_df(&data.dd, (float *)&data.v[4], &current->thread);
 			preempt_enable();
 #else
 			return 0;
@@ -933,7 +933,7 @@ int fix_alignment(struct pt_regs *regs)
 #ifdef CONFIG_PPC_FPU
 		preempt_disable();
 		enable_kernel_fp();
-		cvt_fd((float *)&data.v[4], &data.dd);
+		cvt_fd((float *)&data.v[4], &data.dd, &current->thread);
 		preempt_enable();
 #else
 		return 0;

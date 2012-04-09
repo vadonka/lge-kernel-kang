@@ -170,6 +170,7 @@ typedef elf_fpreg_t elf_vsrreghalf_t32[ELF_NVSRHALFREG];
 #define elf_check_arch(x) ((x)->e_machine == ELF_ARCH)
 #define compat_elf_check_arch(x)	((x)->e_machine == EM_PPC)
 
+#define USE_ELF_CORE_DUMP
 #define CORE_DUMP_USE_REGSET
 #define ELF_EXEC_PAGESIZE	PAGE_SIZE
 
@@ -250,7 +251,7 @@ do {								\
  * the 64bit ABI has never had these issues dont enable the workaround
  * even if we have an executable stack.
  */
-# define elf_read_implies_exec(ex, exec_stk) (is_32bit_task() ? \
+# define elf_read_implies_exec(ex, exec_stk) (test_thread_flag(TIF_32BIT) ? \
 		(exec_stk == EXSTACK_DEFAULT) : 0)
 #else 
 # define SET_PERSONALITY(ex) \

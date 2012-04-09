@@ -17,7 +17,7 @@ static inline void frozen_process(void)
 {
 	if (!unlikely(current->flags & PF_NOFREEZE)) {
 		current->flags |= PF_FROZEN;
-		smp_wmb();
+		wmb();
 	}
 	clear_freeze_flag(current);
 }
@@ -93,25 +93,31 @@ bool freeze_task(struct task_struct *p, bool sig_only)
 	 * the task as frozen and next clears its TIF_FREEZE.
 	 */
 	if (!freezing(p)) {
-		smp_rmb();
+		rmb();
 		if (frozen(p))
 			return false;
 
 		if (!sig_only || should_send_signal(p))
 			set_freeze_flag(p);
 		else
+		{
+			if (!strcmp(p->comm, "nvrm_daemon"))
+			{
+				pr_err("%s: %s's sig_only: %d\n", __func__, p->comm, sig_only);
+				pr_err("%s: Setting freeze flag failed\n", p->comm);
+			}
 			return false;
+		}
 	}
 
 	if (should_send_signal(p)) {
-		fake_signal_wake_up(p);
-		/*
-		 * fake_signal_wake_up() goes through p's scheduler
-		 * lock and guarantees that TASK_STOPPED/TRACED ->
-		 * TASK_RUNNING transition can't race with task state
-		 * testing in try_to_freeze_tasks().
-		 */
+		if (!signal_pending(p))
+			fake_signal_wake_up(p);
 	} else if (sig_only) {
+		if (!strcmp(p->comm, "nvrm_daemon"))
+		{
+			pr_err("%s: %s has PF_FREEZER_NOSIG cleared\n", __func__, p->comm);
+		}
 		return false;
 	} else {
 		wake_up_state(p, TASK_INTERRUPTIBLE);

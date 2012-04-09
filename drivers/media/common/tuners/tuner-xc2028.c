@@ -15,7 +15,6 @@
 #include <linux/delay.h>
 #include <media/tuner.h>
 #include <linux/mutex.h>
-#include <linux/slab.h>
 #include <asm/unaligned.h>
 #include "tuner-i2c.h"
 #include "tuner-xc2028.h"
@@ -100,8 +99,6 @@ struct xc2028_data {
 	if (size != _rc)						\
 		tuner_info("i2c output error: rc = %d (should be %d)\n",\
 			   _rc, (int)size);				\
-	if (priv->ctrl.msleep)						\
-		msleep(priv->ctrl.msleep);				\
 	_rc;								\
 })
 
@@ -121,8 +118,6 @@ struct xc2028_data {
 	if (isize != _rc)						\
 		tuner_err("i2c input error: rc = %d (should be %d)\n",	\
 			   _rc, (int)isize); 				\
-	if (priv->ctrl.msleep)						\
-		msleep(priv->ctrl.msleep);				\
 	_rc;								\
 })
 
@@ -133,8 +128,8 @@ struct xc2028_data {
 			(_rc = tuner_i2c_xfer_send(&priv->i2c_props,	\
 						_val, sizeof(_val)))) {	\
 		tuner_err("Error on line %d: %d\n", __LINE__, _rc);	\
-	} else if (priv->ctrl.msleep)					\
-		msleep(priv->ctrl.msleep);				\
+	} else 								\
+		msleep(10);						\
 	_rc;								\
 })
 
@@ -685,7 +680,7 @@ static int check_firmware(struct dvb_frontend *fe, unsigned int type,
 {
 	struct xc2028_data         *priv = fe->tuner_priv;
 	struct firmware_properties new_fw;
-	int			   rc = 0, retry_count = 0;
+	int			   rc = 0, is_retry = 0;
 	u16			   version, hwmodel;
 	v4l2_std_id		   std0;
 
@@ -813,20 +808,10 @@ check_device:
 		  hwmodel, (version & 0xf000) >> 12, (version & 0xf00) >> 8,
 		  (version & 0xf0) >> 4, version & 0xf);
 
-
-	if (priv->ctrl.read_not_reliable)
-		goto read_not_reliable;
-
 	/* Check firmware version against what we downloaded. */
 	if (priv->firm_version != ((version & 0xf0) << 4 | (version & 0x0f))) {
-		if (!priv->ctrl.read_not_reliable) {
-			tuner_err("Incorrect readback of firmware version.\n");
-			goto fail;
-		} else {
-			tuner_err("Returned an incorrect version. However, "
-				  "read is not reliable enough. Ignoring it.\n");
-			hwmodel = 3028;
-		}
+		tuner_err("Incorrect readback of firmware version.\n");
+		goto fail;
 	}
 
 	/* Check that the tuner hardware model remains consistent over time. */
@@ -840,7 +825,6 @@ check_device:
 		goto fail;
 	}
 
-read_not_reliable:
 	memcpy(&priv->cur_fw, &new_fw, sizeof(priv->cur_fw));
 
 	/*
@@ -855,9 +839,9 @@ read_not_reliable:
 
 fail:
 	memset(&priv->cur_fw, 0, sizeof(priv->cur_fw));
-	if (retry_count < 8) {
+	if (!is_retry) {
 		msleep(50);
-		retry_count++;
+		is_retry = 1;
 		tuner_dbg("Retrying firmware load\n");
 		goto retry;
 	}
@@ -907,7 +891,7 @@ ret:
 #define DIV 15625
 
 static int generic_set_freq(struct dvb_frontend *fe, u32 freq /* in HZ */,
-			    enum v4l2_tuner_type new_type,
+			    enum tuner_mode new_mode,
 			    unsigned int type,
 			    v4l2_std_id std,
 			    u16 int_freq)
@@ -933,68 +917,30 @@ static int generic_set_freq(struct dvb_frontend *fe, u32 freq /* in HZ */,
 	 * that xc2028 will be in a safe state.
 	 * Maybe this might also be needed for DTV.
 	 */
-	if (new_type == V4L2_TUNER_ANALOG_TV) {
+	if (new_mode == T_ANALOG_TV)
 		rc = send_seq(priv, {0x00, 0x00});
 
-		/* Analog modes require offset = 0 */
-	} else {
-		/*
-		 * Digital modes require an offset to adjust to the
-		 * proper frequency. The offset depends on what
-		 * firmware version is used.
-		 */
-
-		/*
-		 * Adjust to the center frequency. This is calculated by the
-		 * formula: offset = 1.25MHz - BW/2
-		 * For DTV 7/8, the firmware uses BW = 8000, so it needs a
-		 * further adjustment to get the frequency center on VHF
-		 */
+	/*
+	 * Digital modes require an offset to adjust to the
+	 * proper frequency.
+	 * Analog modes require offset = 0
+	 */
+	if (new_mode == T_DIGITAL_TV) {
+		/* Sets the offset according with firmware */
 		if (priv->cur_fw.type & DTV6)
 			offset = 1750000;
 		else if (priv->cur_fw.type & DTV7)
 			offset = 2250000;
 		else	/* DTV8 or DTV78 */
 			offset = 2750000;
+
+		/*
+		 * We must adjust the offset by 500kHz  when
+		 * tuning a 7MHz VHF channel with DTV78 firmware
+		 * (used in Australia, Italy and Germany)
+		 */
 		if ((priv->cur_fw.type & DTV78) && freq < 470000000)
 			offset -= 500000;
-
-		/*
-		 * xc3028 additional "magic"
-		 * Depending on the firmware version, it needs some adjustments
-		 * to properly centralize the frequency. This seems to be
-		 * needed to compensate the SCODE table adjustments made by
-		 * newer firmwares
-		 */
-
-#if 1
-		/*
-		 * The proper adjustment would be to do it at s-code table.
-		 * However, this didn't work, as reported by
-		 * Robert Lowery <rglowery@exemail.com.au>
-		 */
-
-		if (priv->cur_fw.type & DTV7)
-			offset += 500000;
-
-#else
-		/*
-		 * Still need tests for XC3028L (firmware 3.2 or upper)
-		 * So, for now, let's just comment the per-firmware
-		 * version of this change. Reports with xc3028l working
-		 * with and without the lines bellow are welcome
-		 */
-
-		if (priv->firm_version < 0x0302) {
-			if (priv->cur_fw.type & DTV7)
-				offset += 500000;
-		} else {
-			if (priv->cur_fw.type & DTV7)
-				offset -= 300000;
-			else if (type != ATSC) /* DVB @6MHz, DTV 8 and DTV 7/8 */
-				offset += 200000;
-		}
-#endif
 	}
 
 	div = (freq - offset + DIV / 2) / DIV;
@@ -1011,8 +957,6 @@ static int generic_set_freq(struct dvb_frontend *fe, u32 freq /* in HZ */,
 	   The reset CLK is needed only with tm6000.
 	   Driver should work fine even if this fails.
 	 */
-	if (priv->ctrl.msleep)
-		msleep(priv->ctrl.msleep);
 	do_tuner_callback(fe, XC2028_RESET_CLK, 1);
 
 	msleep(10);
@@ -1054,7 +998,7 @@ static int xc2028_set_analog_freq(struct dvb_frontend *fe,
 		if (priv->ctrl.input1)
 			type |= INPUT1;
 		return generic_set_freq(fe, (625l * p->frequency) / 10,
-				V4L2_TUNER_RADIO, type, 0, 0);
+				T_RADIO, type, 0, 0);
 	}
 
 	/* if std is not defined, choose one */
@@ -1069,7 +1013,7 @@ static int xc2028_set_analog_freq(struct dvb_frontend *fe,
 	p->std |= parse_audio_std_option();
 
 	return generic_set_freq(fe, 62500l * p->frequency,
-				V4L2_TUNER_ANALOG_TV, type, p->std, 0);
+				T_ANALOG_TV, type, p->std, 0);
 }
 
 static int xc2028_set_params(struct dvb_frontend *fe,
@@ -1153,28 +1097,21 @@ static int xc2028_set_params(struct dvb_frontend *fe,
 
 	/* All S-code tables need a 200kHz shift */
 	if (priv->ctrl.demod) {
-		demod = priv->ctrl.demod;
-
-		/*
-		 * Newer firmwares require a 200 kHz offset only for ATSC
-		 */
-		if (type == ATSC || priv->firm_version < 0x0302)
-			demod += 200;
+		demod = priv->ctrl.demod + 200;
 		/*
 		 * The DTV7 S-code table needs a 700 kHz shift.
+		 * Thanks to Terry Wu <terrywu2009@gmail.com> for reporting this
 		 *
 		 * DTV7 is only used in Australia.  Germany or Italy may also
 		 * use this firmware after initialization, but a tune to a UHF
 		 * channel should then cause DTV78 to be used.
-		 *
-		 * Unfortunately, on real-field tests, the s-code offset
-		 * didn't work as expected, as reported by
-		 * Robert Lowery <rglowery@exemail.com.au>
 		 */
+		if (type & DTV7)
+			demod += 500;
 	}
 
 	return generic_set_freq(fe, p->frequency,
-				V4L2_TUNER_DIGITAL_TV, type, 0, demod);
+				T_DIGITAL_TV, type, 0, demod);
 }
 
 static int xc2028_sleep(struct dvb_frontend *fe)

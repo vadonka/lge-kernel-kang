@@ -6,13 +6,11 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/errno.h>
 #include <linux/iommu-helper.h>
-#include <linux/bitmap.h>
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -171,7 +169,7 @@ void iommu_range_free(struct iommu *iommu, dma_addr_t dma_addr, unsigned long np
 
 	entry = (dma_addr - iommu->page_table_map_base) >> IO_PAGE_SHIFT;
 
-	bitmap_clear(arena->map, entry, npages);
+	iommu_area_free(arena->map, entry, npages);
 }
 
 int iommu_table_init(struct iommu *iommu, int tsbsize,
@@ -255,9 +253,10 @@ static inline iopte_t *alloc_npages(struct device *dev, struct iommu *iommu,
 static int iommu_alloc_ctx(struct iommu *iommu)
 {
 	int lowest = iommu->ctx_lowest_free;
-	int n = find_next_zero_bit(iommu->ctx_bitmap, IOMMU_NUM_CTXS, lowest);
+	int sz = IOMMU_NUM_CTXS - lowest;
+	int n = find_next_zero_bit(iommu->ctx_bitmap, sz, lowest);
 
-	if (unlikely(n == IOMMU_NUM_CTXS)) {
+	if (unlikely(n == sz)) {
 		n = find_next_zero_bit(iommu->ctx_bitmap, lowest, 1);
 		if (unlikely(n == lowest)) {
 			printk(KERN_WARNING "IOMMU: Ran out of contexts.\n");
@@ -333,10 +332,13 @@ static void dma_4u_free_coherent(struct device *dev, size_t size,
 				 void *cpu, dma_addr_t dvma)
 {
 	struct iommu *iommu;
+	iopte_t *iopte;
 	unsigned long flags, order, npages;
 
 	npages = IO_PAGE_ALIGN(size) >> IO_PAGE_SHIFT;
 	iommu = dev->archdata.iommu;
+	iopte = iommu->page_table +
+		((dvma - iommu->page_table_map_base) >> IO_PAGE_SHIFT);
 
 	spin_lock_irqsave(&iommu->lock, flags);
 
@@ -859,3 +861,13 @@ int dma_supported(struct device *dev, u64 device_mask)
 	return 0;
 }
 EXPORT_SYMBOL(dma_supported);
+
+int dma_set_mask(struct device *dev, u64 dma_mask)
+{
+#ifdef CONFIG_PCI
+	if (dev->bus == &pci_bus_type)
+		return pci_set_dma_mask(to_pci_dev(dev), dma_mask);
+#endif
+	return -EINVAL;
+}
+EXPORT_SYMBOL(dma_set_mask);

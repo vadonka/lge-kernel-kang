@@ -65,7 +65,7 @@ struct tegra_wdt {
 	bool			enabled;
 };
 
-static struct tegra_wdt *tegra_wdt_dev;
+static struct platform_device *tegra_wdt_dev;
 
 static void tegra_wdt_set_timeout(struct tegra_wdt *wdt, int sec)
 {
@@ -126,8 +126,7 @@ static int tegra_wdt_notify(struct notifier_block *this,
 
 static int tegra_wdt_open(struct inode *inode, struct file *file)
 {
-	struct miscdevice *miscdev = file->private_data;
-	struct tegra_wdt *wdt = dev_get_drvdata(miscdev->parent);
+	struct tegra_wdt *wdt = platform_get_drvdata(tegra_wdt_dev);
 
 	if (test_and_set_bit(1, &wdt->users))
 		return -EBUSY;
@@ -291,7 +290,7 @@ static int tegra_wdt_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, wdt);
-	tegra_wdt_dev = wdt;
+	tegra_wdt_dev = pdev;
 	return 0;
 fail:
 	if (wdt->irq != -1)
@@ -322,7 +321,7 @@ static int tegra_wdt_remove(struct platform_device *pdev)
 	release_mem_region(wdt->res_src->start, resource_size(wdt->res_src));
 	release_mem_region(wdt->res_wdt->start, resource_size(wdt->res_wdt));
 	kfree(wdt);
-	tegra_wdt_dev = NULL;
+	platform_set_drvdata(pdev, NULL);
 	return 0;
 }
 

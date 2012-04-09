@@ -3,26 +3,26 @@
 ** File:
 **     ImmVibeSPI.c
 **
-** Description: 
+** Description:
 **     Device-dependent functions called by Immersion TSP API
 **     to control PWM duty cycle, amp enable/disable, save IVT file, etc...
 **
-** Portions Copyright (c) 2008-2009 Immersion Corporation. All Rights Reserved. 
+** Portions Copyright (c) 2008-2009 Immersion Corporation. All Rights Reserved.
 **
-** This file contains Original Code and/or Modifications of Original Code 
-** as defined in and that are subject to the GNU Public License v2 - 
-** (the 'License'). You may not use this file except in compliance with the 
-** License. You should have received a copy of the GNU General Public License 
+** This file contains Original Code and/or Modifications of Original Code
+** as defined in and that are subject to the GNU Public License v2 -
+** (the 'License'). You may not use this file except in compliance with the
+** License. You should have received a copy of the GNU General Public License
 ** along with this program; if not, write to the Free Software Foundation, Inc.,
-** 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or contact 
+** 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA or contact
 ** TouchSenseSales@immersion.com.
 **
-** The Original Code and all software distributed under the License are 
-** distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER 
-** EXPRESS OR IMPLIED, AND IMMERSION HEREBY DISCLAIMS ALL SUCH WARRANTIES, 
-** INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS 
-** FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT. Please see 
-** the License for the specific language governing rights and limitations 
+** The Original Code and all software distributed under the License are
+** distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+** EXPRESS OR IMPLIED, AND IMMERSION HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+** INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY, FITNESS
+** FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT. Please see
+** the License for the specific language governing rights and limitations
 ** under the License.
 ** =========================================================================
 */
@@ -185,19 +185,19 @@ static void vib_close( )
 }
 #endif
 
-//20101218  vib disable on reboot
+//20101218 km.lee@lge.com vib disable on reboot
 void vib_enable( NvBool on )
 {
   	/*
 	if ( vib_set_power_rail( g_vib->vdd_id, on ) != 0 ) {
 		printk( "[ImmVibeSPI][%s] : Failed to vib_set_power_rail\n", __func__ );
-	} 
+	}
 	*/
 
 	NvOdmGpioConfig( g_vib->h_vib_gpio, g_vib->h_vib_gpio_pin, NvOdmGpioPinMode_Output );
 	NvOdmGpioSetState( g_vib->h_vib_gpio, g_vib->h_vib_gpio_pin, on );
 }
-//20100111  vib disable on reboot 2nd [START]
+//20100111 km.lee@lge.com vib disable on reboot 2nd [START]
 void vib_enable_reboot( NvBool on )
 {
   	
@@ -209,7 +209,7 @@ void vib_enable_reboot( NvBool on )
 	NvOdmGpioConfig( g_vib->h_vib_gpio, g_vib->h_vib_gpio_pin, NvOdmGpioPinMode_Output );
 	NvOdmGpioSetState( g_vib->h_vib_gpio, g_vib->h_vib_gpio_pin, on );
 }
-//20100111  vib disable on reboot 2nd [END]
+//20100111 km.lee@lge.com vib disable on reboot 2nd [END]
 
 // mode [1] : disable
 // mode [2] : enable
@@ -222,7 +222,11 @@ static void vib_generatePWM( NvOdmPwmMode mode )
 
 	if ( g_vib->hOdmPwm!= NULL ) {
 		DutyCycle = 0x00320000; // 50% duty
+#if defined (CONFIG_MODEM_MDM)
 		NvOdmPwmConfig( g_vib->hOdmPwm, NvOdmPwmOutputId_PWM0, mode, DutyCycle, &g_requestedPeriod, &ReturnedPeriod );
+#elif defined (CONFIG_MODEM_IFX)
+		NvOdmPwmConfig( g_vib->hOdmPwm, NvOdmPwmOutputId_PWM3, mode, DutyCycle, &g_requestedPeriod, &ReturnedPeriod );
+#endif
 	}
 	else	{
 		printk( "[ImmVibeSPI] : Failed to vib_generatePWM.\n");
@@ -279,7 +283,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Initialize( void )
 
    	g_bAmpEnabled = true;   /* to force ImmVibeSPI_ForceOut_AmpDisable disabling the amp */
 
-   	/* 
+   	/*
     	** Disable amp.
     	** If multiple actuators are supported, please make sure to call ImmVibeSPI_ForceOut_AmpDisable
    	** for each actuator (provide the actuator index as input argument).
@@ -294,7 +298,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Terminate( void )
 {
    	DbgOut(( "[ImmVibeSPI] : ImmVibeSPI_ForceOut_Terminate\n" ));
 
-   	/* 
+   	/*
     	** Disable amp.
     	** If multiple actuators are supported, please make sure to call ImmVibeSPI_ForceOut_AmpDisable
     	** for each actuator (provide the actuator index as input argument).
@@ -312,17 +316,19 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_ForceOut_Set( VibeUInt8 nActuatorIndex, Vibe
 	NvU32	DutyCycle;
 	NvU32	ReturnedPeriod;
 	
-//	DbgOut(( "[ImmVibeSPI] ImmVibeSPI_ForceOut_Set nForce =  %d \n", nForce ));
+//  DbgOut(( "[ImmVibeSPI] ImmVibeSPI_ForceOut_Set nForce =  %d \n", nForce ));
 
    	if ( nForce == 0 ) {
 		DutyCycle = 0x00320000; // 50% duty
    	} else {
 		DutyCycle = ((100*nForce/256)+50) << 16;
-//		printk( "[ImmVibeSPI] ImmVibeSPI_ForceOut_Set DutyCycle =  %x \n", DutyCycle );
+// printk( "[ImmVibeSPI] ImmVibeSPI_ForceOut_Set DutyCycle =  %x \n", DutyCycle );
    	}
-
+#if defined (CONFIG_MODEM_MDM)
 	NvOdmPwmConfig( g_vib->hOdmPwm, NvOdmPwmOutputId_PWM0, NvOdmPwmMode_Enable, DutyCycle, &g_requestedPeriod, &ReturnedPeriod );
-
+#elif defined (CONFIG_MODEM_IFX)
+    	NvOdmPwmConfig( g_vib->hOdmPwm, NvOdmPwmOutputId_PWM3, NvOdmPwmMode_Enable, DutyCycle, &g_requestedPeriod, &ReturnedPeriod );
+#endif
    	return VIBE_S_SUCCESS;
 }
 
@@ -369,7 +375,7 @@ IMMVIBESPIAPI VibeStatus ImmVibeSPI_Device_GetName( VibeUInt8 nActuatorIndex, ch
 //#error Please review the code between the #if and #endif
 
 #if 0   /* The following code is provided as a sample. Please modify as required. */
-    	if ((!szDevName) || (nSize < 1)) 
+    	if ((!szDevName) || (nSize < 1))
 		return VIBE_E_FAIL;
 
     	DbgOut((KERN_DEBUG "ImmVibeSPI_Device_GetName.\n"));

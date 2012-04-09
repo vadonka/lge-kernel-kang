@@ -38,12 +38,12 @@
 #include <mach/nvrm_linux.h>
 
 
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 #include <mach/io.h>
 #include <nvrm_spi.h>
 #include <nvrm_power.h>
 #include <nvrm_power_private.h>
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 
 
@@ -99,7 +99,7 @@ static bool        bOnce = 0;
 //LGE_TELECA_CR:568_DUAL_SPI END
 
 struct tegra_spi {
-	NvU32			index;		//20100811-1, , spi dev id
+	NvU32			index;		//20100811-1, syblue.lee@lge.com, spi dev id
 	NvRmSpiHandle		rm_spi;
 	NvU32			pinmux;
 	NvU32			Mode;
@@ -107,10 +107,10 @@ struct tegra_spi {
 	LOCK_T			lock;
 	struct work_struct	work;
 	struct workqueue_struct	*queue;
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 
 	NvU32			RmPowerClientId;
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 }; 
 
@@ -335,11 +335,11 @@ static int tegra_spi_do_message(struct tegra_spi *spi, struct spi_message *m)
 #endif
 #endif
 			if(nvErr != NvSuccess)
-			{	//20110120-1, , Add workaround code for short SCK
-				//printk("%s[ID:%d] : WaitTimeout error %d\n", __FUNCTION__, spi->index, nvErr);
+			{	//20110120-1, syblue.lee@lge.com, Add workaround code for short SCK
+				printk("%s[ID:%d] : WaitTimeout error %d\n", __FUNCTION__, spi->index, nvErr);
 				NvRmSpiClose(spi->rm_spi);
 				nvErr = NvRmSpiOpen(s_hRmGlobal, NvOdmIoModule_Spi, spi->index, 0, &spi->rm_spi);
-				printk("%s[ID:%d] : Recovery NvRmSpi instance Open %d\n", __FUNCTION__, spi->index, nvErr);
+				printk("%s[ID:%d] : Restart NvRmSpiOpen %d\n", __FUNCTION__, spi->index, nvErr);
 				break;
 			}
 #if ENABLE_TX_RX_DUMP
@@ -394,15 +394,15 @@ static int tegra_spi_do_message(struct tegra_spi *spi, struct spi_message *m)
 static void tegra_spi_workerthread(struct work_struct *w)
 {
 	struct tegra_spi *spi;
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 	NvRmDfsBusyHint BusyHints[4];
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 	spi = container_of(w, struct tegra_spi, work);
 
 	SPI_DEBUG_PRINT("tegra_spi_transfer start\n");
 
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 
 	BusyHints[0].ClockId = NvRmDfsClockId_Emc;
 	BusyHints[0].BoostDurationMs = NV_WAIT_INFINITE;
@@ -452,19 +452,19 @@ static void tegra_spi_workerthread(struct work_struct *w)
  
 	LOCK(spi->lock);
 
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 	while (!list_empty(&spi->msg_queue))
 	{
 
 		struct spi_message *m;
-// LGE_UPDATE_S  ebs 0707 	 
-        if (spi_shutdown )
-        {
-           printk("tegra_spi_workthread stopped\n");
-		   return;
-        }  
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707 	 
+	    if (spi_shutdown )
+	    {
+     		printk("tegra_spi_workthread stopped\n");
+			return;
+	    }  
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 		 
 		m = container_of(spi->msg_queue.next, struct spi_message, queue);
 		list_del_init(&m->queue);
@@ -482,7 +482,7 @@ static void tegra_spi_workerthread(struct work_struct *w)
 
 	UNLOCK(spi->lock);
 
-// LGE_UPDATE_S  ebs 0707	
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707	
 // ebs 0707
 	/* Set the clocks to the low corner */
 	BusyHints[0].BoostKHz = 0; // Emc
@@ -492,13 +492,13 @@ static void tegra_spi_workerthread(struct work_struct *w)
 
 	NvRmPowerBusyHintMulti(s_hRmGlobal, spi->RmPowerClientId, BusyHints, 4, NvRmDfsBusyHintSyncMode_Async);
 
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 
 	SPI_DEBUG_PRINT("tegra_spi_transfer end\n");
 }
 
-static int __devinit tegra_spi_probe(struct platform_device *pdev)
+static int __init tegra_spi_probe(struct platform_device *pdev)
 {
 	struct spi_master *master;
 	struct tegra_spi *spi;
@@ -549,10 +549,10 @@ static int __devinit tegra_spi_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-//20100711-1, , add mode_bits [START]
+//20100711-1, syblue.lee@lge.com, add mode_bits [START]
 	/* the spi->mode bits understood by this driver: */
 	master->mode_bits = NV_SUPPORTED_MODE_BITS;
-//20100711, , add mode_bits [END]
+//20100711, syblue.lee@lge.com, add mode_bits [END]
 
 	master->setup = tegra_spi_setup;
 	master->transfer = tegra_spi_transfer;
@@ -564,7 +564,7 @@ static int __devinit tegra_spi_probe(struct platform_device *pdev)
 	spi = spi_master_get_devdata(master);
 
 	spi->pinmux = plat->pinmux;
-	spi->index = pdev->id;	//20100811-1, , Save spi dev id
+	spi->index = pdev->id;	//20100811-1, syblue.lee@lge.com, Save spi dev id
 
 	SPI_DEBUG_PRINT("tegra_spi_probe : NvRmSpiOpen\n");
 	if (plat->is_slink) { 
@@ -586,7 +586,7 @@ static int __devinit tegra_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Failed to create work queue\n");
 		goto workQueueCreate_failed;
 	}
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 
 // ebs 0707
 	spi->RmPowerClientId = NVRM_POWER_CLIENT_TAG('S','P','I','S');
@@ -598,7 +598,7 @@ static int __devinit tegra_spi_probe(struct platform_device *pdev)
 	
 // ebs 0707 
 
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 	INIT_WORK(&spi->work, tegra_spi_workerthread);
 //LGE_TELECA_CR:568_DUAL_SPI START
@@ -641,9 +641,9 @@ static int tegra_spi_remove(struct platform_device *pdev)
 
 	spi_unregister_master(master);
 
-// LGE_UPDATE_S  ebs 0707
+// LGE_UPDATE_S eungbo.shim@lge.com ebs 0707
 	NvRmPowerUnRegister(s_hRmGlobal, spi->RmPowerClientId);
-// LGE_UPDATE_E  ebs 0707
+// LGE_UPDATE_E eungbo.shim@lge.com ebs 0707
 
 	
 	NvRmSpiClose(spi->rm_spi);
@@ -715,7 +715,7 @@ static void star_spi_shutdown(struct platform_device *pdev)
      printk("star_spi_shutdown :  completed\n");
 }
 
-//20100607-1, , power management	[START]
+//20100607-1, syblue.lee@lge.com, power management	[START]
 #ifdef CONFIG_PM
 static int tegra_spi_suspend(struct platform_device *pdev, pm_message_t msg)
 {
@@ -724,7 +724,9 @@ static int tegra_spi_suspend(struct platform_device *pdev, pm_message_t msg)
 
 	pSpi = dev_get_drvdata(&pdev->dev);
 	pShimSpi = spi_master_get_devdata(pSpi);
-	printk("[EBS] ### tegra_spi_suspend() \n");
+
+	printk( "tegra_spi_suspend\n");	//syblue.lee 100602 ; test
+
 	return 0;
 }
 
@@ -735,11 +737,13 @@ static int tegra_spi_resume(struct platform_device *pdev)
 
 	pSpi = dev_get_drvdata(&pdev->dev);
 	pShimSpi = spi_master_get_devdata(pSpi);
-	printk("[EBS] ### tegra_spi_resume() \n");
+
+	printk( "tegra_spi_resume\n");
+
 	return 0;
 }
 #endif	
-//20100607, , power management	[START]
+//20100607, syblue.lee@lge.com, power management	[START]
 MODULE_ALIAS("platform:tegra_spi");
 static struct platform_driver tegra_spi_driver = {
 	.probe = tegra_spi_probe,
@@ -749,12 +753,12 @@ static struct platform_driver tegra_spi_driver = {
 		.name	= "tegra_spi",
 		.owner	= THIS_MODULE,
 	},
-//20100607-1, , power management	[START]
+//20100607-1, syblue.lee@lge.com, power management	[START]
 #ifdef CONFIG_PM
 			.suspend = tegra_spi_suspend,
 			.resume = tegra_spi_resume, 
 #endif	
-//20100607, , power management	[START]
+//20100607, syblue.lee@lge.com, power management	[START]
 };
 
 static int __init tegra_spi_init(void)
@@ -772,6 +776,6 @@ static void __exit tegra_spi_exit(void)
 }
 module_exit(tegra_spi_exit);
 
-MODULE_AUTHOR("Sangyun Lee, <>");
+MODULE_AUTHOR("Sangyun Lee, <syblue.lee@lge.com>");
 MODULE_DESCRIPTION("Tegra SPI slave driver");
 MODULE_LICENSE("GPL");

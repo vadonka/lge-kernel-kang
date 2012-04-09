@@ -53,7 +53,7 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/acpi.h>
-#include <linux/io.h>
+#include <asm/io.h>
 
 /* SIS630 SMBus registers */
 #define SMB_STS			0x80	/* status */
@@ -389,11 +389,11 @@ static u32 sis630_func(struct i2c_adapter *adapter)
 		I2C_FUNC_SMBUS_BLOCK_DATA;
 }
 
-static int __devinit sis630_setup(struct pci_dev *sis630_dev)
+static int sis630_setup(struct pci_dev *sis630_dev)
 {
 	unsigned char b;
 	struct pci_dev *dummy = NULL;
-	int retval, i;
+	int retval = -ENODEV, i;
 
 	/* check for supported SiS devices */
 	for (i=0; supported[i] > 0 ; i++) {
@@ -418,21 +418,18 @@ static int __devinit sis630_setup(struct pci_dev *sis630_dev)
 	*/
 	if (pci_read_config_byte(sis630_dev, SIS630_BIOS_CTL_REG,&b)) {
 		dev_err(&sis630_dev->dev, "Error: Can't read bios ctl reg\n");
-		retval = -ENODEV;
 		goto exit;
 	}
 	/* if ACPI already enabled , do nothing */
 	if (!(b & 0x80) &&
 	    pci_write_config_byte(sis630_dev, SIS630_BIOS_CTL_REG, b | 0x80)) {
 		dev_err(&sis630_dev->dev, "Error: Can't enable ACPI\n");
-		retval = -ENODEV;
 		goto exit;
 	}
 
 	/* Determine the ACPI base address */
 	if (pci_read_config_word(sis630_dev,SIS630_ACPI_BASE_REG,&acpi_base)) {
 		dev_err(&sis630_dev->dev, "Error: Can't determine ACPI base address\n");
-		retval = -ENODEV;
 		goto exit;
 	}
 
@@ -448,7 +445,6 @@ static int __devinit sis630_setup(struct pci_dev *sis630_dev)
 			    sis630_driver.name)) {
 		dev_err(&sis630_dev->dev, "SMBus registers 0x%04x-0x%04x already "
 			"in use!\n", acpi_base + SMB_STS, acpi_base + SMB_SAA);
-		retval = -EBUSY;
 		goto exit;
 	}
 
@@ -472,7 +468,7 @@ static struct i2c_adapter sis630_adapter = {
 	.algo		= &smbus_algorithm,
 };
 
-static const struct pci_device_id sis630_ids[] __devinitconst = {
+static struct pci_device_id sis630_ids[] __devinitdata = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_503) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_SI, PCI_DEVICE_ID_SI_LPC) },
 	{ 0, }

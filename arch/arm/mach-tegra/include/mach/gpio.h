@@ -23,8 +23,6 @@
 #include <mach/irqs.h>
 
 #define ARCH_NR_GPIOS		INT_GPIO_NR
-#define TEGRA_GPIO_TO_IRQ(gpio) (INT_GPIO_BASE + (gpio))
-#define TEGRA_IRQ_TO_GPIO(irq) ((gpio) - INT_GPIO_BASE)
 
 #include <asm-generic/gpio.h>
 
@@ -49,7 +47,7 @@ static inline int irq_to_gpio(unsigned int irq)
 void tegra_gpio_enable(int gpio);
 void tegra_gpio_disable(int gpio);
 
-// 20110209  disable gpio interrupt during power-off 
+// 20110209 byoungwoo.yoon@lge.com disable gpio interrupt during power-off 
 void tegra_gpio_disable_all_irq(void);
 
 #endif

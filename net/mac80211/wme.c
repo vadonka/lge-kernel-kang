@@ -21,16 +21,7 @@
 /* Default mapping in classifier to work with default
  * queue setup.
  */
-const int ieee802_1d_to_ac[8] = {
-	IEEE80211_AC_BE,
-	IEEE80211_AC_BK,
-	IEEE80211_AC_BK,
-	IEEE80211_AC_BE,
-	IEEE80211_AC_VI,
-	IEEE80211_AC_VI,
-	IEEE80211_AC_VO,
-	IEEE80211_AC_VO
-};
+const int ieee802_1d_to_ac[8] = { 2, 3, 3, 2, 1, 1, 0, 0 };
 
 static int wme_downgrade_ac(struct sk_buff *skb)
 {
@@ -59,22 +50,19 @@ u16 ieee80211_select_queue(struct ieee80211_sub_if_data *sdata,
 {
 	struct ieee80211_local *local = sdata->local;
 	struct sta_info *sta = NULL;
+	u32 sta_flags = 0;
 	const u8 *ra = NULL;
 	bool qos = false;
 
 	if (local->hw.queues < 4 || skb->len < 6) {
 		skb->priority = 0; /* required for correct WPA/11i MIC */
-		return min_t(u16, local->hw.queues - 1, IEEE80211_AC_BE);
+		return min_t(u16, local->hw.queues - 1,
+			     ieee802_1d_to_ac[skb->priority]);
 	}
 
 	rcu_read_lock();
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_AP_VLAN:
-		sta = rcu_dereference(sdata->u.vlan.sta);
-		if (sta) {
-			qos = get_sta_flags(sta) & WLAN_STA_WME;
-			break;
-		}
 	case NL80211_IFTYPE_AP:
 		ra = skb->data;
 		break;
@@ -101,15 +89,19 @@ u16 ieee80211_select_queue(struct ieee80211_sub_if_data *sdata,
 	}
 
 	if (!sta && ra && !is_multicast_ether_addr(ra)) {
-		sta = sta_info_get(sdata, ra);
+		sta = sta_info_get(local, ra);
 		if (sta)
-			qos = get_sta_flags(sta) & WLAN_STA_WME;
+			sta_flags = get_sta_flags(sta);
 	}
+
+	if (sta_flags & WLAN_STA_WME)
+		qos = true;
+
 	rcu_read_unlock();
 
 	if (!qos) {
 		skb->priority = 0; /* required for correct WPA/11i MIC */
-		return IEEE80211_AC_BE;
+		return ieee802_1d_to_ac[skb->priority];
 	}
 
 	/* use the data classifier to determine what 802.1d tag the

@@ -46,8 +46,6 @@
 #include <linux/tcp.h>
 #include <linux/init.h>
 #include <linux/dma-mapping.h>
-#include <linux/slab.h>
-#include <linux/prefetch.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>

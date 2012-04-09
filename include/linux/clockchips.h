@@ -56,52 +56,44 @@ enum clock_event_nofitiers {
 
 /**
  * struct clock_event_device - clock event device descriptor
- * @event_handler:	Assigned by the framework to be called by the low
- *			level handler of the event source
- * @set_next_event:	set next event function
- * @next_event:		local storage for the next event in oneshot mode
+ * @name:		ptr to clock event name
+ * @features:		features
  * @max_delta_ns:	maximum delta value in ns
  * @min_delta_ns:	minimum delta value in ns
  * @mult:		nanosecond to cycles multiplier
  * @shift:		nanoseconds to cycles divisor (power of two)
- * @mode:		operating mode assigned by the management code
- * @features:		features
- * @retries:		number of forced programming retries
- * @set_mode:		set mode function
- * @broadcast:		function to broadcast events
- * @min_delta_ticks:	minimum delta value in ticks stored for reconfiguration
- * @max_delta_ticks:	maximum delta value in ticks stored for reconfiguration
- * @name:		ptr to clock event name
  * @rating:		variable to rate clock event devices
  * @irq:		IRQ number (only for non CPU local devices)
  * @cpumask:		cpumask to indicate for which CPUs this device works
+ * @set_next_event:	set next event function
+ * @set_mode:		set mode function
+ * @event_handler:	Assigned by the framework to be called by the low
+ *			level handler of the event source
+ * @broadcast:		function to broadcast events
  * @list:		list head for the management code
+ * @mode:		operating mode assigned by the management code
+ * @next_event:		local storage for the next event in oneshot mode
  */
 struct clock_event_device {
-	void			(*event_handler)(struct clock_event_device *);
-	int			(*set_next_event)(unsigned long evt,
-						  struct clock_event_device *);
-	ktime_t			next_event;
+	const char		*name;
+	unsigned int		features;
 	u64			max_delta_ns;
 	u64			min_delta_ns;
 	u32			mult;
 	u32			shift;
-	enum clock_event_mode	mode;
-	unsigned int		features;
-	unsigned long		retries;
-
-	void			(*broadcast)(const struct cpumask *mask);
-	void			(*set_mode)(enum clock_event_mode mode,
-					    struct clock_event_device *);
-	unsigned long		min_delta_ticks;
-	unsigned long		max_delta_ticks;
-
-	const char		*name;
 	int			rating;
 	int			irq;
 	const struct cpumask	*cpumask;
+	int			(*set_next_event)(unsigned long evt,
+						  struct clock_event_device *);
+	void			(*set_mode)(enum clock_event_mode mode,
+					    struct clock_event_device *);
+	void			(*event_handler)(struct clock_event_device *);
+	void			(*broadcast)(const struct cpumask *mask);
 	struct list_head	list;
-} ____cacheline_aligned;
+	enum clock_event_mode	mode;
+	ktime_t			next_event;
+};
 
 /*
  * Calculate a multiplication factor for scaled math, which is used to convert
@@ -128,12 +120,6 @@ extern u64 clockevent_delta2ns(unsigned long latch,
 			       struct clock_event_device *evt);
 extern void clockevents_register_device(struct clock_event_device *dev);
 
-extern void clockevents_config_and_register(struct clock_event_device *dev,
-					    u32 freq, unsigned long min_delta,
-					    unsigned long max_delta);
-
-extern int clockevents_update_freq(struct clock_event_device *ce, u32 freq);
-
 extern void clockevents_exchange_device(struct clock_event_device *old,
 					struct clock_event_device *new);
 extern void clockevents_set_mode(struct clock_event_device *dev,
@@ -143,13 +129,6 @@ extern int clockevents_program_event(struct clock_event_device *dev,
 				     ktime_t expires, ktime_t now);
 
 extern void clockevents_handle_noop(struct clock_event_device *dev);
-
-static inline void
-clockevents_calc_mult_shift(struct clock_event_device *ce, u32 freq, u32 minsec)
-{
-	return clocks_calc_mult_shift(&ce->mult, &ce->shift, NSEC_PER_SEC,
-				      freq, minsec);
-}
 
 #ifdef CONFIG_GENERIC_CLOCKEVENTS
 extern void clockevents_notify(unsigned long reason, void *arg);

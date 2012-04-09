@@ -21,7 +21,6 @@
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/etherdevice.h>
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/ethtool.h>
 #include <linux/crc32.h>
@@ -293,22 +292,22 @@ static int bcm_enet_receive_queue(struct net_device *dev, int budget)
 		/* if the packet does not have start of packet _and_
 		 * end of packet flag set, then just recycle it */
 		if ((len_stat & DMADESC_ESOP_MASK) != DMADESC_ESOP_MASK) {
-			dev->stats.rx_dropped++;
+			priv->stats.rx_dropped++;
 			continue;
 		}
 
 		/* recycle packet if it's marked as bad */
 		if (unlikely(len_stat & DMADESC_ERR_MASK)) {
-			dev->stats.rx_errors++;
+			priv->stats.rx_errors++;
 
 			if (len_stat & DMADESC_OVSIZE_MASK)
-				dev->stats.rx_length_errors++;
+				priv->stats.rx_length_errors++;
 			if (len_stat & DMADESC_CRC_MASK)
-				dev->stats.rx_crc_errors++;
+				priv->stats.rx_crc_errors++;
 			if (len_stat & DMADESC_UNDER_MASK)
-				dev->stats.rx_frame_errors++;
+				priv->stats.rx_frame_errors++;
 			if (len_stat & DMADESC_OV_MASK)
-				dev->stats.rx_fifo_errors++;
+				priv->stats.rx_fifo_errors++;
 			continue;
 		}
 
@@ -321,13 +320,16 @@ static int bcm_enet_receive_queue(struct net_device *dev, int budget)
 		if (len < copybreak) {
 			struct sk_buff *nskb;
 
-			nskb = netdev_alloc_skb_ip_align(dev, len);
+			nskb = netdev_alloc_skb(dev, len + NET_IP_ALIGN);
 			if (!nskb) {
 				/* forget packet, just rearm desc */
-				dev->stats.rx_dropped++;
+				priv->stats.rx_dropped++;
 				continue;
 			}
 
+			/* since we're copying the data, we can align
+			 * them properly */
+			skb_reserve(nskb, NET_IP_ALIGN);
 			dma_sync_single_for_cpu(kdev, desc->address,
 						len, DMA_FROM_DEVICE);
 			memcpy(nskb->data, skb->data, len);
@@ -341,9 +343,11 @@ static int bcm_enet_receive_queue(struct net_device *dev, int budget)
 		}
 
 		skb_put(skb, len);
+		skb->dev = dev;
 		skb->protocol = eth_type_trans(skb, dev);
-		dev->stats.rx_packets++;
-		dev->stats.rx_bytes += len;
+		priv->stats.rx_packets++;
+		priv->stats.rx_bytes += len;
+		dev->last_rx = jiffies;
 		netif_receive_skb(skb);
 
 	} while (--budget > 0);
@@ -403,7 +407,7 @@ static int bcm_enet_tx_reclaim(struct net_device *dev, int force)
 		spin_unlock(&priv->tx_lock);
 
 		if (desc->len_stat & DMADESC_UNDER_MASK)
-			dev->stats.tx_errors++;
+			priv->stats.tx_errors++;
 
 		dev_kfree_skb(skb);
 		released++;
@@ -563,8 +567,9 @@ static int bcm_enet_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!priv->tx_desc_count)
 		netif_stop_queue(dev);
 
-	dev->stats.tx_bytes += skb->len;
-	dev->stats.tx_packets++;
+	priv->stats.tx_bytes += skb->len;
+	priv->stats.tx_packets++;
+	dev->trans_start = jiffies;
 	ret = NETDEV_TX_OK;
 
 out_unlock:
@@ -597,12 +602,12 @@ static int bcm_enet_set_mac_address(struct net_device *dev, void *p)
 }
 
 /*
- * Change rx mode (promiscuous/allmulti) and update multicast list
+ * Change rx mode (promiscous/allmulti) and update multicast list
  */
 static void bcm_enet_set_multicast_list(struct net_device *dev)
 {
 	struct bcm_enet_priv *priv;
-	struct netdev_hw_addr *ha;
+	struct dev_mc_list *mc_list;
 	u32 val;
 	int i;
 
@@ -617,7 +622,7 @@ static void bcm_enet_set_multicast_list(struct net_device *dev)
 
 	/* only 3 perfect match registers left, first one is used for
 	 * own mac address */
-	if ((dev->flags & IFF_ALLMULTI) || netdev_mc_count(dev) > 3)
+	if ((dev->flags & IFF_ALLMULTI) || dev->mc_count > 3)
 		val |= ENET_RXCFG_ALLMCAST_MASK;
 	else
 		val &= ~ENET_RXCFG_ALLMCAST_MASK;
@@ -629,22 +634,25 @@ static void bcm_enet_set_multicast_list(struct net_device *dev)
 		return;
 	}
 
-	i = 0;
-	netdev_for_each_mc_addr(ha, dev) {
+	for (i = 0, mc_list = dev->mc_list;
+	     (mc_list != NULL) && (i < dev->mc_count) && (i < 3);
+	     i++, mc_list = mc_list->next) {
 		u8 *dmi_addr;
 		u32 tmp;
 
-		if (i == 3)
-			break;
+		/* filter non ethernet address */
+		if (mc_list->dmi_addrlen != 6)
+			continue;
+
 		/* update perfect match registers */
-		dmi_addr = ha->addr;
+		dmi_addr = mc_list->dmi_addr;
 		tmp = (dmi_addr[2] << 24) | (dmi_addr[3] << 16) |
 			(dmi_addr[4] << 8) | dmi_addr[5];
 		enet_writel(priv, tmp, ENET_PML_REG(i + 1));
 
 		tmp = (dmi_addr[0] << 8 | dmi_addr[1]);
 		tmp |= ENET_PMH_DATAVALID_MASK;
-		enet_writel(priv, tmp, ENET_PMH_REG(i++ + 1));
+		enet_writel(priv, tmp, ENET_PMH_REG(i + 1));
 	}
 
 	for (; i < 3; i++) {
@@ -798,7 +806,7 @@ static int bcm_enet_open(struct net_device *dev)
 		snprintf(phy_id, sizeof(phy_id), PHY_ID_FMT,
 			 priv->mac_id ? "1" : "0", priv->phy_id);
 
-		phydev = phy_connect(dev, phy_id, bcm_enet_adjust_phy_link, 0,
+		phydev = phy_connect(dev, phy_id, &bcm_enet_adjust_phy_link, 0,
 				     PHY_INTERFACE_MODE_MII);
 
 		if (IS_ERR(phydev)) {
@@ -839,8 +847,8 @@ static int bcm_enet_open(struct net_device *dev)
 	if (ret)
 		goto out_phy_disconnect;
 
-	ret = request_irq(priv->irq_rx, bcm_enet_isr_dma, IRQF_DISABLED,
-			  dev->name, dev);
+	ret = request_irq(priv->irq_rx, bcm_enet_isr_dma,
+			  IRQF_SAMPLE_RANDOM | IRQF_DISABLED, dev->name, dev);
 	if (ret)
 		goto out_freeirq;
 
@@ -957,9 +965,7 @@ static int bcm_enet_open(struct net_device *dev)
 	/* all set, enable mac and interrupts, start dma engine and
 	 * kick rx dma channel */
 	wmb();
-	val = enet_readl(priv, ENET_CTL_REG);
-	val |= ENET_CTL_ENABLE_MASK;
-	enet_writel(priv, val, ENET_CTL_REG);
+	enet_writel(priv, ENET_CTL_ENABLE_MASK, ENET_CTL_REG);
 	enet_dma_writel(priv, ENETDMA_CFG_EN_MASK, ENETDMA_CFG_REG);
 	enet_dma_writel(priv, ENETDMA_CHANCFG_EN_MASK,
 			ENETDMA_CHANCFG_REG(priv->rx_chan));
@@ -1097,7 +1103,7 @@ static int bcm_enet_stop(struct net_device *dev)
 	enet_dma_writel(priv, 0, ENETDMA_IRMASK_REG(priv->tx_chan));
 
 	/* make sure no mib update is scheduled */
-	cancel_work_sync(&priv->mib_update_task);
+	flush_scheduled_work();
 
 	/* disable dma & mac */
 	bcm_enet_disable_dma(priv, priv->tx_chan);
@@ -1141,6 +1147,17 @@ static int bcm_enet_stop(struct net_device *dev)
 }
 
 /*
+ * core request to return device rx/tx stats
+ */
+static struct net_device_stats *bcm_enet_get_stats(struct net_device *dev)
+{
+	struct bcm_enet_priv *priv;
+
+	priv = netdev_priv(dev);
+	return &priv->stats;
+}
+
+/*
  * ethtool callbacks
  */
 struct bcm_enet_stats {
@@ -1152,18 +1169,16 @@ struct bcm_enet_stats {
 
 #define GEN_STAT(m) sizeof(((struct bcm_enet_priv *)0)->m),		\
 		     offsetof(struct bcm_enet_priv, m)
-#define DEV_STAT(m) sizeof(((struct net_device_stats *)0)->m),		\
-		     offsetof(struct net_device_stats, m)
 
 static const struct bcm_enet_stats bcm_enet_gstrings_stats[] = {
-	{ "rx_packets", DEV_STAT(rx_packets), -1 },
-	{ "tx_packets",	DEV_STAT(tx_packets), -1 },
-	{ "rx_bytes", DEV_STAT(rx_bytes), -1 },
-	{ "tx_bytes", DEV_STAT(tx_bytes), -1 },
-	{ "rx_errors", DEV_STAT(rx_errors), -1 },
-	{ "tx_errors", DEV_STAT(tx_errors), -1 },
-	{ "rx_dropped",	DEV_STAT(rx_dropped), -1 },
-	{ "tx_dropped",	DEV_STAT(tx_dropped), -1 },
+	{ "rx_packets", GEN_STAT(stats.rx_packets), -1 },
+	{ "tx_packets",	GEN_STAT(stats.tx_packets), -1 },
+	{ "rx_bytes", GEN_STAT(stats.rx_bytes), -1 },
+	{ "tx_bytes", GEN_STAT(stats.tx_bytes), -1 },
+	{ "rx_errors", GEN_STAT(stats.rx_errors), -1 },
+	{ "tx_errors", GEN_STAT(stats.tx_errors), -1 },
+	{ "rx_dropped",	GEN_STAT(stats.rx_dropped), -1 },
+	{ "tx_dropped",	GEN_STAT(stats.tx_dropped), -1 },
 
 	{ "rx_good_octets", GEN_STAT(mib.rx_gd_octets), ETH_MIB_RX_GD_OCTETS},
 	{ "rx_good_pkts", GEN_STAT(mib.rx_gd_pkts), ETH_MIB_RX_GD_PKTS },
@@ -1319,11 +1334,7 @@ static void bcm_enet_get_ethtool_stats(struct net_device *netdev,
 		char *p;
 
 		s = &bcm_enet_gstrings_stats[i];
-		if (s->mib_reg == -1)
-			p = (char *)&netdev->stats;
-		else
-			p = (char *)priv;
-		p += s->stat_offset;
+		p = (char *)priv + s->stat_offset;
 		data[i] = (s->sizeof_stat == sizeof(u64)) ?
 			*(u64 *)p : *(u32 *)p;
 	}
@@ -1346,8 +1357,7 @@ static int bcm_enet_get_settings(struct net_device *dev,
 		return phy_ethtool_gset(priv->phydev, cmd);
 	} else {
 		cmd->autoneg = 0;
-		ethtool_cmd_speed_set(cmd, ((priv->force_speed_100)
-					    ? SPEED_100 : SPEED_10));
+		cmd->speed = (priv->force_speed_100) ? SPEED_100 : SPEED_10;
 		cmd->duplex = (priv->force_duplex_full) ?
 			DUPLEX_FULL : DUPLEX_HALF;
 		cmd->supported = ADVERTISED_10baseT_Half  |
@@ -1492,7 +1502,7 @@ static int bcm_enet_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 	if (priv->has_phy) {
 		if (!priv->phydev)
 			return -ENODEV;
-		return phy_mii_ioctl(priv->phydev, rq, cmd);
+		return phy_mii_ioctl(priv->phydev, if_mii(rq), cmd);
 	} else {
 		struct mii_if_info mii;
 
@@ -1601,6 +1611,7 @@ static const struct net_device_ops bcm_enet_ops = {
 	.ndo_open		= bcm_enet_open,
 	.ndo_stop		= bcm_enet_stop,
 	.ndo_start_xmit		= bcm_enet_start_xmit,
+	.ndo_get_stats		= bcm_enet_get_stats,
 	.ndo_set_mac_address	= bcm_enet_set_mac_address,
 	.ndo_set_multicast_list = bcm_enet_set_multicast_list,
 	.ndo_do_ioctl		= bcm_enet_ioctl,
@@ -1641,6 +1652,7 @@ static int __devinit bcm_enet_probe(struct platform_device *pdev)
 	if (!dev)
 		return -ENOMEM;
 	priv = netdev_priv(dev);
+	memset(priv, 0, sizeof(*priv));
 
 	ret = compute_hw_mtu(priv, dev->mtu);
 	if (ret)

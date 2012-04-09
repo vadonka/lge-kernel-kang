@@ -13,8 +13,8 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/usb/isp1760.h>
-#include <linux/usb/hcd.h>
 
+#include "../core/hcd.h"
 #include "isp1760-hcd.h"
 
 #ifdef CONFIG_PPC_OF
@@ -27,15 +27,16 @@
 #endif
 
 #ifdef CONFIG_PPC_OF
-static int of_isp1760_probe(struct platform_device *dev)
+static int of_isp1760_probe(struct of_device *dev,
+		const struct of_device_id *match)
 {
 	struct usb_hcd *hcd;
-	struct device_node *dp = dev->dev.of_node;
+	struct device_node *dp = dev->node;
 	struct resource *res;
 	struct resource memory;
 	struct of_irq oirq;
 	int virq;
-	resource_size_t res_len;
+	u64 res_len;
 	int ret;
 	const unsigned int *prop;
 	unsigned int devflags = 0;
@@ -44,11 +45,12 @@ static int of_isp1760_probe(struct platform_device *dev)
 	if (ret)
 		return -ENXIO;
 
-	res_len = resource_size(&memory);
-
-	res = request_mem_region(memory.start, res_len, dev_name(&dev->dev));
+	res = request_mem_region(memory.start, memory.end - memory.start + 1,
+			dev_name(&dev->dev));
 	if (!res)
 		return -EBUSY;
+
+	res_len = memory.end - memory.start + 1;
 
 	if (of_irq_map_one(dp, 0, &oirq)) {
 		ret = -ENODEV;
@@ -90,11 +92,11 @@ static int of_isp1760_probe(struct platform_device *dev)
 	return ret;
 
 release_reg:
-	release_mem_region(memory.start, res_len);
+	release_mem_region(memory.start, memory.end - memory.start + 1);
 	return ret;
 }
 
-static int of_isp1760_remove(struct platform_device *dev)
+static int of_isp1760_remove(struct of_device *dev)
 {
 	struct usb_hcd *hcd = dev_get_drvdata(&dev->dev);
 
@@ -107,7 +109,7 @@ static int of_isp1760_remove(struct platform_device *dev)
 	return 0;
 }
 
-static const struct of_device_id of_isp1760_match[] = {
+static struct of_device_id of_isp1760_match[] = {
 	{
 		.compatible = "nxp,usb-isp1760",
 	},
@@ -118,12 +120,9 @@ static const struct of_device_id of_isp1760_match[] = {
 };
 MODULE_DEVICE_TABLE(of, of_isp1760_match);
 
-static struct platform_driver isp1760_of_driver = {
-	.driver = {
-		.name = "nxp-isp1760",
-		.owner = THIS_MODULE,
-		.of_match_table = of_isp1760_match,
-	},
+static struct of_platform_driver isp1760_of_driver = {
+	.name           = "nxp-isp1760",
+	.match_table    = of_isp1760_match,
 	.probe          = of_isp1760_probe,
 	.remove         = of_isp1760_remove,
 };
@@ -397,7 +396,7 @@ static int __init isp1760_init(void)
 	if (!ret)
 		any_ret = 0;
 #ifdef CONFIG_PPC_OF
-	ret = platform_driver_register(&isp1760_of_driver);
+	ret = of_register_platform_driver(&isp1760_of_driver);
 	if (!ret)
 		any_ret = 0;
 #endif
@@ -417,7 +416,7 @@ static void __exit isp1760_exit(void)
 {
 	platform_driver_unregister(&isp1760_plat_driver);
 #ifdef CONFIG_PPC_OF
-	platform_driver_unregister(&isp1760_of_driver);
+	of_unregister_platform_driver(&isp1760_of_driver);
 #endif
 #ifdef CONFIG_PCI
 	pci_unregister_driver(&isp1761_pci_driver);

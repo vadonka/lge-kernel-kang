@@ -10,6 +10,7 @@
  */
 
 #include <linux/mm.h>
+#include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/sched.h>
 #include <linux/pipe_fs_i.h>
@@ -66,7 +67,8 @@ static int fifo_open(struct inode *inode, struct file *filp)
 				/* suppress POLLHUP until we have
 				 * seen a writer */
 				filp->f_version = pipe->w_counter;
-			} else {
+			} else 
+			{
 				wait_for_partner(inode, &pipe->w_counter);
 				if(signal_pending(current))
 					goto err_rd;
@@ -150,5 +152,4 @@ err_nocleanup:
  */
 const struct file_operations def_fifo_fops = {
 	.open		= fifo_open,	/* will set read_ or write_pipefifo_fops */
-	.llseek		= noop_llseek,
 };

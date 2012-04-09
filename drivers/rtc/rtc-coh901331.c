@@ -14,7 +14,6 @@
 #include <linux/pm.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
-#include <linux/slab.h>
 
 /*
  * Registers in the COH 901 331
@@ -220,7 +219,6 @@ static int __init coh901331_probe(struct platform_device *pdev)
 	}
 	clk_disable(rtap->clk);
 
-	platform_set_drvdata(pdev, rtap);
 	rtap->rtc = rtc_device_register("coh901331", &pdev->dev, &coh901331_ops,
 					 THIS_MODULE);
 	if (IS_ERR(rtap->rtc)) {
@@ -228,10 +226,11 @@ static int __init coh901331_probe(struct platform_device *pdev)
 		goto out_no_rtc;
 	}
 
+	platform_set_drvdata(pdev, rtap);
+
 	return 0;
 
  out_no_rtc:
-	platform_set_drvdata(pdev, NULL);
  out_no_clk_enable:
 	clk_put(rtap->clk);
  out_no_clk:
@@ -272,13 +271,12 @@ static int coh901331_resume(struct platform_device *pdev)
 {
 	struct coh901331_port *rtap = dev_get_drvdata(&pdev->dev);
 
-	if (device_may_wakeup(&pdev->dev)) {
+	if (device_may_wakeup(&pdev->dev))
 		disable_irq_wake(rtap->irq);
-	} else {
+	else
 		clk_enable(rtap->clk);
 		writel(rtap->irqmaskstore, rtap->virtbase + COH901331_IRQ_MASK);
 		clk_disable(rtap->clk);
-	}
 	return 0;
 }
 #else

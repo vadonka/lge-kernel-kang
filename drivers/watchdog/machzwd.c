@@ -21,7 +21,7 @@
  *      wd#1 - 2 seconds;
  *      wd#2 - 7.2 ms;
  *  After the expiration of wd#1, it can generate a NMI, SCI, SMI, or
- *  a system RESET and it starts wd#2 that unconditionally will RESET
+ *  a system RESET and it starts wd#2 that unconditionaly will RESET
  *  the system when the counter reaches zero.
  *
  *  14-Dec-2001 Matt Domsch <Matt_Domsch@dell.com>
@@ -54,7 +54,7 @@
 
 /* indexes */			/* size */
 #define ZFL_VERSION	0x02	/* 16   */
-#define CONTROL		0x10	/* 16   */
+#define CONTROL 	0x10	/* 16   */
 #define STATUS		0x12	/* 8    */
 #define COUNTER_1	0x0C	/* 16   */
 #define COUNTER_2	0x0E	/* 8    */
@@ -101,7 +101,7 @@ MODULE_PARM_DESC(nowayout,
 
 #define PFX "machzwd"
 
-static const struct watchdog_info zf_info = {
+static struct watchdog_info zf_info = {
 	.options		= WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
 	.firmware_version	= 1,
 	.identity		= "ZF-Logic watchdog",
@@ -143,7 +143,7 @@ static unsigned long next_heartbeat;
 #ifndef ZF_DEBUG
 #	define dprintk(format, args...)
 #else
-#	define dprintk(format, args...) printk(KERN_DEBUG PFX \
+#	define dprintk(format, args...) printk(KERN_DEBUG PFX
 				":%s:%d: " format, __func__, __LINE__ , ## args)
 #endif
 
@@ -388,7 +388,7 @@ static struct notifier_block zf_notifier = {
 
 static void __init zf_show_action(int act)
 {
-	static const char * const str[] = { "RESET", "SMI", "NMI", "SCI" };
+	char *str[] = { "RESET", "SMI", "NMI", "SCI" };
 
 	printk(KERN_INFO PFX ": Watchdog using action = %s\n", str[act]);
 }

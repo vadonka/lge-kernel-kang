@@ -567,13 +567,13 @@ static void rin_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 		return;
 
 // 2011.2.2 [ril] improve the performance of TCP Throughput [start]
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 	sl->rx_bytes += count;
 #endif
 	skb = dev_alloc_skb(count);
 	if (skb == NULL) {
 		printk(KERN_WARNING "%s: memory squeeze, dropping packet.\n", sl->dev->name);
-#if defined (CONFIG_MACH_STAR_TMUS)
+#if defined (CONFIG_MODEM_MDM)
         sl->rx_bytes += count;
 #endif
 		sl->rx_dropped++;
@@ -583,13 +583,13 @@ static void rin_receive_buf(struct tty_struct *tty, const unsigned char *cp,
 	memcpy(skb_put(skb, count), cp, count);
 	skb_reset_mac_header(skb);
 	skb->protocol = htons(ETH_P_IP);
-#if defined (CONFIG_MACH_STAR_TMUS)
+#if defined (CONFIG_MODEM_MDM)
     spin_lock_bh(&sl->lock);
 	sl->rx_bytes += count;
 #endif
 	netif_rx(skb);
 	sl->rx_packets++;
-#if defined (CONFIG_MACH_STAR_TMUS)
+#if defined (CONFIG_MODEM_MDM)
     spin_unlock_bh(&sl->lock);
 #endif
 
@@ -929,7 +929,7 @@ static struct tty_ldisc_ops rin_ldisc = {
 	.name 		= "rin",
 	.open 		= rin_open,
 	.close	 	= rin_close,
-	.ioctl		= rin_ioctl,
+	.ioctl			= rin_ioctl,
 	.receive_buf	= rin_receive_buf,
 	.write_wakeup	= rin_write_wakeup,
 };

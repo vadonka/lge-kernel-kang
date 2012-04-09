@@ -11,9 +11,9 @@
 #include <linux/irqflags.h>
 
 /* entries in ARCH_DLINFO: */
-#if defined(CONFIG_IA32_EMULATION) || !defined(CONFIG_X86_64)
+#ifdef CONFIG_IA32_EMULATION
 # define AT_VECTOR_SIZE_ARCH 2
-#else /* else it's non-compat x86-64 */
+#else
 # define AT_VECTOR_SIZE_ARCH 1
 #endif
 
@@ -23,7 +23,6 @@ struct task_struct *__switch_to(struct task_struct *prev,
 struct tss_struct;
 void __switch_to_xtra(struct task_struct *prev_p, struct task_struct *next_p,
 		      struct tss_struct *tss);
-extern void show_regs_common(void);
 
 #ifdef CONFIG_X86_32
 
@@ -32,7 +31,7 @@ extern void show_regs_common(void);
 	"movl %P[task_canary](%[next]), %%ebx\n\t"			\
 	"movl %%ebx, "__percpu_arg([stack_canary])"\n\t"
 #define __switch_canary_oparam						\
-	, [stack_canary] "=m" (stack_canary.canary)
+	, [stack_canary] "=m" (per_cpu_var(stack_canary.canary))
 #define __switch_canary_iparam						\
 	, [task_canary] "i" (offsetof(struct task_struct, stack_canary))
 #else	/* CC_STACKPROTECTOR */
@@ -98,6 +97,8 @@ do {									\
  */
 #define HAVE_DISABLE_HLT
 #else
+#define __SAVE(reg, offset) "movq %%" #reg ",(14-" #offset ")*8(%%rsp)\n\t"
+#define __RESTORE(reg, offset) "movq (14-" #offset ")*8(%%rsp),%%" #reg "\n\t"
 
 /* frame pointer must be last for get_wchan */
 #define SAVE_CONTEXT    "pushf ; pushq %%rbp ; movq %%rsi,%%rbp\n\t"
@@ -112,7 +113,7 @@ do {									\
 	"movq %P[task_canary](%%rsi),%%r8\n\t"				  \
 	"movq %%r8,"__percpu_arg([gs_canary])"\n\t"
 #define __switch_canary_oparam						  \
-	, [gs_canary] "=m" (irq_stack_union.stack_canary)
+	, [gs_canary] "=m" (per_cpu_var(irq_stack_union.stack_canary))
 #define __switch_canary_iparam						  \
 	, [task_canary] "i" (offsetof(struct task_struct, stack_canary))
 #else	/* CC_STACKPROTECTOR */
@@ -127,11 +128,13 @@ do {									\
 	     "movq %%rsp,%P[threadrsp](%[prev])\n\t" /* save RSP */	  \
 	     "movq %P[threadrsp](%[next]),%%rsp\n\t" /* restore RSP */	  \
 	     "call __switch_to\n\t"					  \
+	     ".globl thread_return\n"					  \
+	     "thread_return:\n\t"					  \
 	     "movq "__percpu_arg([current_task])",%%rsi\n\t"		  \
 	     __switch_canary						  \
 	     "movq %P[thread_info](%%rsi),%%r8\n\t"			  \
 	     "movq %%rax,%%rdi\n\t" 					  \
-	     "testl  %[_tif_fork],%P[ti_flags](%%r8)\n\t"		  \
+	     "testl  %[_tif_fork],%P[ti_flags](%%r8)\n\t"	  \
 	     "jnz   ret_from_fork\n\t"					  \
 	     RESTORE_CONTEXT						  \
 	     : "=a" (last)					  	  \
@@ -141,7 +144,7 @@ do {									\
 	       [ti_flags] "i" (offsetof(struct thread_info, flags)),	  \
 	       [_tif_fork] "i" (_TIF_FORK),			  	  \
 	       [thread_info] "i" (offsetof(struct task_struct, stack)),   \
-	       [current_task] "m" (current_task)			  \
+	       [current_task] "m" (per_cpu_var(current_task))		  \
 	       __switch_canary_iparam					  \
 	     : "memory", "cc" __EXTRA_CLOBBER)
 #endif
@@ -154,22 +157,19 @@ extern void native_load_gs_index(unsigned);
  * Load a segment. Fall back on loading the zero
  * segment if something goes wrong..
  */
-#define loadsegment(seg, value)						\
-do {									\
-	unsigned short __val = (value);					\
-									\
-	asm volatile("						\n"	\
-		     "1:	movl %k0,%%" #seg "		\n"	\
-									\
-		     ".section .fixup,\"ax\"			\n"	\
-		     "2:	xorl %k0,%k0			\n"	\
-		     "		jmp 1b				\n"	\
-		     ".previous					\n"	\
-									\
-		     _ASM_EXTABLE(1b, 2b)				\
-									\
-		     : "+r" (__val) : : "memory");			\
-} while (0)
+#define loadsegment(seg, value)			\
+	asm volatile("\n"			\
+		     "1:\t"			\
+		     "movl %k0,%%" #seg "\n"	\
+		     "2:\n"			\
+		     ".section .fixup,\"ax\"\n"	\
+		     "3:\t"			\
+		     "movl %k1, %%" #seg "\n\t"	\
+		     "jmp 2b\n"			\
+		     ".previous\n"		\
+		     _ASM_EXTABLE(1b,3b)	\
+		     : :"r" (value), "r" (0) : "memory")
+
 
 /*
  * Save a segment register away
@@ -303,81 +303,24 @@ static inline void native_wbinvd(void)
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #else
-
-static inline unsigned long read_cr0(void)
-{
-	return native_read_cr0();
-}
-
-static inline void write_cr0(unsigned long x)
-{
-	native_write_cr0(x);
-}
-
-static inline unsigned long read_cr2(void)
-{
-	return native_read_cr2();
-}
-
-static inline void write_cr2(unsigned long x)
-{
-	native_write_cr2(x);
-}
-
-static inline unsigned long read_cr3(void)
-{
-	return native_read_cr3();
-}
-
-static inline void write_cr3(unsigned long x)
-{
-	native_write_cr3(x);
-}
-
-static inline unsigned long read_cr4(void)
-{
-	return native_read_cr4();
-}
-
-static inline unsigned long read_cr4_safe(void)
-{
-	return native_read_cr4_safe();
-}
-
-static inline void write_cr4(unsigned long x)
-{
-	native_write_cr4(x);
-}
-
-static inline void wbinvd(void)
-{
-	native_wbinvd();
-}
-
+#define read_cr0()	(native_read_cr0())
+#define write_cr0(x)	(native_write_cr0(x))
+#define read_cr2()	(native_read_cr2())
+#define write_cr2(x)	(native_write_cr2(x))
+#define read_cr3()	(native_read_cr3())
+#define write_cr3(x)	(native_write_cr3(x))
+#define read_cr4()	(native_read_cr4())
+#define read_cr4_safe()	(native_read_cr4_safe())
+#define write_cr4(x)	(native_write_cr4(x))
+#define wbinvd()	(native_wbinvd())
 #ifdef CONFIG_X86_64
-
-static inline unsigned long read_cr8(void)
-{
-	return native_read_cr8();
-}
-
-static inline void write_cr8(unsigned long x)
-{
-	native_write_cr8(x);
-}
-
-static inline void load_gs_index(unsigned selector)
-{
-	native_load_gs_index(selector);
-}
-
+#define read_cr8()	(native_read_cr8())
+#define write_cr8(x)	(native_write_cr8(x))
+#define load_gs_index   native_load_gs_index
 #endif
 
 /* Clear the 'TS' bit */
-static inline void clts(void)
-{
-	native_clts();
-}
+#define clts()		(native_clts())
 
 #endif/* CONFIG_PARAVIRT */
 
@@ -506,17 +449,10 @@ void stop_this_cpu(void *dummy);
  *
  * (Could use an alternative three way for this if there was one.)
  */
-static __always_inline void rdtsc_barrier(void)
+static inline void rdtsc_barrier(void)
 {
 	alternative(ASM_NOP3, "mfence", X86_FEATURE_MFENCE_RDTSC);
 	alternative(ASM_NOP3, "lfence", X86_FEATURE_LFENCE_RDTSC);
 }
 
-/*
- * We handle most unaligned accesses in hardware.  On the other hand
- * unaligned DMA can be quite expensive on some Nehalem processors.
- *
- * Based on this we disable the IP header alignment in network drivers.
- */
-#define NET_IP_ALIGN	0
 #endif /* _ASM_X86_SYSTEM_H */

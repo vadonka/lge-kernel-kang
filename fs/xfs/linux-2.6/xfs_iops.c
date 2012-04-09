@@ -24,13 +24,21 @@
 #include "xfs_trans.h"
 #include "xfs_sb.h"
 #include "xfs_ag.h"
+#include "xfs_dir2.h"
 #include "xfs_alloc.h"
+#include "xfs_dmapi.h"
 #include "xfs_quota.h"
 #include "xfs_mount.h"
 #include "xfs_bmap_btree.h"
+#include "xfs_alloc_btree.h"
+#include "xfs_ialloc_btree.h"
+#include "xfs_dir2_sf.h"
+#include "xfs_attr_sf.h"
 #include "xfs_dinode.h"
 #include "xfs_inode.h"
 #include "xfs_bmap.h"
+#include "xfs_btree.h"
+#include "xfs_ialloc.h"
 #include "xfs_rtalloc.h"
 #include "xfs_error.h"
 #include "xfs_itable.h"
@@ -39,15 +47,14 @@
 #include "xfs_buf_item.h"
 #include "xfs_utils.h"
 #include "xfs_vnodeops.h"
-#include "xfs_trace.h"
 
 #include <linux/capability.h>
 #include <linux/xattr.h>
 #include <linux/namei.h>
 #include <linux/posix_acl.h>
 #include <linux/security.h>
+#include <linux/falloc.h>
 #include <linux/fiemap.h>
-#include <linux/slab.h>
 
 /*
  * Bring the timestamps in the XFS inode uptodate.
@@ -69,8 +76,9 @@ xfs_synchronize_times(
 }
 
 /*
- * If the linux inode is valid, mark it dirty, else mark the dirty state
- * in the XFS inode to make sure we pick it up when reclaiming the inode.
+ * If the linux inode is valid, mark it dirty.
+ * Used when commiting a dirty inode into a transaction so that
+ * the inode will get written back by the linux code
  */
 void
 xfs_mark_inode_dirty_sync(
@@ -78,27 +86,43 @@ xfs_mark_inode_dirty_sync(
 {
 	struct inode	*inode = VFS_I(ip);
 
-	if (!(inode->i_state & (I_WILL_FREE|I_FREEING)))
+	if (!(inode->i_state & (I_WILL_FREE|I_FREEING|I_CLEAR)))
 		mark_inode_dirty_sync(inode);
-	else {
-		barrier();
-		ip->i_update_core = 1;
-	}
 }
 
+/*
+ * Change the requested timestamp in the given inode.
+ * We don't lock across timestamp updates, and we don't log them but
+ * we do record the fact that there is dirty information in core.
+ */
 void
-xfs_mark_inode_dirty(
-	xfs_inode_t	*ip)
+xfs_ichgtime(
+	xfs_inode_t	*ip,
+	int		flags)
 {
 	struct inode	*inode = VFS_I(ip);
+	timespec_t	tv;
+	int		sync_it = 0;
 
-	if (!(inode->i_state & (I_WILL_FREE|I_FREEING)))
-		mark_inode_dirty(inode);
-	else {
-		barrier();
-		ip->i_update_core = 1;
+	tv = current_fs_time(inode->i_sb);
+
+	if ((flags & XFS_ICHGTIME_MOD) &&
+	    !timespec_equal(&inode->i_mtime, &tv)) {
+		inode->i_mtime = tv;
+		sync_it = 1;
+	}
+	if ((flags & XFS_ICHGTIME_CHG) &&
+	    !timespec_equal(&inode->i_ctime, &tv)) {
+		inode->i_ctime = tv;
+		sync_it = 1;
 	}
 
+	/*
+	 * Update complete - now make sure everyone knows that the inode
+	 * is dirty.
+	 */
+	if (sync_it)
+		xfs_mark_inode_dirty_sync(ip);
 }
 
 /*
@@ -110,16 +134,15 @@ xfs_mark_inode_dirty(
 STATIC int
 xfs_init_security(
 	struct inode	*inode,
-	struct inode	*dir,
-	const struct qstr *qstr)
+	struct inode	*dir)
 {
 	struct xfs_inode *ip = XFS_I(inode);
 	size_t		length;
 	void		*value;
-	unsigned char	*name;
+	char		*name;
 	int		error;
 
-	error = security_inode_init_security(inode, dir, qstr, (char **)&name,
+	error = security_inode_init_security(inode, dir, &name,
 					     &value, &length);
 	if (error) {
 		if (error == -EOPNOTSUPP)
@@ -190,20 +213,20 @@ xfs_vn_mknod(
 	if (IS_POSIXACL(dir)) {
 		default_acl = xfs_get_acl(dir, ACL_TYPE_DEFAULT);
 		if (IS_ERR(default_acl))
-			return PTR_ERR(default_acl);
+			return -PTR_ERR(default_acl);
 
 		if (!default_acl)
 			mode &= ~current_umask();
 	}
 
 	xfs_dentry_to_name(&name, dentry);
-	error = xfs_create(XFS_I(dir), &name, mode, rdev, &ip);
+	error = xfs_create(XFS_I(dir), &name, mode, rdev, &ip, NULL);
 	if (unlikely(error))
 		goto out_free_acl;
 
 	inode = VFS_I(ip);
 
-	error = xfs_init_security(inode, dir, &dentry->d_name);
+	error = xfs_init_security(inode, dir);
 	if (unlikely(error))
 		goto out_cleanup_inode;
 
@@ -325,7 +348,7 @@ xfs_vn_link(
 	if (unlikely(error))
 		return -error;
 
-	ihold(inode);
+	atomic_inc(&inode->i_count);
 	d_instantiate(dentry, inode);
 	return 0;
 }
@@ -370,13 +393,13 @@ xfs_vn_symlink(
 		(irix_symlink_mode ? 0777 & ~current_umask() : S_IRWXUGO);
 	xfs_dentry_to_name(&name, dentry);
 
-	error = xfs_symlink(XFS_I(dir), &name, symname, mode, &cip);
+	error = xfs_symlink(XFS_I(dir), &name, symname, mode, &cip, NULL);
 	if (unlikely(error))
 		goto out;
 
 	inode = VFS_I(cip);
 
-	error = xfs_init_security(inode, dir, &dentry->d_name);
+	error = xfs_init_security(inode, dir);
 	if (unlikely(error))
 		goto out_cleanup_inode;
 
@@ -461,10 +484,10 @@ xfs_vn_getattr(
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
 
-	trace_xfs_getattr(ip);
+	xfs_itrace_entry(ip);
 
 	if (XFS_FORCED_SHUTDOWN(mp))
-		return -XFS_ERROR(EIO);
+		return XFS_ERROR(EIO);
 
 	stat->size = XFS_ISIZE(ip);
 	stat->dev = inode->i_sb->s_dev;
@@ -511,6 +534,63 @@ xfs_vn_setattr(
 	struct iattr	*iattr)
 {
 	return -xfs_setattr(XFS_I(dentry->d_inode), iattr, 0);
+}
+
+/*
+ * block_truncate_page can return an error, but we can't propagate it
+ * at all here. Leave a complaint + stack trace in the syslog because
+ * this could be bad. If it is bad, we need to propagate the error further.
+ */
+STATIC void
+xfs_vn_truncate(
+	struct inode	*inode)
+{
+	int	error;
+	error = block_truncate_page(inode->i_mapping, inode->i_size,
+							xfs_get_blocks);
+	WARN_ON(error);
+}
+
+STATIC long
+xfs_vn_fallocate(
+	struct inode	*inode,
+	int		mode,
+	loff_t		offset,
+	loff_t		len)
+{
+	long		error;
+	loff_t		new_size = 0;
+	xfs_flock64_t	bf;
+	xfs_inode_t	*ip = XFS_I(inode);
+
+	/* preallocation on directories not yet supported */
+	error = -ENODEV;
+	if (S_ISDIR(inode->i_mode))
+		goto out_error;
+
+	bf.l_whence = 0;
+	bf.l_start = offset;
+	bf.l_len = len;
+
+	xfs_ilock(ip, XFS_IOLOCK_EXCL);
+	error = xfs_change_file_space(ip, XFS_IOC_RESVSP, &bf,
+				      0, XFS_ATTR_NOLOCK);
+	if (!error && !(mode & FALLOC_FL_KEEP_SIZE) &&
+	    offset + len > i_size_read(inode))
+		new_size = offset + len;
+
+	/* Change file size if needed */
+	if (new_size) {
+		struct iattr iattr;
+
+		iattr.ia_valid = ATTR_SIZE;
+		iattr.ia_size = new_size;
+		error = xfs_setattr(ip, &iattr, XFS_ATTR_NOLOCK);
+	}
+
+	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
+out_error:
+	return error;
 }
 
 #define XFS_FIEMAP_FLAGS	(FIEMAP_FLAG_SYNC|FIEMAP_FLAG_XATTR)
@@ -581,11 +661,8 @@ xfs_vn_fiemap(
 		bm.bmv_length = BTOBB(length);
 
 	/* We add one because in getbmap world count includes the header */
-	bm.bmv_count = !fieinfo->fi_extents_max ? MAXEXTNUM :
-					fieinfo->fi_extents_max + 1;
-	bm.bmv_count = min_t(__s32, bm.bmv_count,
-			     (PAGE_SIZE * 16 / sizeof(struct getbmapx)));
-	bm.bmv_iflags = BMV_IF_PREALLOC | BMV_IF_NO_HOLES;
+	bm.bmv_count = fieinfo->fi_extents_max + 1;
+	bm.bmv_iflags = BMV_IF_PREALLOC;
 	if (fieinfo->fi_flags & FIEMAP_FLAG_XATTR)
 		bm.bmv_iflags |= BMV_IF_ATTRFORK;
 	if (!(fieinfo->fi_flags & FIEMAP_FLAG_SYNC))
@@ -600,12 +677,14 @@ xfs_vn_fiemap(
 
 static const struct inode_operations xfs_inode_operations = {
 	.check_acl		= xfs_check_acl,
+	.truncate		= xfs_vn_truncate,
 	.getattr		= xfs_vn_getattr,
 	.setattr		= xfs_vn_setattr,
 	.setxattr		= generic_setxattr,
 	.getxattr		= generic_getxattr,
 	.removexattr		= generic_removexattr,
 	.listxattr		= xfs_vn_listxattr,
+	.fallocate		= xfs_vn_fallocate,
 	.fiemap			= xfs_vn_fiemap,
 };
 
@@ -714,11 +793,8 @@ xfs_setup_inode(
 	struct inode		*inode = &ip->i_vnode;
 
 	inode->i_ino = ip->i_ino;
-	inode->i_state = I_NEW;
-
-	inode_sb_list_add(inode);
-	/* make the inode look hashed for the writeback code */
-	hlist_add_fake(&inode->i_hash);
+	inode->i_state = I_NEW|I_LOCK;
+	inode_add_to_lists(ip->i_mount->m_super, inode);
 
 	inode->i_mode	= ip->i_d.di_mode;
 	inode->i_nlink	= ip->i_d.di_nlink;

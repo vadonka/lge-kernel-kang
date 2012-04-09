@@ -9,7 +9,6 @@
 
 #include <linux/fs.h>
 #include <linux/dlm.h>
-#include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/gfs2_ondisk.h>
 
@@ -30,15 +29,15 @@ static void gdlm_ast(void *arg)
 
 	switch (gl->gl_lksb.sb_status) {
 	case -DLM_EUNLOCK: /* Unlocked, so glock can be freed */
-		gfs2_glock_free(gl);
+		kmem_cache_free(gfs2_glock_cachep, gl);
 		return;
 	case -DLM_ECANCEL: /* Cancel while getting lock */
 		ret |= LM_OUT_CANCELED;
 		goto out;
 	case -EAGAIN: /* Try lock fails */
-	case -EDEADLK: /* Deadlock detected */
 		goto out;
-	case -ETIMEDOUT: /* Canceled due to timeout */
+	case -EINVAL: /* Invalid */
+	case -ENOMEM: /* Out of memory */
 		ret |= LM_OUT_ERROR;
 		goto out;
 	case 0: /* Success */
@@ -140,13 +139,15 @@ static u32 make_flags(const u32 lkid, const unsigned int gfs_flags,
 	return lkf;
 }
 
-static int gdlm_lock(struct gfs2_glock *gl, unsigned int req_state,
-		     unsigned int flags)
+static unsigned int gdlm_lock(struct gfs2_glock *gl,
+			      unsigned int req_state, unsigned int flags)
 {
 	struct lm_lockstruct *ls = &gl->gl_sbd->sd_lockstruct;
+	int error;
 	int req;
 	u32 lkf;
 
+	gl->gl_req = req_state;
 	req = make_mode(req_state);
 	lkf = make_flags(gl->gl_lksb.sb_lkid, flags, req);
 
@@ -154,18 +155,23 @@ static int gdlm_lock(struct gfs2_glock *gl, unsigned int req_state,
 	 * Submit the actual lock request.
 	 */
 
-	return dlm_lock(ls->ls_dlm, req, &gl->gl_lksb, lkf, gl->gl_strname,
-			GDLM_STRNAME_BYTES - 1, 0, gdlm_ast, gl, gdlm_bast);
+	error = dlm_lock(ls->ls_dlm, req, &gl->gl_lksb, lkf, gl->gl_strname,
+			 GDLM_STRNAME_BYTES - 1, 0, gdlm_ast, gl, gdlm_bast);
+	if (error == -EAGAIN)
+		return 0;
+	if (error)
+		return LM_OUT_ERROR;
+	return LM_OUT_ASYNC;
 }
 
-static void gdlm_put_lock(struct gfs2_glock *gl)
+static void gdlm_put_lock(struct kmem_cache *cachep, void *ptr)
 {
-	struct gfs2_sbd *sdp = gl->gl_sbd;
-	struct lm_lockstruct *ls = &sdp->sd_lockstruct;
+	struct gfs2_glock *gl = ptr;
+	struct lm_lockstruct *ls = &gl->gl_sbd->sd_lockstruct;
 	int error;
 
 	if (gl->gl_lksb.sb_lkid == 0) {
-		gfs2_glock_free(gl);
+		kmem_cache_free(cachep, gl);
 		return;
 	}
 

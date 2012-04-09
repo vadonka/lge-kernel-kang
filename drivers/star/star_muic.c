@@ -27,7 +27,7 @@
 #include <linux/workqueue.h>
 #include <linux/wakelock.h>  
 #include <linux/freezer.h>
-//20101117, , for autorun
+//20101117, jm1.lee@lge.com, for autorun
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
 #include <linux/switch.h>
 #endif
@@ -51,8 +51,7 @@ enum
     DISABLE = 0x0, 
     ENABLE  = 0x1
 };
-#endif
-#ifndef CONFIG_MACH_STAR_TMUS
+#else
 typedef enum
 {
     USIF_UART,
@@ -77,9 +76,6 @@ typedef struct MuicDeviceRec
     NvOdmGpioPinHandle h_AP20_UART_SW;
     NvOdmGpioPinHandle h_IFX_UART_SW;
 #if defined(CONFIG_MACH_STAR)
-#ifdef CONFIG_MACH_STAR_REV_F
-    NvOdmGpioPinHandle h_USIF1_SW;
-#endif
     NvOdmGpioPinHandle h_USB_VBUS_EN;
 #else
     NvOdmGpioPinHandle h_USIF1_SW;    
@@ -92,18 +88,18 @@ typedef struct MuicDeviceRec
     NvOdmGpioPinHandle      hSdaGpioPinHandle;
 #endif	
     struct wake_lock wlock;
-//20101117, , for autorun
+//20101117, jm1.lee@lge.com, for autorun
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
     struct switch_dev sdev_autorun;
 #endif
 } Muic_Device;
 
-//20101117, , for autorun
+//20101117, jm1.lee@lge.com, for autorun
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
 #define	DRIVER_NAME_FOR_AUTORUN		"TEGRA_UDC_AUTORUN"
 #endif
 
-//20100526, , charging_ic Function [START]
+//20100526, jh.ahn@lge.com, charging_ic Function [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
 typedef enum {
     CHG_IC_DEFAULT_MODE=0,    		/* 0  */
@@ -119,10 +115,10 @@ extern void charging_ic_active(NvU32);
 extern void charging_ic_deactive(void);
 extern max8922_status get_charging_ic_status(void);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-//20100526, , charging_ic Function [END]
+//20100526, jh.ahn@lge.com, charging_ic Function [END]
 
 static star_shutdown = 0;
-//20101117, , for autorun [START]
+//20101117, jm1.lee@lge.com, for autorun [START]
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
 static ssize_t print_switch_name_for_autorun(struct switch_dev *sdev, char *buf)
 {
@@ -135,7 +131,7 @@ static ssize_t print_switch_state_for_autorun(struct switch_dev *sdev, char *buf
 			(sdev->state ? "online" : "offline"));
 }
 #endif
-//20101117, , for autorun [END]
+//20101117, jm1.lee@lge.com, for autorun [END]
 
 #ifdef _MUIC_GPIO_I2C_
 
@@ -435,7 +431,7 @@ static max14526_device_type boot_muic_state = DEVICE_NONE;
 //static NvBool send_key_muic_hook_pressed = NV_FALSE;
 //DP3T_MODE_TYPE  DP3T_mode = DP3T_NC;
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
 static void USIF_ctrl(USIF_MODE_TYPE mode);
 #endif
 static void DP3T_Switch_ctrl(DP3T_MODE_TYPE mode);
@@ -638,6 +634,97 @@ static void remove_star_muic_proc_file(void)
 {
     remove_proc_entry(STAR_MUIC_PROC_FILE, NULL);
 }
+
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+
+static struct proc_dir_entry *muic_interrupt_enable_proc_file;
+#define	MUIC_INTERRUPT_ENABLE_PROC_FILE	"driver/muic_interrupt_enable"
+
+static int muic_interrupt_status;
+
+// forward declaration
+static void muic_interrupt_handler(void* arg);
+
+static ssize_t muic_interrupt_enable_read(struct file *filp, char *buf, size_t len, loff_t *offset)
+{
+	printk(KERN_INFO "[MUIC] interrupt status=%d\n", muic_interrupt_status);
+	return 0;
+}
+
+extern void disable_power_supply_change_notification(void);
+extern void enable_power_supply_change_notification(void);
+
+static ssize_t muic_interrupt_enable_write(struct file *filp, const char *buf, size_t len,
+	loff_t *off)
+{
+	int enable;
+
+	if (len == 0)
+		return -EINVAL;
+
+	sscanf(buf, "%d", &enable);
+
+	// MUIC interrupt is enabled, disable it
+	if (muic_interrupt_status == 1 && enable == 0) {
+		printk(KERN_INFO "[MUIC] disabling MUIC interrupt\n");
+
+		NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
+			s_hMuicHandle.hGpioInterrupt);
+
+		// disable power supply change notification
+		disable_power_supply_change_notification();
+
+		muic_interrupt_status = 0;
+
+	// MUIC interrupt is disabled, enable it
+	} else if (muic_interrupt_status == 0 && enable == 1) {
+		printk(KERN_INFO "[MUIC] enabling MUIC interrupt\n");
+
+		if (NvOdmGpioInterruptRegister(s_hMuicHandle.hGpio, &s_hMuicHandle.hGpioInterrupt,
+			s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_InputInterruptFallingEdge,
+			muic_interrupt_handler, (void*)&s_hMuicHandle, 0) == NV_FALSE) {
+			printk(KERN_ERR "[MUIC] %s: fail to register interrupt\n", __func__);
+			return -ENOSYS;
+		}
+
+		// enable power supply change notification
+		enable_power_supply_change_notification();
+
+		muic_interrupt_status = 1;
+		current_device = DEVICE_NONE;
+
+	} else {
+		printk(KERN_INFO "[MUIC] keep current interrupt status\n");
+	}
+
+	return len;
+}
+
+
+static struct file_operations muic_interrupt_enable_fops = {
+	.read	= muic_interrupt_enable_read,
+	.write	= muic_interrupt_enable_write,
+};
+
+static void create_muic_interrupt_enable_proc_file(void)
+{
+	muic_interrupt_enable_proc_file =
+		create_proc_entry(MUIC_INTERRUPT_ENABLE_PROC_FILE, 0777, NULL);
+	if (muic_interrupt_enable_proc_file) {
+		muic_interrupt_enable_proc_file->proc_fops = &muic_interrupt_enable_fops;
+
+	} else {
+		printk(KERN_ERR "%s: MUIC interrupt enable PROC file creation failed\n", __func__);
+	}
+}
+
+static void remove_muic_interrupt_enable_proc_file(void)
+{
+	remove_proc_entry(MUIC_INTERRUPT_ENABLE_PROC_FILE, NULL);
+}
+
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+
 #endif 
 
 int max14526_muic_init(TYPE_RESET reset)
@@ -653,10 +740,10 @@ int max14526_muic_init(TYPE_RESET reset)
     ret=  MUIC_Reg_Write(&s_hMuicHandle, CTRL2_REG, INT_EN_M);
    
     DP3T_Switch_ctrl(DP3T_NC);
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_IPC);
 #endif
-    //20100526, , Charging IC Reset [START]
+    //20100526, jh.ahn@lge.com, Charging IC Reset [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     if ( !reset )
     {
@@ -664,7 +751,7 @@ int max14526_muic_init(TYPE_RESET reset)
         charging_ic_deactive();
     }
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Charging IC Reset [END]
+    //20100526, jh.ahn@lge.com, Charging IC Reset [END]
 
     wake_unlock(&s_hMuicHandle.wlock);
     current_device = DEVICE_NONE;
@@ -766,7 +853,7 @@ static NvBool MUIC_Reg_Read (Muic_Device* hMuicHandle, NvU8 reg, NvU8 *val)
 #endif
 }
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
 void USIF_ctrl(USIF_MODE_TYPE mode)
 {
     if(mode == USIF_UART)
@@ -863,12 +950,12 @@ void Set_MAX14526_Charger_Detect(NvU8 int_status_reg)
         Set_MAX14526_ADDR(SW_CTRL_REG, COMN1_TO_DN1 | COMP2_TO_DP2);
 
         /* Enable charger IC in TA mode */
-        //20100526, , Enable charger IC in TA mode [START]
+        //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
         lprintk(D_MUIC, "%s: CHG_IC_TA_MODE(%d) \n", __func__, CHG_IC_TA_MODE);	
         charging_ic_active(CHG_IC_TA_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-        //20100526, , Enable charger IC in TA mode [END]
+        //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [END]
         wake_lock(&s_hMuicHandle.wlock);
         current_device = DEVICE_USB_CABLE;
     }
@@ -879,12 +966,12 @@ void Set_MAX14526_Charger_Detect(NvU8 int_status_reg)
         Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_HZ | COMN1_TO_HZ);
      
         /* Enable charger IC in TA mode */
-        //20100526, , Enable charger IC in TA mode [START]
+        //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
         lprintk(D_MUIC, "%s: CHG_IC_TA_MODE(%d) \n", __func__, CHG_IC_TA_MODE);	
         charging_ic_active(CHG_IC_TA_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-        //20100526, , Enable charger IC in TA mode [END]
+        //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [END]
         current_device = DEVICE_TA_CHARGER;
     }
     // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -897,7 +984,7 @@ void Set_MAX14526_Factory_Mode_Detect(void)
 {
     printk("-->> MUIC : %s\n",__func__);
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_UART);
 #endif
     DP3T_Switch_ctrl(DP3T_S2_CP_SW);
@@ -908,12 +995,12 @@ void Set_MAX14526_Factory_Mode_Detect(void)
     Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_U2 | COMN1_TO_U1);
    
     /* Turn on charger IC with FACTORY mode */
-    //20100526, , Turn on charger IC with FACTORY mode [START]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     lprintk(D_MUIC, "%s: CHG_IC_FACTORY_MODE(%d) \n", __func__, CHG_IC_FACTORY_MODE);	
     charging_ic_active(CHG_IC_FACTORY_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Turn on charger IC with FACTORY mode [END]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [END]
     wake_lock(&s_hMuicHandle.wlock);
     current_device = DEVICE_UART_CABLE;
 }
@@ -922,7 +1009,7 @@ void Set_MAX14526_Develop_Mode_Detect(void)
 {
     printk("-->> MUIC : %s\n",__func__);
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_IPC);
 #endif
     DP3T_Switch_ctrl(DP3T_S1_AP);
@@ -934,12 +1021,12 @@ void Set_MAX14526_Develop_Mode_Detect(void)
    
 
     /* Turn on charger IC with FACTORY mode */
-    //20100526, , Turn on charger IC with FACTORY mode [START]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     lprintk(D_MUIC, "%s: CHG_IC_FACTORY_MODE(%d) \n", __func__, CHG_IC_FACTORY_MODE);	
     charging_ic_active(CHG_IC_FACTORY_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Turn on charger IC with FACTORY mode [END]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [END]
     wake_lock(&s_hMuicHandle.wlock);
     current_device = DEVICE_FACTORY_USB_CABLE;
 }
@@ -948,7 +1035,7 @@ void Set_MAX14526_Usb_Mode_Detect(void)
 {
     printk("-->> MUIC : %s \n",__func__);
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_IPC); 
 #endif
     DP3T_Switch_ctrl(DP3T_NC);
@@ -959,12 +1046,12 @@ void Set_MAX14526_Usb_Mode_Detect(void)
     Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_DP2 | COMN1_TO_DN1);
     
     /* Turn on charger IC with Standard USB mode  */
-    //20100526, , Turn on charger IC with Standard USB mode [START]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with Standard USB mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     lprintk(D_MUIC, "%s: CHG_IC_DEFAULT_MODE(%d) \n", __func__, CHG_IC_DEFAULT_MODE);	
     charging_ic_active(CHG_IC_DEFAULT_MODE); 
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Turn on charger IC with Standard USB mode [END]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with Standard USB mode [END]
     wake_lock(&s_hMuicHandle.wlock);
     current_device = DEVICE_USB_CABLE;
 }
@@ -973,7 +1060,7 @@ void Set_MAX14526_CP_USB_Mode(void){
 
     printk("-->> MUIC : %s \n",__func__);
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_IPC);
 #endif
     DP3T_Switch_ctrl(DP3T_S3_CP_USB);
@@ -984,12 +1071,12 @@ void Set_MAX14526_CP_USB_Mode(void){
     Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_U2 | COMN1_TO_U1);
 
     /* Turn on charger IC with FACTORY mode */
-    //20100526, , Turn on charger IC with FACTORY mode [START]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     lprintk(D_MUIC, "%s: CHG_IC_FACTORY_MODE(%d) \n", __func__, CHG_IC_FACTORY_MODE);	
     charging_ic_active(CHG_IC_FACTORY_MODE); 
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Turn on charger IC with FACTORY mode [END]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [END]
     wake_lock(&s_hMuicHandle.wlock);
     current_device = DEVICE_CP_USB_CABLE;
 }
@@ -998,7 +1085,7 @@ void Set_MAX14526_CP_USB_Mode_PortSetting(void){
 
     printk("-->> MUIC : %s \n",__func__);
 
-#if !defined(CONFIG_MACH_STAR_TMUS)
+#if !defined(CONFIG_MACH_STAR)
     USIF_ctrl(USIF_IPC);
 #endif
     DP3T_Switch_ctrl(DP3T_S3_CP_USB);
@@ -1009,12 +1096,12 @@ void Set_MAX14526_CP_USB_Mode_PortSetting(void){
     Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_U2 | COMN1_TO_U1);
 
     /* Turn on charger IC with FACTORY mode */
-    //20100526, , Turn on charger IC with FACTORY mode [START]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     lprintk(D_MUIC, "%s: CHG_IC_DEFAULT_MODE(%d) \n", __func__, CHG_IC_DEFAULT_MODE);
     charging_ic_active(CHG_IC_DEFAULT_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Turn on charger IC with FACTORY mode [END]
+    //20100526, jh.ahn@lge.com, Turn on charger IC with FACTORY mode [END]
     wake_lock(&s_hMuicHandle.wlock);
     current_device = DEVICE_CP_USB_CABLE;
 }
@@ -1091,7 +1178,7 @@ void muic_initialize_max(TYPE_RESET reset)
     // Enable Interrupts (0x02 = 0x40)
     Set_MAX14526_ADDR(CTRL2_REG, INT_EN_M);
     
-    //20100526, , Charging IC Reset [START]
+    //20100526, jh.ahn@lge.com, Charging IC Reset [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     if ( !reset )
     {
@@ -1099,7 +1186,7 @@ void muic_initialize_max(TYPE_RESET reset)
         charging_ic_deactive();
     }
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-    //20100526, , Charging IC Reset [END]
+    //20100526, jh.ahn@lge.com, Charging IC Reset [END]
     wake_unlock(&s_hMuicHandle.wlock);
 }
 
@@ -1114,7 +1201,13 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
 
     // IDNO=0010? 56Kohm  :: CP USB MODE
     else if ((int_status_reg &IDNO_M )==IDNO_0010)  
+        // LGE_CHANGE [dojip.kim@lge.com] 2010-12-31, 
+        // [LGE_AP20] temporarily use the LT 56K ohm UART as AP UART
+#if 1 /* original code */
         Set_MAX14526_CP_USB_Mode();
+#else
+        Set_MAX14526_Develop_Mode_Detect();
+#endif
 
 
     // IDNO=0010? 910Kohm  :: CP USB MODE
@@ -1143,12 +1236,12 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
             // COMP2 to H-Z / COMN1 to H-Z (0x03=0x24)
             Set_MAX14526_ADDR(SW_CTRL_REG, COMP2_TO_HZ | COMN1_TO_HZ);
             
-            //20100526, , Enable charger IC in TA mode [START]
+            //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
             lprintk(D_MUIC, "%s: CHG_IC_TA_MODE(%d) \n", __func__, CHG_IC_TA_MODE);	
             charging_ic_active(CHG_IC_TA_MODE);
 #endif /* CONFIG_STAR_BATTERY_CHARGER */
-            //20100526, , Enable charger IC in TA mode [END]
+            //20100526, jh.ahn@lge.com, Enable charger IC in TA mode [END]
 
             current_device = DEVICE_TA_CHARGER;
             printk("-->> MUIC : %s : DEVICE_TA_CHARGER  \n",__func__);
@@ -1157,7 +1250,7 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
         {
             // USB Detected
             Set_MAX14526_Usb_Mode_Detect();
-//20101117, , for autorun
+//20101117, jm1.lee@lge.com, for autorun
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
             switch_set_state(&s_hMuicHandle.sdev_autorun, 1);
 #endif
@@ -1176,7 +1269,7 @@ void MAX14526_Device_Detection(void)
 {
     NvU8 reg_value;
 
-    //20101002, , keep CP USB state after rebooting [START]
+    //20101002, jm1.lee@lge.com, keep CP USB state after rebooting [START]
     if(DEVICE_CP_USB_CABLE == boot_muic_state)
     {
         lprintk(D_MUIC, "CP Retain mode. \n");
@@ -1199,7 +1292,7 @@ void MAX14526_Device_Detection(void)
         }
         return;
     }
-    //20101002, , keep CP USB state after rebooting [END]
+    //20101002, jm1.lee@lge.com, keep CP USB state after rebooting [END]
     
     // Read INT_STAT_REG (0x04)
     reg_value = Get_MAX14526_ADDR(INT_STAT_REG); 	
@@ -1253,7 +1346,7 @@ void MAX14526_Device_Detection(void)
             if ((reg_value & VBUS_M) == 0){
                 // Exit AP USB Mode
                 max14526_muic_init(DEFAULT);
-//20101117, , for autorun
+//20101117, jm1.lee@lge.com, for autorun
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
                 switch_set_state(&s_hMuicHandle.sdev_autorun, 0);
 #endif
@@ -1310,7 +1403,7 @@ static void muic_interrupt_handler(void* arg)
     NvOdmGpioInterruptDone(s_hMuicHandle.hGpioInterrupt);
 }
 
-static int __devinit muic_probe(struct platform_device *pdev)
+static int __init muic_probe(struct platform_device *pdev)
 {
     int i, j, ret;
 #ifdef _MUIC_GPIO_I2C_
@@ -1318,11 +1411,7 @@ static int __devinit muic_probe(struct platform_device *pdev)
 #else	
     NvU32 I2cInstance = 0;
 #endif
-#if defined(CONFIG_MACH_STAR_REV_D) || defined(CONFIG_MACH_STAR_REV_E) || defined(CONFIG_MACH_STAR_REV_F)
-    NvU32 pin[5], port[5];
-#else
     NvU32 pin[4], port[4];
-#endif
     const NvOdmPeripheralConnectivity *pConnectivity = NULL;
 
     printk(KERN_INFO "muic_probe\n");
@@ -1377,7 +1466,7 @@ static int __devinit muic_probe(struct platform_device *pdev)
         goto err_open_gpio_pin_acquire_fail;
     }
 
-#if defined(CONFIG_MACH_STAR_TMUS)
+#if defined(CONFIG_MACH_STAR)
     s_hMuicHandle.h_USB_VBUS_EN = NvOdmGpioAcquirePinHandle(s_hMuicHandle.hGpio, port[3], pin[3]);
     if (!s_hMuicHandle.h_USB_VBUS_EN)
     {
@@ -1391,22 +1480,11 @@ static int __devinit muic_probe(struct platform_device *pdev)
         lprintk(D_MUIC, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto err_open_gpio_pin_acquire_fail;
     }
-
-    s_hMuicHandle.h_USB_VBUS_EN = NvOdmGpioAcquirePinHandle(s_hMuicHandle.hGpio, port[4], pin[4]);
-    if (!s_hMuicHandle.h_USB_VBUS_EN)
-    {
-        lprintk(D_MUIC, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
-        goto err_open_gpio_pin_acquire_fail;
-    }
 #endif
-
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_InputData);
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW, NvOdmGpioPinMode_Output);
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW, NvOdmGpioPinMode_Output);
 #if defined(CONFIG_MACH_STAR)
-#ifdef CONFIG_MACH_STAR_REV_F
-    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, NvOdmGpioPinMode_Output);
-#endif
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, NvOdmGpioPinMode_Output);
 #else
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, NvOdmGpioPinMode_Output);
@@ -1430,7 +1508,7 @@ static int __devinit muic_probe(struct platform_device *pdev)
 #endif
     wake_lock_init(&s_hMuicHandle.wlock, WAKE_LOCK_SUSPEND, "muic_active");
 
-//20101117, , for autorun [START]
+//20101117, jm1.lee@lge.com, for autorun [START]
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
     s_hMuicHandle.sdev_autorun.name = DRIVER_NAME_FOR_AUTORUN;
     s_hMuicHandle.sdev_autorun.print_name = print_switch_name_for_autorun;
@@ -1441,7 +1519,7 @@ static int __devinit muic_probe(struct platform_device *pdev)
         goto err_sdev_unregister;
     }
 #endif
-//20101117, , for autorun [END]
+//20101117, jm1.lee@lge.com, for autorun [END]
 
     INIT_DELAYED_WORK(&muic_wq, muic_wq_func);
 
@@ -1457,14 +1535,19 @@ static int __devinit muic_probe(struct platform_device *pdev)
     create_star_muic_proc_file();
     current_device = DEVICE_NONE;
 
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+	muic_interrupt_status = 1;
+	create_muic_interrupt_enable_proc_file();
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+
     muic_initialize_max(RESET);
 
-    //20100915, , move to late_initcall [START] 
+    //20100915, sunghoon.kim@lge.com, move to late_initcall [START] 
 #if 0		
     NvOdmOsSleepMS(400) ;
     MAX14526_Device_Detection();
 #endif		
-    //20100915, , move to late_initcall [STOP]  
+    //20100915, sunghoon.kim@lge.com, move to late_initcall [STOP]  
 
     return 0;
 
@@ -1472,19 +1555,16 @@ err_get_interrupt_handler:
 #ifndef _MUIC_GPIO_I2C_	
     NvOdmI2cClose(s_hMuicHandle.hOdmI2c);
 #endif
-//20101117, , for autorun [START]
+//20101117, jm1.lee@lge.com, for autorun [START]
 #ifdef CONFIG_USB_SUPPORT_LGE_ANDROID_AUTORUN
 err_sdev_unregister:
 	switch_dev_unregister(&s_hMuicHandle.sdev_autorun);
 #endif
-//20101117, , for autorun [END]
+//20101117, jm1.lee@lge.com, for autorun [END]
 err_open_i2c_handle:
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
-#ifdef CONFIG_MACH_STAR_REV_F
-    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
-#endif
 #if defined(CONFIG_MACH_STAR)
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
 #else
@@ -1507,9 +1587,6 @@ static int muic_remove(struct platform_device *pdev)
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
 #if defined(CONFIG_MACH_STAR)
-#ifdef CONFIG_MACH_STAR_REV_F
-    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
-#endif
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
 #else
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
@@ -1521,6 +1598,12 @@ static int muic_remove(struct platform_device *pdev)
 #endif
     wake_lock_destroy(&s_hMuicHandle.wlock);
     remove_star_muic_proc_file();
+
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+	muic_interrupt_status = 0;
+	remove_muic_interrupt_enable_proc_file();
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-08-22, disable MUIC interrupt during FOTA upgrade
+
     return 0;
 }
 
@@ -1535,8 +1618,19 @@ static void muic_shutdown(struct platform_device *pdev)
 		printk("muic_wq canceled\n");
 	}  
 #endif
+
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-08-31, disable MUIC interrupt during FOTA upgrade
+/* original code
     NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
             s_hMuicHandle.hGpioInterrupt);
+*/
+	if (muic_interrupt_status == 1) {
+		NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
+			s_hMuicHandle.hGpioInterrupt);
+
+		muic_interrupt_status = 0;
+	}
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-08-31, disable MUIC interrupt during FOTA upgrade
 
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_Output);
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC , 0x0);
@@ -1549,9 +1643,6 @@ static void muic_shutdown(struct platform_device *pdev)
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW , 0x0);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
 #if defined(CONFIG_MACH_STAR)
-#ifdef CONFIG_MACH_STAR_REV_F
-    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
-#endif
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN , 0x0);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
 #else
@@ -1596,9 +1687,7 @@ static struct platform_driver muic_driver = {
     .remove    = muic_remove,
     .suspend   = muic_suspend,
     .resume    = muic_resume,
-#ifndef CONFIG_MACH_STAR_REV_F
     .shutdown = muic_shutdown,
-#endif
     .driver    = {
         .name = "star_muic",
     },
@@ -1627,17 +1716,17 @@ static void __exit muic_exit(void)
 
 
 
-//20100911, , MUIC kernel command line parsing [START]
+//20100911, sunghoon.kim@lge.com, MUIC kernel command line parsing [START]
 static int __init muic_state(char *str)
 {
     int muic_value = simple_strtol(str, NULL, 0);
-    //20101002, , keep CP USB state after rebooting
+    //20101002, jm1.lee@lge.com, keep CP USB state after rebooting
     boot_muic_state = muic_value;
     printk(KERN_INFO "muic_state = %d\n",muic_value);
     return 1;
 }
 __setup("muic_state=", muic_state);
-//20100911, , MUIC kernel command line parsing [END]
+//20100911, sunghoon.kim@lge.com, MUIC kernel command line parsing [END]
 
 
 module_init(muic_init);

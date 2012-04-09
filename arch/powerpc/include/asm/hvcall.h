@@ -74,7 +74,6 @@
 #define H_NOT_ENOUGH_RESOURCES -44
 #define H_R_STATE       -45
 #define H_RESCINDEND    -46
-#define H_MULTI_THREADS_ACTIVE -9005
 
 
 /* Long Busy is a condition that can be returned by the firmware
@@ -102,7 +101,6 @@
 #define H_ANDCOND		(1UL<<(63-33))
 #define H_ICACHE_INVALIDATE	(1UL<<(63-40))	/* icbi, etc.  (ignored for IO pages) */
 #define H_ICACHE_SYNCHRONIZE	(1UL<<(63-41))	/* dcbst, icbi, etc (ignored for IO pages */
-#define H_COALESCE_CAND	(1UL<<(63-42))	/* page is a good candidate for coalescing */
 #define H_ZERO_PAGE		(1UL<<(63-48))	/* zero the page before mapping (ignored for IO pages) */
 #define H_COPY_PAGE		(1UL<<(63-49))
 #define H_N			(1UL<<(63-61))
@@ -123,7 +121,7 @@
 #define H_DABRX_KERNEL		(1UL<<(63-62))
 #define H_DABRX_USER		(1UL<<(63-63))
 
-/* Each control block has to be on a 4K boundary */
+/* Each control block has to be on a 4K bondary */
 #define H_CB_ALIGNMENT          4096
 
 /* pSeries hypervisor opcodes */
@@ -214,29 +212,12 @@
 #define H_QUERY_INT_STATE       0x1E4
 #define H_POLL_PENDING		0x1D8
 #define H_ILLAN_ATTRIBUTES	0x244
-#define H_MODIFY_HEA_QP		0x250
-#define H_QUERY_HEA_QP		0x254
-#define H_QUERY_HEA		0x258
-#define H_QUERY_HEA_PORT	0x25C
-#define H_MODIFY_HEA_PORT	0x260
-#define H_REG_BCMC		0x264
-#define H_DEREG_BCMC		0x268
-#define H_REGISTER_HEA_RPAGES	0x26C
-#define H_DISABLE_AND_GET_HEA	0x270
-#define H_GET_HEA_INFO		0x274
-#define H_ALLOC_HEA_RESOURCE	0x278
-#define H_ADD_CONN		0x284
-#define H_DEL_CONN		0x288
 #define H_JOIN			0x298
 #define H_VASI_STATE            0x2A4
 #define H_ENABLE_CRQ		0x2B0
-#define H_GET_EM_PARMS		0x2B8
 #define H_SET_MPP		0x2D0
 #define H_GET_MPP		0x2D4
-#define H_HOME_NODE_ASSOCIATIVITY 0x2EC
-#define H_BEST_ENERGY		0x2F4
-#define H_GET_MPP_X		0x314
-#define MAX_HCALL_OPCODE	H_GET_MPP_X
+#define MAX_HCALL_OPCODE	H_GET_MPP
 
 #ifndef __ASSEMBLY__
 
@@ -287,15 +268,12 @@ long plpar_hcall_raw(unsigned long opcode, unsigned long *retbuf, ...);
  */
 #define PLPAR_HCALL9_BUFSIZE 9
 long plpar_hcall9(unsigned long opcode, unsigned long *retbuf, ...);
-long plpar_hcall9_raw(unsigned long opcode, unsigned long *retbuf, ...);
 
 /* For hcall instrumentation.  One structure per-hcall, per-CPU */
 struct hcall_stats {
 	unsigned long	num_calls;	/* number of calls (on this CPU) */
 	unsigned long	tb_total;	/* total wall time (mftb) of calls. */
 	unsigned long	purr_total;	/* total cpu time (PURR) of calls. */
-	unsigned long	tb_start;
-	unsigned long	purr_start;
 };
 #define HCALL_STAT_ARRAY_SIZE	((MAX_HCALL_OPCODE >> 2) + 1)
 
@@ -313,16 +291,6 @@ struct hvcall_mpp_data {
 };
 
 int h_get_mpp(struct hvcall_mpp_data *);
-
-struct hvcall_mpp_x_data {
-	unsigned long coalesced_bytes;
-	unsigned long pool_coalesced_bytes;
-	unsigned long pool_purr_cycles;
-	unsigned long pool_spurr_cycles;
-	unsigned long reserved[3];
-};
-
-int h_get_mpp_x(struct hvcall_mpp_x_data *mpp_x_data);
 
 #ifdef CONFIG_PPC_PSERIES
 extern int CMO_PrPSP;

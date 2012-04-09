@@ -108,8 +108,7 @@ static unsigned int ldo_voltage_value(u8 bits)
 }
 
 static int pcf50633_regulator_set_voltage(struct regulator_dev *rdev,
-					  int min_uV, int max_uV,
-					  unsigned *selector)
+						int min_uV, int max_uV)
 {
 	struct pcf50633 *pcf;
 	int regulator_id, millivolts;
@@ -147,8 +146,6 @@ static int pcf50633_regulator_set_voltage(struct regulator_dev *rdev,
 	default:
 		return -EINVAL;
 	}
-
-	*selector = volt_bits;
 
 	return pcf50633_reg_write(pcf, regnr, volt_bits);
 }
@@ -317,14 +314,12 @@ static int __devinit pcf50633_regulator_probe(struct platform_device *pdev)
 	struct pcf50633 *pcf;
 
 	/* Already set by core driver */
-	pcf = dev_to_pcf50633(pdev->dev.parent);
+	pcf = platform_get_drvdata(pdev);
 
 	rdev = regulator_register(&regulators[pdev->id], &pdev->dev,
 				  pdev->dev.platform_data, pcf);
 	if (IS_ERR(rdev))
 		return PTR_ERR(rdev);
-
-	platform_set_drvdata(pdev, rdev);
 
 	if (pcf->pdata->regulator_registered)
 		pcf->pdata->regulator_registered(pcf, pdev->id);
@@ -336,7 +331,6 @@ static int __devexit pcf50633_regulator_remove(struct platform_device *pdev)
 {
 	struct regulator_dev *rdev = platform_get_drvdata(pdev);
 
-	platform_set_drvdata(pdev, NULL);
 	regulator_unregister(rdev);
 
 	return 0;

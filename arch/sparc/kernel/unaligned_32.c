@@ -16,7 +16,9 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <linux/smp.h>
-#include <linux/perf_event.h>
+#include <linux/smp_lock.h>
+
+/* #define DEBUG_MNA */
 
 enum direction {
 	load,    /* ld, ldd, ldh, ldsh */
@@ -26,6 +28,12 @@ enum direction {
 	fpstore,
 	invalid,
 };
+
+#ifdef DEBUG_MNA
+static char *dirstrings[] = {
+  "load", "store", "both", "fpload", "fpstore", "invalid"
+};
+#endif
 
 static inline enum direction decode_direction(unsigned int insn)
 {
@@ -247,7 +255,10 @@ asmlinkage void kernel_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		unsigned long addr = compute_effective_address(regs, insn);
 		int err;
 
-		perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, 0, regs, addr);
+#ifdef DEBUG_MNA
+		printk("KMNA: pc=%08lx [dir=%s addr=%08lx size=%d] retpc[%08lx]\n",
+		       regs->pc, dirstrings[dir], addr, size, regs->u_regs[UREG_RETPC]);
+#endif
 		switch (dir) {
 		case load:
 			err = do_int_load(fetch_reg_addr(((insn>>25)&0x1f),
@@ -322,6 +333,7 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 {
 	enum direction dir;
 
+	lock_kernel();
 	if(!(current->thread.flags & SPARC_FLAG_UNALIGNED) ||
 	   (((insn >> 30) & 3) != 3))
 		goto kill_user;
@@ -338,7 +350,6 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 		}
 
 		addr = compute_effective_address(regs, insn);
-		perf_sw_event(PERF_COUNT_SW_ALIGNMENT_FAULTS, 1, 0, regs, addr);
 		switch(dir) {
 		case load:
 			err = do_int_load(fetch_reg_addr(((insn>>25)&0x1f),
@@ -375,5 +386,5 @@ asmlinkage void user_unaligned_trap(struct pt_regs *regs, unsigned int insn)
 kill_user:
 	user_mna_trap_fault(regs, insn);
 out:
-	;
+	unlock_kernel();
 }

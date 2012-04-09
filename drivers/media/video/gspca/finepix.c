@@ -82,6 +82,7 @@ static void dostream(struct work_struct *work)
 	struct gspca_dev *gspca_dev = &dev->gspca_dev;
 	struct urb *urb = gspca_dev->urb[0];
 	u8 *data = urb->transfer_buffer;
+	struct gspca_frame *frame;
 	int ret = 0;
 	int len;
 
@@ -117,6 +118,10 @@ again:
 			}
 			if (!gspca_dev->present || !gspca_dev->streaming)
 				goto out;
+			frame = gspca_get_i_frame(&dev->gspca_dev);
+			if (frame == NULL)
+				gspca_dev->last_packet_type = DISCARD_PACKET;
+
 			if (len < FPIX_MAX_TRANSFER ||
 				(data[len - 2] == 0xff &&
 					data[len - 1] == 0xd9)) {
@@ -127,17 +132,21 @@ again:
 				 * but there's nothing we can do. We also end
 				 * here if the the jpeg ends right at the end
 				 * of the frame. */
-				gspca_frame_add(gspca_dev, LAST_PACKET,
-						data, len);
+				if (frame)
+					frame = gspca_frame_add(gspca_dev,
+							LAST_PACKET,
+							frame,
+							data, len);
 				break;
 			}
 
 			/* got a partial image */
-			gspca_frame_add(gspca_dev,
-					gspca_dev->last_packet_type
-						== LAST_PACKET
-					? FIRST_PACKET : INTER_PACKET,
-					data, len);
+			if (frame)
+				gspca_frame_add(gspca_dev,
+						gspca_dev->last_packet_type
+							== LAST_PACKET
+						? FIRST_PACKET : INTER_PACKET,
+						frame, data, len);
 		}
 
 		/* We must wait before trying reading the next
@@ -182,7 +191,7 @@ static int sd_start(struct gspca_dev *gspca_dev)
 	/* Init the device */
 	ret = command(gspca_dev, 0);
 	if (ret < 0) {
-		err("init failed %d", ret);
+		PDEBUG(D_STREAM, "init failed %d", ret);
 		return ret;
 	}
 
@@ -194,14 +203,14 @@ static int sd_start(struct gspca_dev *gspca_dev)
 			FPIX_MAX_TRANSFER, &len,
 			FPIX_TIMEOUT);
 	if (ret < 0) {
-		err("usb_bulk_msg failed %d", ret);
+		PDEBUG(D_STREAM, "usb_bulk_msg failed %d", ret);
 		return ret;
 	}
 
 	/* Request a frame, but don't read it */
 	ret = command(gspca_dev, 1);
 	if (ret < 0) {
-		err("frame request failed %d", ret);
+		PDEBUG(D_STREAM, "frame request failed %d", ret);
 		return ret;
 	}
 
@@ -229,7 +238,7 @@ static void sd_stop0(struct gspca_dev *gspca_dev)
 }
 
 /* Table of supported USB devices */
-static const struct usb_device_id device_table[] = {
+static const __devinitdata struct usb_device_id device_table[] = {
 	{USB_DEVICE(0x04cb, 0x0104)},
 	{USB_DEVICE(0x04cb, 0x0109)},
 	{USB_DEVICE(0x04cb, 0x010b)},
@@ -291,12 +300,19 @@ static struct usb_driver sd_driver = {
 /* -- module insert / remove -- */
 static int __init sd_mod_init(void)
 {
-	return usb_register(&sd_driver);
+	int ret;
+
+	ret = usb_register(&sd_driver);
+	if (ret < 0)
+		return ret;
+	PDEBUG(D_PROBE, "registered");
+	return 0;
 }
 
 static void __exit sd_mod_exit(void)
 {
 	usb_deregister(&sd_driver);
+	PDEBUG(D_PROBE, "deregistered");
 }
 
 module_init(sd_mod_init);

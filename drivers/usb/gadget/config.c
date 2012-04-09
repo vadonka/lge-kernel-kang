@@ -19,7 +19,6 @@
  */
 
 #include <linux/errno.h>
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/string.h>
@@ -28,6 +27,12 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 
+//20100822, jm1.lee@lge.com, for USB mode switching [START]
+#if defined(CONFIG_MACH_STAR)
+#undef __init
+#define __init
+#endif
+//20100822, jm1.lee@lge.com, for USB mode switching [END]
 
 /**
  * usb_descriptor_fillbuf - fill buffer with descriptors
@@ -128,7 +133,7 @@ int usb_gadget_config_buf(
  * with identifiers (for interfaces, strings, endpoints, and more)
  * as needed by a given function instance.
  */
-struct usb_descriptor_header **
+struct usb_descriptor_header **__init
 usb_copy_descriptors(struct usb_descriptor_header **src)
 {
 	struct usb_descriptor_header **tmp;
@@ -175,7 +180,7 @@ usb_copy_descriptors(struct usb_descriptor_header **src)
  * intended use is to help remembering the endpoint descriptor to use
  * when enabling a given endpoint.
  */
-struct usb_endpoint_descriptor *
+struct usb_endpoint_descriptor *__init
 usb_find_endpoint(
 	struct usb_descriptor_header **src,
 	struct usb_descriptor_header **copy,

@@ -20,42 +20,34 @@
 #include <linux/namei.h>
 #include <linux/fs.h>
 #include <linux/shmem_fs.h>
-#include <linux/ramfs.h>
 #include <linux/cred.h>
 #include <linux/sched.h>
 #include <linux/init_task.h>
-#include <linux/slab.h>
 
 static struct vfsmount *dev_mnt;
 
 #if defined CONFIG_DEVTMPFS_MOUNT
-static int mount_dev = 1;
+static int dev_mount = 1;
 #else
-static int mount_dev;
+static int dev_mount;
 #endif
-
-static DEFINE_MUTEX(dirlock);
 
 static int __init mount_param(char *str)
 {
-	mount_dev = simple_strtoul(str, NULL, 0);
+	dev_mount = simple_strtoul(str, NULL, 0);
 	return 1;
 }
 __setup("devtmpfs.mount=", mount_param);
 
-static struct dentry *dev_mount(struct file_system_type *fs_type, int flags,
-		      const char *dev_name, void *data)
+static int dev_get_sb(struct file_system_type *fs_type, int flags,
+		      const char *dev_name, void *data, struct vfsmount *mnt)
 {
-#ifdef CONFIG_TMPFS
-	return mount_single(fs_type, flags, data, shmem_fill_super);
-#else
-	return mount_single(fs_type, flags, data, ramfs_fill_super);
-#endif
+	return get_sb_single(fs_type, flags, data, shmem_fill_super, mnt);
 }
 
 static struct file_system_type dev_fs_type = {
 	.name = "devtmpfs",
-	.mount = dev_mount,
+	.get_sb = dev_get_sb,
 	.kill_sb = kill_litter_super,
 };
 
@@ -82,37 +74,47 @@ static int dev_mkdir(const char *name, mode_t mode)
 	dentry = lookup_create(&nd, 1);
 	if (!IS_ERR(dentry)) {
 		err = vfs_mkdir(nd.path.dentry->d_inode, dentry, mode);
-		if (!err)
-			/* mark as kernel-created inode */
-			dentry->d_inode->i_private = &dev_mnt;
 		dput(dentry);
 	} else {
 		err = PTR_ERR(dentry);
 	}
-
 	mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+
 	path_put(&nd.path);
 	return err;
 }
 
 static int create_path(const char *nodepath)
 {
-	int err;
+	char *path;
+	struct nameidata nd;
+	int err = 0;
 
-	mutex_lock(&dirlock);
-	err = dev_mkdir(nodepath, 0755);
-	if (err == -ENOENT) {
-		char *path;
+	path = kstrdup(nodepath, GFP_KERNEL);
+	if (!path)
+		return -ENOMEM;
+
+	err = vfs_path_lookup(dev_mnt->mnt_root, dev_mnt,
+			      path, LOOKUP_PARENT, &nd);
+	if (err == 0) {
+		struct dentry *dentry;
+
+		/* create directory right away */
+		dentry = lookup_create(&nd, 1);
+		if (!IS_ERR(dentry)) {
+			err = vfs_mkdir(nd.path.dentry->d_inode,
+					dentry, 0755);
+			dput(dentry);
+		}
+		mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+
+		path_put(&nd.path);
+	} else if (err == -ENOENT) {
 		char *s;
 
 		/* parent directories do not exist, create them */
-		path = kstrdup(nodepath, GFP_KERNEL);
-		if (!path) {
-			err = -ENOMEM;
-			goto out;
-		}
 		s = path;
-		for (;;) {
+		while (1) {
 			s = strchr(s, '/');
 			if (!s)
 				break;
@@ -123,10 +125,9 @@ static int create_path(const char *nodepath)
 			s[0] = '/';
 			s++;
 		}
-		kfree(path);
 	}
-out:
-	mutex_unlock(&dirlock);
+
+	kfree(path);
 	return err;
 }
 
@@ -155,40 +156,34 @@ int devtmpfs_create_node(struct device *dev)
 		mode |= S_IFCHR;
 
 	curr_cred = override_creds(&init_cred);
-
 	err = vfs_path_lookup(dev_mnt->mnt_root, dev_mnt,
 			      nodename, LOOKUP_PARENT, &nd);
 	if (err == -ENOENT) {
+		/* create missing parent directories */
 		create_path(nodename);
 		err = vfs_path_lookup(dev_mnt->mnt_root, dev_mnt,
 				      nodename, LOOKUP_PARENT, &nd);
+		if (err)
+			goto out;
 	}
-	if (err)
-		goto out;
 
 	dentry = lookup_create(&nd, 0);
 	if (!IS_ERR(dentry)) {
+		int umask;
+
+		umask = sys_umask(0000);
 		err = vfs_mknod(nd.path.dentry->d_inode,
 				dentry, mode, dev->devt);
-		if (!err) {
-			struct iattr newattrs;
-
-			/* fixup possibly umasked mode */
-			newattrs.ia_mode = mode;
-			newattrs.ia_valid = ATTR_MODE;
-			mutex_lock(&dentry->d_inode->i_mutex);
-			notify_change(dentry, &newattrs);
-			mutex_unlock(&dentry->d_inode->i_mutex);
-
-			/* mark as kernel-created inode */
+		sys_umask(umask);
+		/* mark as kernel created inode */
+		if (!err)
 			dentry->d_inode->i_private = &dev_mnt;
-		}
 		dput(dentry);
 	} else {
 		err = PTR_ERR(dentry);
 	}
-
 	mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+
 	path_put(&nd.path);
 out:
 	kfree(tmp);
@@ -210,21 +205,16 @@ static int dev_rmdir(const char *name)
 	mutex_lock_nested(&nd.path.dentry->d_inode->i_mutex, I_MUTEX_PARENT);
 	dentry = lookup_one_len(nd.last.name, nd.path.dentry, nd.last.len);
 	if (!IS_ERR(dentry)) {
-		if (dentry->d_inode) {
-			if (dentry->d_inode->i_private == &dev_mnt)
-				err = vfs_rmdir(nd.path.dentry->d_inode,
-						dentry);
-			else
-				err = -EPERM;
-		} else {
+		if (dentry->d_inode)
+			err = vfs_rmdir(nd.path.dentry->d_inode, dentry);
+		else
 			err = -ENOENT;
-		}
 		dput(dentry);
 	} else {
 		err = PTR_ERR(dentry);
 	}
-
 	mutex_unlock(&nd.path.dentry->d_inode->i_mutex);
+
 	path_put(&nd.path);
 	return err;
 }
@@ -238,8 +228,7 @@ static int delete_path(const char *nodepath)
 	if (!path)
 		return -ENOMEM;
 
-	mutex_lock(&dirlock);
-	for (;;) {
+	while (1) {
 		char *base;
 
 		base = strrchr(path, '/');
@@ -250,7 +239,6 @@ static int delete_path(const char *nodepath)
 		if (err)
 			break;
 	}
-	mutex_unlock(&dirlock);
 
 	kfree(path);
 	return err;
@@ -307,19 +295,6 @@ int devtmpfs_delete_node(struct device *dev)
 		if (dentry->d_inode) {
 			err = vfs_getattr(nd.path.mnt, dentry, &stat);
 			if (!err && dev_mynode(dev, dentry->d_inode, &stat)) {
-				struct iattr newattrs;
-				/*
-				 * before unlinking this node, reset permissions
-				 * of possible references like hardlinks
-				 */
-				newattrs.ia_uid = 0;
-				newattrs.ia_gid = 0;
-				newattrs.ia_mode = stat.mode & ~0777;
-				newattrs.ia_valid =
-					ATTR_UID|ATTR_GID|ATTR_MODE;
-				mutex_lock(&dentry->d_inode->i_mutex);
-				notify_change(dentry, &newattrs);
-				mutex_unlock(&dentry->d_inode->i_mutex);
 				err = vfs_unlink(nd.path.dentry->d_inode,
 						 dentry);
 				if (!err || err == -ENOENT)
@@ -347,21 +322,26 @@ out:
  * If configured, or requested by the commandline, devtmpfs will be
  * auto-mounted after the kernel mounted the root filesystem.
  */
-int devtmpfs_mount(const char *mntdir)
+int devtmpfs_mount(const char *mountpoint)
 {
+	struct path path;
 	int err;
 
-	if (!mount_dev)
+	if (!dev_mount)
 		return 0;
 
 	if (!dev_mnt)
 		return 0;
 
-	err = sys_mount("devtmpfs", (char *)mntdir, "devtmpfs", MS_SILENT, NULL);
+	err = kern_path(mountpoint, LOOKUP_FOLLOW, &path);
+	if (err)
+		return err;
+	err = do_add_mount(dev_mnt, &path, 0, NULL);
 	if (err)
 		printk(KERN_INFO "devtmpfs: error mounting %i\n", err);
 	else
 		printk(KERN_INFO "devtmpfs: mounted\n");
+	path_put(&path);
 	return err;
 }
 

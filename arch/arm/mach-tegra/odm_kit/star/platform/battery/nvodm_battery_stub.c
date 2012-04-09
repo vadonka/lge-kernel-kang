@@ -47,7 +47,11 @@ NvBool NvOdmBatteryDeviceOpen(NvOdmBatteryDeviceHandle *hDevice,
                               NvOdmOsSemaphoreHandle *hOdmSemaphore)
 {
     *hDevice = NULL;
+#if defined (CONFIG_MODEM_MDM)
     return NV_TRUE;
+#elif defined (CONFIG_MODEM_IFX)
+	return NV_FALSE;
+#endif
 }
 
 void NvOdmBatteryDeviceClose(NvOdmBatteryDeviceHandle hDevice)
@@ -68,7 +72,11 @@ NvBool NvOdmBatteryGetAcLineStatus(
        NvOdmBatteryAcLineStatus *pStatus)
 {
     *pStatus = NvOdmBatteryAcLine_Offline;
+#if defined (CONFIG_MODEM_MDM)
     return NV_TRUE;
+#elif defined (CONFIG_MODEM_IFX)
+	return NV_FALSE;
+#endif
 }
 
 
@@ -88,7 +96,11 @@ NvBool NvOdmBatteryGetBatteryStatus(
        NvU8 *pStatus)
 {
     *pStatus = NVODM_BATTERY_STATUS_UNKNOWN;
+#if defined (CONFIG_MODEM_MDM)
     return NV_TRUE;
+#elif defined (CONFIG_MODEM_IFX)
+	return NV_FALSE;
+#endif
 }
 
 /**
@@ -118,7 +130,11 @@ NvBool NvOdmBatteryGetBatteryData(
     BatteryData.BatteryVoltage         = NVODM_BATTERY_DATA_UNKNOWN;
 
     *pData = BatteryData;
+#if defined (CONFIG_MODEM_MDM)
     return NV_TRUE;
+#elif defined (CONFIG_MODEM_IFX)
+	return NV_FALSE;
+#endif
 }
 
 /**

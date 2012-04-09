@@ -6,7 +6,7 @@
 
     Chip details at:
 
-    <http://www.onsemi.com/PowerSolutions/product.do?id=ADM1026>
+    <http://www.analog.com/UploadedFiles/Data_Sheets/779263102ADM1026_a.pdf>
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -36,6 +36,9 @@
 
 /* Addresses to scan */
 static const unsigned short normal_i2c[] = { 0x2c, 0x2d, 0x2e, I2C_CLIENT_END };
+
+/* Insmod parameters */
+I2C_CLIENT_INSMOD_1(adm1026);
 
 static int gpio_input[17] = { -1, -1, -1, -1, -1, -1, -1, -1, -1,
 				-1, -1, -1, -1, -1, -1, -1, -1 };
@@ -175,7 +178,7 @@ static u16 ADM1026_REG_TEMP_OFFSET[] = { 0x1e, 0x6e, 0x6f };
  * these macros are called: arguments may be evaluated more than once.
  */
 
-/* IN are scaled according to built-in resistors.  These are the
+/* IN are scaled acording to built-in resistors.  These are the
  *   voltages corresponding to 3/4 of full scale (192 or 0xc0)
  *   NOTE: The -12V input needs an additional factor to account
  *      for the Vref pullup resistor.
@@ -290,7 +293,7 @@ struct adm1026_data {
 
 static int adm1026_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id);
-static int adm1026_detect(struct i2c_client *client,
+static int adm1026_detect(struct i2c_client *client, int kind,
 			  struct i2c_board_info *info);
 static int adm1026_remove(struct i2c_client *client);
 static int adm1026_read_value(struct i2c_client *client, u8 reg);
@@ -302,7 +305,7 @@ static void adm1026_init_client(struct i2c_client *client);
 
 
 static const struct i2c_device_id adm1026_id[] = {
-	{ "adm1026", 0 },
+	{ "adm1026", adm1026 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adm1026_id);
@@ -316,7 +319,7 @@ static struct i2c_driver adm1026_driver = {
 	.remove		= adm1026_remove,
 	.id_table	= adm1026_id,
 	.detect		= adm1026_detect,
-	.address_list	= normal_i2c,
+	.address_data	= &addr_data,
 };
 
 static int adm1026_read_value(struct i2c_client *client, u8 reg)
@@ -916,27 +919,27 @@ static ssize_t set_fan_div(struct device *dev, struct device_attribute *attr,
 	int nr = sensor_attr->index;
 	struct i2c_client *client = to_i2c_client(dev);
 	struct adm1026_data *data = i2c_get_clientdata(client);
-	int val, orig_div, new_div;
+	int val, orig_div, new_div, shift;
 
 	val = simple_strtol(buf, NULL, 10);
 	new_div = DIV_TO_REG(val);
-
+	if (new_div == 0) {
+		return -EINVAL;
+	}
 	mutex_lock(&data->update_lock);
 	orig_div = data->fan_div[nr];
 	data->fan_div[nr] = DIV_FROM_REG(new_div);
 
 	if (nr < 4) { /* 0 <= nr < 4 */
+		shift = 2 * nr;
 		adm1026_write_value(client, ADM1026_REG_FAN_DIV_0_3,
-				    (DIV_TO_REG(data->fan_div[0]) << 0) |
-				    (DIV_TO_REG(data->fan_div[1]) << 2) |
-				    (DIV_TO_REG(data->fan_div[2]) << 4) |
-				    (DIV_TO_REG(data->fan_div[3]) << 6));
+			((DIV_TO_REG(orig_div) & (~(0x03 << shift))) |
+			(new_div << shift)));
 	} else { /* 3 < nr < 8 */
+		shift = 2 * (nr - 4);
 		adm1026_write_value(client, ADM1026_REG_FAN_DIV_4_7,
-				    (DIV_TO_REG(data->fan_div[4]) << 0) |
-				    (DIV_TO_REG(data->fan_div[5]) << 2) |
-				    (DIV_TO_REG(data->fan_div[6]) << 4) |
-				    (DIV_TO_REG(data->fan_div[7]) << 6));
+			((DIV_TO_REG(orig_div) & (~(0x03 << (2 * shift)))) |
+			(new_div << shift)));
 	}
 
 	if (data->fan_div[nr] != orig_div) {
@@ -1647,7 +1650,7 @@ static const struct attribute_group adm1026_group_in8_9 = {
 };
 
 /* Return 0 if detection is successful, -ENODEV otherwise */
-static int adm1026_detect(struct i2c_client *client,
+static int adm1026_detect(struct i2c_client *client, int kind,
 			  struct i2c_board_info *info)
 {
 	struct i2c_adapter *adapter = client->adapter;
@@ -1669,26 +1672,35 @@ static int adm1026_detect(struct i2c_client *client,
 		i2c_adapter_id(client->adapter), client->addr,
 		company, verstep);
 
-	/* Determine the chip type. */
-	dev_dbg(&adapter->dev, "Autodetecting device at %d,0x%02x...\n",
-		i2c_adapter_id(adapter), address);
-	if (company == ADM1026_COMPANY_ANALOG_DEV
-	    && verstep == ADM1026_VERSTEP_ADM1026) {
-		/* Analog Devices ADM1026 */
-	} else if (company == ADM1026_COMPANY_ANALOG_DEV
-		&& (verstep & 0xf0) == ADM1026_VERSTEP_GENERIC) {
-		dev_err(&adapter->dev, "Unrecognized stepping "
-			"0x%02x. Defaulting to ADM1026.\n", verstep);
-	} else if ((verstep & 0xf0) == ADM1026_VERSTEP_GENERIC) {
-		dev_err(&adapter->dev, "Found version/stepping "
-			"0x%02x. Assuming generic ADM1026.\n",
-			verstep);
-	} else {
-		dev_dbg(&adapter->dev, "Autodetection failed\n");
-		/* Not an ADM1026... */
-		return -ENODEV;
+	/* If auto-detecting, Determine the chip type. */
+	if (kind <= 0) {
+		dev_dbg(&adapter->dev, "Autodetecting device at %d,0x%02x "
+			"...\n", i2c_adapter_id(adapter), address);
+		if (company == ADM1026_COMPANY_ANALOG_DEV
+		    && verstep == ADM1026_VERSTEP_ADM1026) {
+			kind = adm1026;
+		} else if (company == ADM1026_COMPANY_ANALOG_DEV
+			&& (verstep & 0xf0) == ADM1026_VERSTEP_GENERIC) {
+			dev_err(&adapter->dev, "Unrecognized stepping "
+				"0x%02x. Defaulting to ADM1026.\n", verstep);
+			kind = adm1026;
+		} else if ((verstep & 0xf0) == ADM1026_VERSTEP_GENERIC) {
+			dev_err(&adapter->dev, "Found version/stepping "
+				"0x%02x. Assuming generic ADM1026.\n",
+				verstep);
+			kind = any_chip;
+		} else {
+			dev_dbg(&adapter->dev, "Autodetection failed\n");
+			/* Not an ADM1026 ... */
+			if (kind == 0) { /* User used force=x,y */
+				dev_err(&adapter->dev, "Generic ADM1026 not "
+					"found at %d,0x%02x.  Try "
+					"force_adm1026.\n",
+					i2c_adapter_id(adapter), address);
+			}
+			return -ENODEV;
+		}
 	}
-
 	strlcpy(info->type, "adm1026", I2C_NAME_SIZE);
 
 	return 0;

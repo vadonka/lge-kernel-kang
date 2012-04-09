@@ -16,7 +16,6 @@
  */
 
 #include <linux/init.h>
-#include <linux/slab.h>
 #include "hisax.h"
 #include "isdnl3.h"
 
@@ -66,7 +65,7 @@ static char *strL3Event[] =
 	"EV_TIMEOUT",
 };
 
-static __attribute__((format(printf, 2, 3))) void
+static void
 l3m_debug(struct FsmInst *fi, char *fmt, ...)
 {
 	va_list args;

@@ -2,7 +2,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2008 - 2011 Intel Corporation. All rights reserved.
+ * Copyright(c) 2008 - 2009 Intel Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -49,14 +49,14 @@ const char *get_cmd_string(u8 cmd)
 		IWL_CMD(REPLY_ADD_STA);
 		IWL_CMD(REPLY_REMOVE_STA);
 		IWL_CMD(REPLY_REMOVE_ALL_STA);
-		IWL_CMD(REPLY_TXFIFO_FLUSH);
 		IWL_CMD(REPLY_WEPKEY);
+		IWL_CMD(REPLY_3945_RX);
 		IWL_CMD(REPLY_TX);
+		IWL_CMD(REPLY_RATE_SCALE);
 		IWL_CMD(REPLY_LEDS_CMD);
 		IWL_CMD(REPLY_TX_LINK_QUALITY_CMD);
 		IWL_CMD(COEX_PRIORITY_TABLE_CMD);
-		IWL_CMD(COEX_MEDIUM_NOTIFICATION);
-		IWL_CMD(COEX_EVENT_CMD);
+		IWL_CMD(RADAR_NOTIFICATION);
 		IWL_CMD(REPLY_QUIET_CMD);
 		IWL_CMD(REPLY_CHANNEL_SWITCH);
 		IWL_CMD(CHANNEL_SWITCH_NOTIFICATION);
@@ -93,32 +93,28 @@ const char *get_cmd_string(u8 cmd)
 		IWL_CMD(CALIBRATION_RES_NOTIFICATION);
 		IWL_CMD(CALIBRATION_COMPLETE_NOTIFICATION);
 		IWL_CMD(REPLY_TX_POWER_DBM_CMD);
-		IWL_CMD(TEMPERATURE_NOTIFICATION);
-		IWL_CMD(TX_ANT_CONFIGURATION_CMD);
-		IWL_CMD(REPLY_BT_COEX_PROFILE_NOTIF);
-		IWL_CMD(REPLY_BT_COEX_PRIO_TABLE);
-		IWL_CMD(REPLY_BT_COEX_PROT_ENV);
-		IWL_CMD(REPLY_WIPAN_PARAMS);
-		IWL_CMD(REPLY_WIPAN_RXON);
-		IWL_CMD(REPLY_WIPAN_RXON_TIMING);
-		IWL_CMD(REPLY_WIPAN_RXON_ASSOC);
-		IWL_CMD(REPLY_WIPAN_QOS_PARAM);
-		IWL_CMD(REPLY_WIPAN_WEPKEY);
-		IWL_CMD(REPLY_WIPAN_P2P_CHANNEL_SWITCH);
-		IWL_CMD(REPLY_WIPAN_NOA_NOTIFICATION);
-		IWL_CMD(REPLY_WIPAN_DEACTIVATION_COMPLETE);
 	default:
 		return "UNKNOWN";
 
 	}
 }
+EXPORT_SYMBOL(get_cmd_string);
 
 #define HOST_COMPLETE_TIMEOUT (HZ / 2)
 
 static void iwl_generic_cmd_callback(struct iwl_priv *priv,
 				     struct iwl_device_cmd *cmd,
-				     struct iwl_rx_packet *pkt)
+				     struct sk_buff *skb)
 {
+	struct iwl_rx_packet *pkt = NULL;
+
+	if (!skb) {
+		IWL_ERR(priv, "Error: Response NULL in %s.\n",
+				get_cmd_string(cmd->hdr.cmd));
+		return;
+	}
+
+	pkt = (struct iwl_rx_packet *)skb->data;
 	if (pkt->hdr.flags & IWL_CMD_FAILED_MSK) {
 		IWL_ERR(priv, "Bad return from %s (0x%08X)\n",
 			get_cmd_string(cmd->hdr.cmd), pkt->hdr.flags);
@@ -143,12 +139,10 @@ static int iwl_send_cmd_async(struct iwl_priv *priv, struct iwl_host_cmd *cmd)
 {
 	int ret;
 
-	if (WARN_ON(!(cmd->flags & CMD_ASYNC)))
-		return -EINVAL;
+	BUG_ON(!(cmd->flags & CMD_ASYNC));
 
 	/* An asynchronous command can not expect an SKB to be set. */
-	if (WARN_ON(cmd->flags & CMD_WANT_SKB))
-		return -EINVAL;
+	BUG_ON(cmd->flags & CMD_WANT_SKB);
 
 	/* Assign a generic callback if one is not provided */
 	if (!cmd->callback)
@@ -171,30 +165,30 @@ int iwl_send_cmd_sync(struct iwl_priv *priv, struct iwl_host_cmd *cmd)
 	int cmd_idx;
 	int ret;
 
-	if (WARN_ON(cmd->flags & CMD_ASYNC))
-		return -EINVAL;
+	BUG_ON(cmd->flags & CMD_ASYNC);
 
 	 /* A synchronous command can not have a callback set. */
-	if (WARN_ON(cmd->callback))
-		return -EINVAL;
+	BUG_ON(cmd->callback);
 
-	IWL_DEBUG_INFO(priv, "Attempting to send sync command %s\n",
+	if (test_and_set_bit(STATUS_HCMD_SYNC_ACTIVE, &priv->status)) {
+		IWL_ERR(priv,
+			"Error sending %s: Already sending a host command\n",
 			get_cmd_string(cmd->id));
+		ret = -EBUSY;
+		goto out;
+	}
 
 	set_bit(STATUS_HCMD_ACTIVE, &priv->status);
-	IWL_DEBUG_INFO(priv, "Setting HCMD_ACTIVE for command %s\n",
-			get_cmd_string(cmd->id));
 
 	cmd_idx = iwl_enqueue_hcmd(priv, cmd);
 	if (cmd_idx < 0) {
 		ret = cmd_idx;
-		clear_bit(STATUS_HCMD_ACTIVE, &priv->status);
 		IWL_ERR(priv, "Error sending %s: enqueue_hcmd failed: %d\n",
 			  get_cmd_string(cmd->id), ret);
-		return ret;
+		goto out;
 	}
 
-	ret = wait_event_timeout(priv->wait_command_queue,
+	ret = wait_event_interruptible_timeout(priv->wait_command_queue,
 			!test_bit(STATUS_HCMD_ACTIVE, &priv->status),
 			HOST_COMPLETE_TIMEOUT);
 	if (!ret) {
@@ -205,33 +199,32 @@ int iwl_send_cmd_sync(struct iwl_priv *priv, struct iwl_host_cmd *cmd)
 				jiffies_to_msecs(HOST_COMPLETE_TIMEOUT));
 
 			clear_bit(STATUS_HCMD_ACTIVE, &priv->status);
-			IWL_DEBUG_INFO(priv, "Clearing HCMD_ACTIVE for command %s\n",
-				       get_cmd_string(cmd->id));
 			ret = -ETIMEDOUT;
 			goto cancel;
 		}
 	}
 
 	if (test_bit(STATUS_RF_KILL_HW, &priv->status)) {
-		IWL_ERR(priv, "Command %s aborted: RF KILL Switch\n",
+		IWL_DEBUG_INFO(priv, "Command %s aborted: RF KILL Switch\n",
 			       get_cmd_string(cmd->id));
 		ret = -ECANCELED;
 		goto fail;
 	}
 	if (test_bit(STATUS_FW_ERROR, &priv->status)) {
-		IWL_ERR(priv, "Command %s failed: FW Error\n",
+		IWL_DEBUG_INFO(priv, "Command %s failed: FW Error\n",
 			       get_cmd_string(cmd->id));
 		ret = -EIO;
 		goto fail;
 	}
-	if ((cmd->flags & CMD_WANT_SKB) && !cmd->reply_page) {
+	if ((cmd->flags & CMD_WANT_SKB) && !cmd->reply_skb) {
 		IWL_ERR(priv, "Error: Response NULL in '%s'\n",
 			  get_cmd_string(cmd->id));
 		ret = -EIO;
 		goto cancel;
 	}
 
-	return 0;
+	ret = 0;
+	goto out;
 
 cancel:
 	if (cmd->flags & CMD_WANT_SKB) {
@@ -241,17 +234,19 @@ cancel:
 		 * in later, it will possibly set an invalid
 		 * address (cmd->meta.source).
 		 */
-		priv->txq[priv->cmd_queue].meta[cmd_idx].flags &=
+		priv->txq[IWL_CMD_QUEUE_NUM].meta[cmd_idx].flags &=
 							~CMD_WANT_SKB;
 	}
 fail:
-	if (cmd->reply_page) {
-		iwl_free_pages(priv, cmd->reply_page);
-		cmd->reply_page = 0;
+	if (cmd->reply_skb) {
+		dev_kfree_skb_any(cmd->reply_skb);
+		cmd->reply_skb = NULL;
 	}
-
+out:
+	clear_bit(STATUS_HCMD_SYNC_ACTIVE, &priv->status);
 	return ret;
 }
+EXPORT_SYMBOL(iwl_send_cmd_sync);
 
 int iwl_send_cmd(struct iwl_priv *priv, struct iwl_host_cmd *cmd)
 {
@@ -260,28 +255,30 @@ int iwl_send_cmd(struct iwl_priv *priv, struct iwl_host_cmd *cmd)
 
 	return iwl_send_cmd_sync(priv, cmd);
 }
+EXPORT_SYMBOL(iwl_send_cmd);
 
 int iwl_send_cmd_pdu(struct iwl_priv *priv, u8 id, u16 len, const void *data)
 {
 	struct iwl_host_cmd cmd = {
 		.id = id,
-		.len = { len, },
-		.data = { data, },
+		.len = len,
+		.data = data,
 	};
 
 	return iwl_send_cmd_sync(priv, &cmd);
 }
+EXPORT_SYMBOL(iwl_send_cmd_pdu);
 
 int iwl_send_cmd_pdu_async(struct iwl_priv *priv,
 			   u8 id, u16 len, const void *data,
 			   void (*callback)(struct iwl_priv *priv,
 					    struct iwl_device_cmd *cmd,
-					    struct iwl_rx_packet *pkt))
+					    struct sk_buff *skb))
 {
 	struct iwl_host_cmd cmd = {
 		.id = id,
-		.len = { len, },
-		.data = { data, },
+		.len = len,
+		.data = data,
 	};
 
 	cmd.flags |= CMD_ASYNC;
@@ -289,3 +286,4 @@ int iwl_send_cmd_pdu_async(struct iwl_priv *priv,
 
 	return iwl_send_cmd_async(priv, &cmd);
 }
+EXPORT_SYMBOL(iwl_send_cmd_pdu_async);

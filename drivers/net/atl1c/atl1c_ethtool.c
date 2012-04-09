@@ -22,7 +22,6 @@
 
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
-#include <linux/slab.h>
 
 #include "atl1c.h"
 
@@ -38,7 +37,7 @@ static int atl1c_get_settings(struct net_device *netdev,
 			   SUPPORTED_100baseT_Full |
 			   SUPPORTED_Autoneg       |
 			   SUPPORTED_TP);
-	if (hw->link_cap_flags & ATL1C_LINK_CAP_1000M)
+	if (hw->ctrl_flags & ATL1C_LINK_CAP_1000M)
 		ecmd->supported |= SUPPORTED_1000baseT_Full;
 
 	ecmd->advertising = ADVERTISED_TP;
@@ -50,13 +49,13 @@ static int atl1c_get_settings(struct net_device *netdev,
 	ecmd->transceiver = XCVR_INTERNAL;
 
 	if (adapter->link_speed != SPEED_0) {
-		ethtool_cmd_speed_set(ecmd, adapter->link_speed);
+		ecmd->speed = adapter->link_speed;
 		if (adapter->link_duplex == FULL_DUPLEX)
 			ecmd->duplex = DUPLEX_FULL;
 		else
 			ecmd->duplex = DUPLEX_HALF;
 	} else {
-		ethtool_cmd_speed_set(ecmd, -1);
+		ecmd->speed = -1;
 		ecmd->duplex = -1;
 	}
 
@@ -77,8 +76,7 @@ static int atl1c_set_settings(struct net_device *netdev,
 	if (ecmd->autoneg == AUTONEG_ENABLE) {
 		autoneg_advertised = ADVERTISED_Autoneg;
 	} else {
-		u32 speed = ethtool_cmd_speed(ecmd);
-		if (speed == SPEED_1000) {
+		if (ecmd->speed == SPEED_1000) {
 			if (ecmd->duplex != DUPLEX_FULL) {
 				if (netif_msg_link(adapter))
 					dev_warn(&adapter->pdev->dev,
@@ -87,7 +85,7 @@ static int atl1c_set_settings(struct net_device *netdev,
 				return -EINVAL;
 			}
 			autoneg_advertised = ADVERTISED_1000baseT_Full;
-		} else if (speed == SPEED_100) {
+		} else if (ecmd->speed == SPEED_100) {
 			if (ecmd->duplex == DUPLEX_FULL)
 				autoneg_advertised = ADVERTISED_100baseT_Full;
 			else
@@ -112,6 +110,11 @@ static int atl1c_set_settings(struct net_device *netdev,
 	}
 	clear_bit(__AT_RESETTING, &adapter->flags);
 	return 0;
+}
+
+static u32 atl1c_get_tx_csum(struct net_device *netdev)
+{
+	return (netdev->features & NETIF_F_HW_CSUM) != 0;
 }
 
 static u32 atl1c_get_msglevel(struct net_device *netdev)
@@ -259,6 +262,8 @@ static void atl1c_get_wol(struct net_device *netdev,
 		wol->wolopts |= WAKE_MAGIC;
 	if (adapter->wol & AT_WUFC_LNKC)
 		wol->wolopts |= WAKE_PHY;
+
+	return;
 }
 
 static int atl1c_set_wol(struct net_device *netdev, struct ethtool_wolinfo *wol)
@@ -303,6 +308,9 @@ static const struct ethtool_ops atl1c_ethtool_ops = {
 	.get_link               = ethtool_op_get_link,
 	.get_eeprom_len         = atl1c_get_eeprom_len,
 	.get_eeprom             = atl1c_get_eeprom,
+	.get_tx_csum            = atl1c_get_tx_csum,
+	.get_sg                 = ethtool_op_get_sg,
+	.set_sg                 = ethtool_op_set_sg,
 };
 
 void atl1c_set_ethtool_ops(struct net_device *netdev)

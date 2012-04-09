@@ -22,11 +22,10 @@ choice
 	prompt "Select Tegra-based product"
 
 config MACH_TEGRA_GENERIC
-	bool "Tegra 2 Development System (Whistler, Harmony, Tango, Star)"
+	bool "Tegra 2 Development System (Whistler, Harmony, Tango)"
 	select TEGRA_ODM_KIT
 	select MACH_HARMONY
 	select MACH_VENTANA
-	select MACH_STAR
 	help
 	  Support for NVIDIA Tegra 2 development platforms; requires
 	  selection of an appropriate ODM kit for your specific development
@@ -39,12 +38,6 @@ config MACH_HARMONY
 
 config MACH_VENTANA
 	bool
-
-config MACH_STAR
-	depends on ARCH_TEGRA_2x_SOC
-	bool "LGE STAR series (Nvidia Tegra AP20)"
-	help
-	  support LGE STAR platform
 
 config TEGRA_ODM_KIT
 	bool
@@ -201,18 +194,18 @@ config TEGRA_LP2POLICY_IGNORE_LC
 
 endchoice
 
-config WIFI_CONTROL_FUNC
-	bool "Enable WiFi control function abstraction"
+comment "LGE Star options"
+config MACH_STAR
+	depends on ARCH_TEGRA_2x_SOC
+        default y
+        bool "LGE STAR project (Nvidia Tegra AP20)"
         help
-	  Enables Power/Reset/Carddetect function abstraction
+         support LGE STAR platform
 
-if TEGRA_ODM_KIT
 source "arch/arm/mach-tegra/odm_kit/Kconfig"
 
 if MACH_STAR
 source "arch/arm/mach-tegra/Kconfig.lge"
-endif
-
 endif
 
 endif

@@ -30,7 +30,6 @@
 #include <linux/types.h>
 #include <linux/rcupdate.h>
 #include <linux/list.h>
-#include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/in.h>
 #include <linux/in6.h>
@@ -139,9 +138,7 @@ static void sel_netport_insert(struct sel_netport *port)
 	if (sel_netport_hash[idx].size == SEL_NETPORT_HASH_BKT_LIMIT) {
 		struct sel_netport *tail;
 		tail = list_entry(
-			rcu_dereference_protected(
-				sel_netport_hash[idx].list.prev,
-				lockdep_is_held(&sel_netport_lock)),
+			rcu_dereference(sel_netport_hash[idx].list.prev),
 			struct sel_netport, list);
 		list_del_rcu(&tail->list);
 		call_rcu(&tail->rcu, sel_netport_free);

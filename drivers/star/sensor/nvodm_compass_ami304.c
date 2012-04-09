@@ -355,10 +355,10 @@ NvBool NvCompassI2CSetRegs(NvOdmCompassHandle hDevice, NvU8 offset, NvU8* value,
         NvOdmI2cStatus i2c_status = NvOdmI2cStatus_Timeout;
 	NvOdmI2cTransactionInfo TransactionInfo;
 
-// LGE_CHANGE_S [] 2011-05-28, [LGE_AP20] sensors: I2C recovery
+// LGE_CHANGE_S [dongjin73.kim@lge.com] 2011-05-28, [LGE_AP20] sensors: I2C recovery
 	if (reboot == 1)
 		return	NV_FALSE;
-// LGE_CHANGE_E [] 2011-05-28, [LGE_AP20] sensors: I2C recovery
+// LGE_CHANGE_E [dongjin73.kim@lge.com] 2011-05-28, [LGE_AP20] sensors: I2C recovery
 
 	if ((NULL == hDevice) || (NULL == value) || (len > I2C_COMPASS_PACKET_SIZE-1)) {
 		return NV_FALSE;
@@ -408,10 +408,10 @@ NvBool NvCompassI2CGetRegs(NvOdmCompassHandle hDevice, NvU8 offset, NvU8* value,
         NvOdmI2cStatus i2c_status = NvOdmI2cStatus_Timeout;
 	NvOdmI2cTransactionInfo TransactionInfo[2];
 
-// LGE_CHANGE_S [] 2011-05-28, [LGE_AP20] sensors: I2C recovery
+// LGE_CHANGE_S [dongjin73.kim@lge.com] 2011-05-28, [LGE_AP20] sensors: I2C recovery
 	if (reboot == 1)
 		return	NV_FALSE;
-// LGE_CHANGE_E [] 2011-05-28, [LGE_AP20] sensors: I2C recovery
+// LGE_CHANGE_E [dongjin73.kim@lge.com] 2011-05-28, [LGE_AP20] sensors: I2C recovery
 
 	if ((NULL == hDevice) || (NULL == value) || (len > I2C_COMPASS_PACKET_SIZE-1)) {
 		return NV_FALSE;

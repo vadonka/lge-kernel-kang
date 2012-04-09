@@ -190,13 +190,8 @@ extern "C"
  */
 
 // Defines minimum scaling limit for each supported SDRAM type
-#ifndef CONFIG_OTF_DDR2MIN
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
-#endif // OTF_DDR2MIN
-
-#ifndef CONFIG_OTF_LPDDR2
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
-#endif // OTF_LPDDR2
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
@@ -247,16 +242,11 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
-#ifdef CONFIG_OTF_CPU1
-#include <linux/spica.h>
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#else
 #define NVRM_CPU1_ON_MIN_KHZ (0)
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
 
 #define NVRM_CPU1_ON_PENDING_MS (1500)
 #define NVRM_CPU1_OFF_PENDING_MS (1000)
-#endif
 
 /**
  * Defines AP20 Thermal policy parameters.
@@ -291,7 +281,11 @@ extern "C"
 
 /// Default low corners for core and dedicated CPU voltages
 #define NVRM_AP20_LOW_CORE_MV (950)
+#if defined (CONFIG_MODEM_MDM)
 #define NVRM_AP20_LOW_CPU_MV (750)
+#elif defined (CONFIG_MODEM_IFX)
+#define NVRM_AP20_LOW_CPU_MV (770)
+#endif
 /// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
 
@@ -381,7 +375,7 @@ NvRmPrivAp20DttPolicyUpdate(
     NvS32 TemperatureC,
     NvRmDtt* pDt);
 
-//20101121 , HW power off in thermal limit [START]
+//20101121 cs77.ha@lge.com, HW power off in thermal limit [START]
 #if defined(CONFIG_MACH_STAR)
 void
 NvRmPrivStarDttPolicyUpdate(
@@ -390,7 +384,7 @@ NvRmPrivStarDttPolicyUpdate(
     NvRmDtt* pDt);
 
 #endif
-//20101121 , HW power off in thermal limit [END]
+//20101121 cs77.ha@lge.com, HW power off in thermal limit [END]
 
 /**
  * Throttles DFS target clocks.

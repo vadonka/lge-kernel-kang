@@ -28,13 +28,13 @@ struct svc_sock {
 	/* private TCP part */
 	u32			sk_reclen;	/* length of record */
 	u32			sk_tcplen;	/* current read length */
-	struct page *		sk_pages[RPCSVC_MAXPAGES];	/* received data */
+	struct rpc_xprt		*sk_bc_xprt;	/* NFSv4.1 backchannel xprt */
 };
 
 /*
  * Function prototypes.
  */
-void		svc_close_all(struct svc_serv *);
+void		svc_close_all(struct list_head *);
 int		svc_recv(struct svc_rqst *, long);
 int		svc_send(struct svc_rqst *);
 void		svc_drop(struct svc_rqst *);

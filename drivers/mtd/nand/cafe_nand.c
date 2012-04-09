@@ -2,7 +2,7 @@
  * Driver for One Laptop Per Child ‘CAFÉ’ controller, aka Marvell 88ALP01
  *
  * The data sheet for this device can be found at:
- *    http://wiki.laptop.org/go/Datasheets 
+ *    http://www.marvell.com/products/pcconn/88ALP01.jsp
  *
  * Copyright © 2006 Red Hat, Inc.
  * Copyright © 2006 David Woodhouse <dwmw2@infradead.org>
@@ -20,7 +20,6 @@
 #include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/dma-mapping.h>
-#include <linux/slab.h>
 #include <asm/io.h>
 
 #define CAFE_NAND_CTRL1		0x00
@@ -90,7 +89,9 @@ static unsigned int numtimings;
 static int timing[3];
 module_param_array(timing, int, &numtimings, 0644);
 
+#ifdef CONFIG_MTD_PARTITIONS
 static const char *part_probes[] = { "cmdlinepart", "RedBoot", NULL };
+#endif
 
 /* Hrm. Why isn't this already conditional on something in the struct device? */
 #define cafe_dev_dbg(dev, args...) do { if (debug) dev_dbg(dev, ##args); } while(0)
@@ -630,8 +631,10 @@ static int __devinit cafe_nand_probe(struct pci_dev *pdev,
 	struct cafe_priv *cafe;
 	uint32_t ctrl;
 	int err = 0;
+#ifdef CONFIG_MTD_PARTITIONS
 	struct mtd_partition *parts;
 	int nr_parts;
+#endif
 
 	/* Very old versions shared the same PCI ident for all three
 	   functions on the chip. Verify the class too... */
@@ -758,7 +761,7 @@ static int __devinit cafe_nand_probe(struct pci_dev *pdev,
 		cafe_readl(cafe, GLOBAL_CTRL), cafe_readl(cafe, GLOBAL_IRQ_MASK));
 
 	/* Scan to find existence of the device */
-	if (nand_scan_ident(mtd, 2, NULL)) {
+	if (nand_scan_ident(mtd, 2)) {
 		err = -ENXIO;
 		goto out_irq;
 	}
@@ -800,8 +803,9 @@ static int __devinit cafe_nand_probe(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, mtd);
 
 	/* We register the whole device first, separate from the partitions */
-	mtd_device_register(mtd, NULL, 0);
+	add_mtd_device(mtd);
 
+#ifdef CONFIG_MTD_PARTITIONS
 #ifdef CONFIG_MTD_CMDLINE_PARTS
 	mtd->name = "cafe_nand";
 #endif
@@ -809,8 +813,9 @@ static int __devinit cafe_nand_probe(struct pci_dev *pdev,
 	if (nr_parts > 0) {
 		cafe->parts = parts;
 		dev_info(&cafe->pdev->dev, "%d partitions found\n", nr_parts);
-		mtd_device_register(mtd, parts, nr_parts);
+		add_mtd_partitions(mtd, parts, nr_parts);
 	}
+#endif
 	goto out;
 
  out_irq:
@@ -832,6 +837,7 @@ static void __devexit cafe_nand_remove(struct pci_dev *pdev)
 	struct mtd_info *mtd = pci_get_drvdata(pdev);
 	struct cafe_priv *cafe = mtd->priv;
 
+	del_mtd_device(mtd);
 	/* Disable NAND IRQ in global IRQ mask register */
 	cafe_writel(cafe, ~1 & cafe_readl(cafe, GLOBAL_IRQ_MASK), GLOBAL_IRQ_MASK);
 	free_irq(pdev->irq, mtd);
@@ -842,7 +848,7 @@ static void __devexit cafe_nand_remove(struct pci_dev *pdev)
 	kfree(mtd);
 }
 
-static const struct pci_device_id cafe_nand_tbl[] = {
+static struct pci_device_id cafe_nand_tbl[] = {
 	{ PCI_VENDOR_ID_MARVELL, PCI_DEVICE_ID_MARVELL_88ALP01_NAND,
 	  PCI_ANY_ID, PCI_ANY_ID },
 	{ }

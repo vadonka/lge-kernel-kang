@@ -41,217 +41,6 @@
 #include "ap15/ap15rm_private.h"
 #include "ap15/project_relocation_table.h"
 
-//Spica OTF Start
-#ifdef CONFIG_SPICA_OTF
-
-#include <linux/spica.h>
-static struct proc_dir_entry *spica_dir;
-
-/* GPU Freq */
-#ifdef CONFIG_OTF_GPU
-#define GPU_PROCFS_NAME "gpufreq"
-#define GPU_PROCFS_SIZE 8
-static struct proc_dir_entry *GPU_Proc_File;
-static char procfs_buffer_gpu[GPU_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_gpu = 0;
-extern unsigned int GPULOW; // Min GPU freq
-extern unsigned int GPUHIGH; // Max GPU freq
-int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "gpu_procfile_read (/proc/spica/%s) called\n", GPU_PROCFS_NAME);
-if (offset > 0) {
-	ret = 0;
-} else {
-	memcpy(buffer, procfs_buffer_gpu, procfs_buffer_size_gpu);
-	ret = procfs_buffer_size_gpu;
-}
-return ret;
-}
-
-int gpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_gpu;
-temp_gpu = 0;
-if ( sscanf(buffer,"%d",&temp_gpu) < 1 ) return procfs_buffer_size_gpu;
-if ( temp_gpu < GPULOW || temp_gpu > GPUHIGH ) return procfs_buffer_size_gpu;
-
-procfs_buffer_size_gpu = count;
-if (procfs_buffer_size_gpu > GPU_PROCFS_SIZE ) {
-	procfs_buffer_size_gpu = GPU_PROCFS_SIZE;
-}
-if ( copy_from_user(procfs_buffer_gpu, buffer, procfs_buffer_size_gpu) ) {
-	printk(KERN_INFO "buffer_size error\n");
-	return -EFAULT;
-}
-sscanf(procfs_buffer_gpu,"%u",&GPUFREQ);
-return procfs_buffer_size_gpu;
-}
-
-static int __init init_gpu_procsfs(void) {
-GPU_Proc_File = spica_add(GPU_PROCFS_NAME);
-if (GPU_Proc_File == NULL) {
-	spica_remove(GPU_PROCFS_NAME);
-	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPU_PROCFS_NAME);
-	return -ENOMEM;
-} else {
-	GPU_Proc_File->read_proc = gpu_procfile_read;
-	GPU_Proc_File->write_proc = gpu_procfile_write;
-	GPU_Proc_File->mode = S_IFREG | S_IRUGO;
-	GPU_Proc_File->uid = 0;
-	GPU_Proc_File->gid = 0;
-	GPU_Proc_File->size = 37;
-	sprintf(procfs_buffer_gpu,"%d",GPUFREQ);
-	procfs_buffer_size_gpu = strlen(procfs_buffer_gpu);
-	printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_gpu_procsfs);
-
-static void __exit cleanup_gpu_procsfs(void) {
-spica_remove(GPU_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
-}
-module_exit(cleanup_gpu_procsfs);
-#endif // OTF_GPU
-
-/* AVP Freq */
-#ifdef CONFIG_OTF_AVP
-#define AVP_PROCFS_NAME "avpfreq"
-#define AVP_PROCFS_SIZE 8
-static struct proc_dir_entry *AVP_Proc_File;
-static char procfs_buffer_avp[AVP_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_avp = 0;
-extern unsigned int AVPLOW;
-extern unsigned int AVPHIGH;
-int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-int ret;
-printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
-if (offset > 0) {
-	ret = 0;
-} else {
-	memcpy(buffer, procfs_buffer_avp, procfs_buffer_size_avp);
-	ret = procfs_buffer_size_avp;
-}
-return ret;
-}
-
-int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-int temp_avp;
-temp_avp = 0;
-if ( sscanf(buffer,"%d",&temp_avp) < 1 ) return procfs_buffer_size_avp;
-if ( temp_avp < AVPLOW || temp_avp > AVPHIGH ) return procfs_buffer_size_avp;
-
-procfs_buffer_size_avp = count;
-if (procfs_buffer_size_avp > AVP_PROCFS_SIZE ) {
-	procfs_buffer_size_avp = AVP_PROCFS_SIZE;
-}
-if ( copy_from_user(procfs_buffer_avp, buffer, procfs_buffer_size_avp) ) {
-	printk(KERN_INFO "buffer_size error\n");
-	return -EFAULT;
-}
-sscanf(procfs_buffer_avp,"%u",&AVPFREQ);
-return procfs_buffer_size_avp;
-}
-
-static int __init init_avp_procsfs(void)
-{
-AVP_Proc_File = spica_add(AVP_PROCFS_NAME);
-if (AVP_Proc_File == NULL) {
-	spica_remove(AVP_PROCFS_NAME);
-	printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", AVP_PROCFS_NAME);
-	return -ENOMEM;
-} else {
-	AVP_Proc_File->read_proc = avp_procfile_read;
-	AVP_Proc_File->write_proc = avp_procfile_write;
-	AVP_Proc_File->mode = S_IFREG | S_IRUGO;
-	AVP_Proc_File->uid = 0;
-	AVP_Proc_File->gid = 0;
-	AVP_Proc_File->size = 37;
-	sprintf(procfs_buffer_avp,"%d",AVPFREQ);
-	procfs_buffer_size_avp = strlen(procfs_buffer_avp);
-	printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
-}
-return 0;
-}
-module_init(init_avp_procsfs);
-
-static void __exit cleanup_avp_procsfs(void) {
-spica_remove(AVP_PROCFS_NAME);
-printk(KERN_INFO "/proc/spica/%s removed\n", AVP_PROCFS_NAME);
-}
-module_exit(cleanup_avp_procsfs);
-#endif // OTF_AVP
-#endif // SPICA_OTF
-
-#ifdef CONFIG_FAKE_SHMOO
-#include <linux/kernel.h>
-/*
- * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
- *
- * Improved by Benee @ https://github.com/VorkTeam/vorkKernel-LGP990
- * Cleaned up and re-organized by Faux123 @ https://github.com/faux123
- */
-/* DEFAULT LG P990 VALUES */
-
-// Maximum recommanded voltage increment per step (by nvidia) -> 100mV
-
-// TEGRA_OC: max cpu low temp: -64
-// TEGRA_OC: max cpu high temp: 60
-// TEGRA_OC: min mV -> 770
-// TEGRA_OC: max mV -> 1000
-// TEGRA_OC: mV[0]-> 750 (770 real)
-// TEGRA_OC: mV[1]-> 800
-// TEGRA_OC: mV[2]-> 850
-// TEGRA_OC: mV[3]-> 875
-// TEGRA_OC: mV[4]-> 950
-// TEGRA_OC: mV[5]-> 1000
-// TEGRA_OC: Hz[0]-> 389000
-// TEGRA_OC: Hz[1]-> 503000
-// TEGRA_OC: Hz[2]-> 655000
-// TEGRA_OC: Hz[3]-> 760000
-// TEGRA_OC: Hz[4]-> 950000
-// TEGRA_OC: Hz[5]-> 1015000
-// TEGRA_OC: Hz[6]-> 1100000 // unused
-// TEGRA_OC: Hz[7]-> 1216000 // unused
-// TEGRA_OC: HwDeviceId-> 101
-// TEGRA_OC: SubClockId-> 0
-// TEGRA_OC: MinKHz-> 32
-
-// Pointer to fake CpuShmoo values
-NvRmCpuShmoo fake_CpuShmoo;
-
-// Max voltage index in the voltage tab (size-1)
-// Total of 7 available spots for P99x/SU660
-NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
-
-NvU32 FakeShmooVoltages[] = {
-    790,
-    830,
-    880,
-    900,
-    930,
-    1020,
-    1155,
-    CONFIG_MAX_CPU_OC_VOLT,
-};
-
-NvRmScaledClkLimits FakepScaledCpuLimits = {
-    101, // FakepScaledCpuLimits.HwDeviceId
-    0, // FakepScaledCpuLimits.SubClockId
-    32, // FakepScaledCpuLimits.MinKHz
-    // Clock table
-    {
-        216000,
-        324000,
-        503000,
-        655000,
-        800000,
-        1015000,
-        1216000,
-        CONFIG_MAX_CPU_OC_FREQ,
-    }
-};
-#endif // CONFIG_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \
          (s_ChipFlavor.pSocShmoo->ShmooVoltages[(step)])
@@ -333,11 +122,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 {
     NvU32 i;
     NvRmFreqKHz CpuMaxKHz, AvpMaxKHz, VdeMaxKHz, TDMaxKHz, DispMaxKHz;
-#if defined(CONFIG_FAKE_SHMOO) || defined(CONFIG_BOOST_PERIPHERALS)
-    NvRmSKUedLimits* pSKUedLimits;
-#else
     const NvRmSKUedLimits* pSKUedLimits;
-#endif
     const NvRmScaledClkLimits* pHwLimits;
     const NvRmSocShmoo* pShmoo;
 
@@ -346,18 +131,6 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     pShmoo = s_ChipFlavor.pSocShmoo;
     pHwLimits = &pShmoo->ScaledLimitsList[0];
     pSKUedLimits = pShmoo->pSKUedLimits;
-#ifdef CONFIG_FAKE_SHMOO
-    // override default with configuration values
-    // CPU clock duh!
-    pSKUedLimits->CpuMaxKHz = CONFIG_MAX_CPU_OC_FREQ;
-#endif
-
-#ifdef CONFIG_BOOST_PERIPHERALS
-    // AVP clock
-    pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
-    // 3D GPU clock
-    pSKUedLimits->TDMaxKHz = CONFIG_MAX_GPU_OC_FREQ;
-#endif
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
 
@@ -369,12 +142,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // Combine AVP/System clock absolute limit with scaling V/F ladder upper
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
-
-#ifdef CONFIG_OTF_AVP
-    AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
-#else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
-#endif
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
     {
         if (pHwLimits[i].HwDeviceId == NV_DEVID_AVP)
@@ -421,14 +189,6 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
             s_pClockScales[id] = pHwLimits[i].MaxKHzList;
         }
     }
-
-#ifdef CONFIG_BOOST_PERIPHERALS
-    s_ClockRangeLimits[NvRmModuleID_Avp].MaxKHz = CONFIG_MAX_AVP_OC_FREQ;
-    s_ClockRangeLimits[NvRmModuleID_2D].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = CONFIG_MAX_GPU_OC_FREQ;
-    s_ClockRangeLimits[NvRmModuleID_Epp].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
-#endif
-
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)
@@ -500,18 +260,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-
-#ifdef CONFIG_OTF_GPU
-    TDMaxKHz = GPUFREQ; // pSKUedLimits->TDMaxKHz;
-    TDMaxKHz = NV_MIN(
-        TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUFREQ;
-#else
     TDMaxKHz = pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(
         TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
-#endif // OTF_GPU
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)
@@ -628,21 +380,12 @@ NvRmPrivModuleVscaleGetMV(
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
     {
-#ifdef CONFIG_FAKE_SHMOO
-        for (i = 0; i < fake_CpuShmoo.ShmooVmaxIndex; i++)
-        {
-            if (FreqKHz <= pScale[i])
-                break;
-        }
-        return fake_CpuShmoo.ShmooVoltages[i];
-#else
         for (i = 0; i < s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex; i++)
         {
             if (FreqKHz <= pScale[i])
                 break;
         }
         return s_ChipFlavor.pCpuShmoo->ShmooVoltages[i];
-#endif
     }
     // Use common ladder for all other modules or CPU on core rail
     for (i = 0; i < s_ChipFlavor.pSocShmoo->ShmooVmaxIndex; i++)
@@ -664,11 +407,7 @@ NvRmPrivModuleVscaleGetMaxKHzList(
 
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
-#ifdef CONFIG_FAKE_SHMOO
-        *pListSize = fake_CpuShmoo.ShmooVmaxIndex + 1;
-#else
         *pListSize = s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex + 1;
-#endif
     else
         *pListSize = s_ChipFlavor.pSocShmoo->ShmooVmaxIndex + 1;
 
@@ -1151,14 +890,6 @@ static NvError NvRmBootArgChipShmooGet(
         // Shmoo data for dedicated CPU domain
         pChipFlavor->pCpuShmoo = &s_CpuShmoo;
 
-#ifdef CONFIG_FAKE_SHMOO
-        s_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
-        s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
-        s_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
-        fake_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
-        fake_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
-        fake_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
-#else
         offset = BootArgSh.CpuShmooVoltagesListOffset;
         size = BootArgSh.CpuShmooVoltagesListSize;
         NV_ASSERT (offset + size <= TotalSize);
@@ -1174,7 +905,6 @@ static NvError NvRmBootArgChipShmooGet(
         s_CpuShmoo.pScaledCpuLimits =
             (const NvRmScaledClkLimits*)((NvUPtr)s_pShmooData + offset);
         NV_ASSERT(size == sizeof(*s_CpuShmoo.pScaledCpuLimits));
-#endif
     }
     else
     {

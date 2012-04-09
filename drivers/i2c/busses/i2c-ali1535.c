@@ -60,7 +60,7 @@
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/acpi.h>
-#include <linux/io.h>
+#include <asm/io.h>
 
 
 /* ALI1535 SMBus address offsets */
@@ -138,9 +138,9 @@ static unsigned short ali1535_smba;
    Note the differences between kernels with the old PCI BIOS interface and
    newer kernels with the real PCI interface. In compat.h some things are
    defined to make the transition easier. */
-static int __devinit ali1535_setup(struct pci_dev *dev)
+static int ali1535_setup(struct pci_dev *dev)
 {
-	int retval;
+	int retval = -ENODEV;
 	unsigned char temp;
 
 	/* Check the following things:
@@ -155,7 +155,6 @@ static int __devinit ali1535_setup(struct pci_dev *dev)
 	if (ali1535_smba == 0) {
 		dev_warn(&dev->dev,
 			"ALI1535_smb region uninitialized - upgrade BIOS?\n");
-		retval = -ENODEV;
 		goto exit;
 	}
 
@@ -168,7 +167,6 @@ static int __devinit ali1535_setup(struct pci_dev *dev)
 			    ali1535_driver.name)) {
 		dev_err(&dev->dev, "ALI1535_smb region 0x%x already in use!\n",
 			ali1535_smba);
-		retval = -EBUSY;
 		goto exit;
 	}
 
@@ -176,7 +174,6 @@ static int __devinit ali1535_setup(struct pci_dev *dev)
 	pci_read_config_byte(dev, SMBCFG, &temp);
 	if ((temp & ALI1535_SMBIO_EN) == 0) {
 		dev_err(&dev->dev, "SMB device not enabled - upgrade BIOS?\n");
-		retval = -ENODEV;
 		goto exit_free;
 	}
 
@@ -184,7 +181,6 @@ static int __devinit ali1535_setup(struct pci_dev *dev)
 	pci_read_config_byte(dev, SMBHSTCFG, &temp);
 	if ((temp & 1) == 0) {
 		dev_err(&dev->dev, "SMBus controller not enabled - upgrade BIOS?\n");
-		retval = -ENODEV;
 		goto exit_free;
 	}
 
@@ -202,11 +198,12 @@ static int __devinit ali1535_setup(struct pci_dev *dev)
 	dev_dbg(&dev->dev, "SMBREV = 0x%X\n", temp);
 	dev_dbg(&dev->dev, "ALI1535_smba = 0x%X\n", ali1535_smba);
 
-	return 0;
+	retval = 0;
+exit:
+	return retval;
 
 exit_free:
 	release_region(ali1535_smba, ALI1535_SMB_IOSIZE);
-exit:
 	return retval;
 }
 
@@ -298,7 +295,7 @@ static int ali1535_transaction(struct i2c_adapter *adap)
 	}
 
 	/* Unfortunately the ALI SMB controller maps "no response" and "bus
-	 * collision" into a single bit. No response is the usual case so don't
+	 * collision" into a single bit. No reponse is the usual case so don't
 	 * do a printk.  This means that bus collisions go unreported.
 	 */
 	if (temp & ALI1535_STS_BUSERR) {
@@ -483,7 +480,7 @@ static struct i2c_adapter ali1535_adapter = {
 	.algo		= &smbus_algorithm,
 };
 
-static const struct pci_device_id ali1535_ids[] = {
+static struct pci_device_id ali1535_ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M7101) },
 	{ },
 };

@@ -71,7 +71,6 @@ static const NvOdmDownloadTransport
 s_NvOdmQueryDownloadTransportSetting = NvOdmDownloadTransport_None;
 
 
-
 #if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
@@ -113,11 +112,11 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
             0x00000008,   /* TCLKSTABLE */
             0x00000002,   /* TCLKSTOP */
             0x0000004b,   /* TREFBW */
-            0x00000004,   /* QUSE_EXTRA */
+            0x00000000,   /* QUSE_EXTRA */
             0x00000003,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
+            0x00000282,   /* FBIO_CFG5 */
             0xa06804ae,   /* CFG_DIG_DLL */
             0x0001f000,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
@@ -167,11 +166,11 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
             0x00000008,   /* TCLKSTABLE */
             0x00000002,   /* TCLKSTOP */
             0x00000071,   /* TREFBW */
-            0x00000004,   /* QUSE_EXTRA */
+            0x00000000,   /* QUSE_EXTRA */
             0x00000003,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
+            0x00000282,   /* FBIO_CFG5 */
             0xa06804ae,   /* CFG_DIG_DLL */
             0x0001f000,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
@@ -221,11 +220,11 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
             0x00000008,   /* TCLKSTABLE */
             0x00000002,   /* TCLKSTOP */
             0x000000e1,   /* TREFBW */
-            0x00000005,   /* QUSE_EXTRA */
+            0x00000000,   /* QUSE_EXTRA */
             0x00000000,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
+            0x00000282,   /* FBIO_CFG5 */
             0xa06804ae,   /* CFG_DIG_DLL */
             0x0001f000,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
@@ -275,11 +274,11 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
             0x00000008,   /* TCLKSTABLE */
             0x00000002,   /* TCLKSTOP */
             0x000001c2,   /* TREFBW */
-            0x00000005,   /* QUSE_EXTRA */
+            0x00000000,   /* QUSE_EXTRA */
             0x00000001,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
+            0x00000282,   /* FBIO_CFG5 */
             0xa06804ae,   /* CFG_DIG_DLL */
             0x007f9010,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
@@ -329,11 +328,11 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
             0x00000008,   /* TCLKSTABLE */
             0x00000002,   /* TCLKSTOP */
             0x00000270,   /* TREFBW */
-            0x00000005,   /* QUSE_EXTRA */
+            0x00000000,   /* QUSE_EXTRA */
             0x00000001,   /* FBIO_CFG6 */
             0x00000000,   /* ODT_WRITE */
             0x00000000,   /* ODT_READ */
-            0x00000082,   /* FBIO_CFG5 */
+            0x00000282,   /* FBIO_CFG5 */
             0xa04c04ae,   /* CFG_DIG_DLL */
             0x007fb010,   /* DLL_XFORM_DQS */
             0x00000000,   /* DLL_XFORM_QUSE */
@@ -347,8 +346,8 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
-  CONFIG_EMC_CORE_VOLT,   /* EMC core voltage */
+                300000,   /* SDRAM frquency */
+                  1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
             0x00000012,   /* RC */
@@ -675,8 +674,8 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
-  CONFIG_EMC_CORE_VOLT,   /* EMC core voltage */
+                300000,   /* SDRAM frquency */
+                  1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
 					  0x00000012,	/* RC */
@@ -738,26 +737,26 @@ static NvOdmQuerySdioInterfaceProperty s_NvOdmQuerySdioInterfaceProperty[4] =
 
     {NV_FALSE, 10, NV_TRUE,  6, NvOdmQuerySdioSlotUsage_wlan},
     {NV_FALSE,  0, NV_FALSE, 6, NvOdmQuerySdioSlotUsage_unused}, //SDIO2 is not used.
-//20100928, , change removable option and setting time [START]
+//20100928, jm1.lee@lge.com, change removable option and setting time [START]
 #if defined (CONFIG_MACH_STAR)
     {NV_TRUE, 10, NV_TRUE, 6, NvOdmQuerySdioSlotUsage_Media}, // micro SD, Removable, Settling time is 10ms. Dedicated to LDO10 power
 #else
     {NV_FALSE, 500, NV_FALSE, 6, NvOdmQuerySdioSlotUsage_Media}, // micro SD, Removable, Settling time is 500ms. 500ms should be adjusted/optimized later again. Dedicated to LDO10 power
 #endif
-//20100928, , change removable option and setting time [END]
+//20100928, jm1.lee@lge.com, change removable option and setting time [END]
     {NV_FALSE, 10, NV_TRUE,  6, NvOdmQuerySdioSlotUsage_Boot},
 };
 
 
 // Wake Events
-//20100413, , wakeup control [START]
+//20100413, cs77.ha@lge.com, wakeup control [START]
 #if defined (CONFIG_MACH_STAR)
 static NvOdmWakeupPadInfo s_NvOdmWakeupPadInfo[] =
 {
-#ifdef CONFIG_MACH_STAR_TMUS
+#if defined (CONFIG_MODEM_MDM)
     {NV_FALSE,  0, NvOdmWakeupPadPolarity_High},    // Wake Event  0 - ulpi_data4 (IPC_SRDY2)    high??
-#else
-    {NV_TRUE,  0, NvOdmWakeupPadPolarity_High},    // Wake Event  0 - ulpi_data4 (IPC_SRDY2)    high??
+#elif defined (CONFIG_MODEM_IFX)
+    {NV_TRUE,   0, NvOdmWakeupPadPolarity_High},    // Wake Event  0 - ulpi_data4 (IPC_SRDY)    high??
 #endif
     {NV_FALSE,  1, NvOdmWakeupPadPolarity_High},    // Wake Event  1 - gp3_pv[3] (IPC_RESET_FLAG)
     {NV_FALSE,  2, NvOdmWakeupPadPolarity_High},    // Wake Event  2 - dvi_d3
@@ -765,22 +764,22 @@ static NvOdmWakeupPadInfo s_NvOdmWakeupPadInfo[] =
     {NV_FALSE,  4, NvOdmWakeupPadPolarity_High},    // Wake Event  4 - hdmi_int (HDMI_INT_N)
     {NV_FALSE/*NV_TRUE*/,   5, NvOdmWakeupPadPolarity_High},    // Wake Event  5 - vgp[6] (proxi_out)
     {NV_FALSE,  6, NvOdmWakeupPadPolarity_High},    // Wake Event  6 - gp3_pu[5] (VIB_EN)
-#ifdef CONFIG_MACH_STAR_TMUS
+#if defined (CONFIG_MODEM_MDM)
     {NV_TRUE,   7, NvOdmWakeupPadPolarity_High}, // Wake Event  7 - gp3_pu[6] (IPC_SRDY1)
-#else
-    {NV_FALSE,  7, NvOdmWakeupPadPolarity_AnyEdge}, // Wake Event  7 - gp3_pu[6] (VIB_PWM)
+#elif defined (CONFIG_MODEM_IFX)
+	{NV_FALSE,  7, NvOdmWakeupPadPolarity_AnyEdge}, // Wake Event  7 - gp3_pu[6] (VIB_PWM)
 #endif
     {NV_TRUE,   8, NvOdmWakeupPadPolarity_AnyEdge},    // Wake Event  8 - gmi_wp_n (BT_HOST_WAKEUP)
-    {NV_TRUE,   9, NvOdmWakeupPadPolarity_AnyEdge},     // Wake Event  9 - gp3_ps[2] (CHG_STATUS_N_AP20)
+    {NV_FALSE/*NV_TRUE*/,   9, NvOdmWakeupPadPolarity_AnyEdge},     // Wake Event  9 - gp3_ps[2] (CHG_STATUS_N_AP20)
     {NV_FALSE, 10, NvOdmWakeupPadPolarity_High},    // Wake Event 10 - gmi_ad21
-    {NV_TRUE,  11, NvOdmWakeupPadPolarity_Low},     // Wake Event 11 - spi2_cs2 (BATT_LOW_INT_N)
-    {NV_TRUE,  12, NvOdmWakeupPadPolarity_Low},     // Wake Event 12 - proxi_out
+    {NV_FALSE/*NV_TRUE*/,  11, NvOdmWakeupPadPolarity_Low},     // Wake Event 11 - spi2_cs2 (BATT_LOW_INT_N)
+    {NV_FALSE, 12, NvOdmWakeupPadPolarity_Low},     // Wake Event 12 - spi2_cs1 (AUDIO_INT_N)
     {NV_TRUE/*NV_FALSE*/, 13, NvOdmWakeupPadPolarity_Low},     // Wake Event 13 - sdio1_dat1
     {NV_FALSE, 14, NvOdmWakeupPadPolarity_AnyEdge}, // Wake Event 14 - gp3_pv[6]
     {NV_FALSE, 15, NvOdmWakeupPadPolarity_AnyEdge}, // Wake Event 15 - gmi_ad16
     {NV_FALSE, 16, NvOdmWakeupPadPolarity_High},    // Wake Event 16 - rtc_irq
     {NV_FALSE, 17, NvOdmWakeupPadPolarity_High},    // Wake Event 17 - kbc_interrupt
-    {NV_TRUE,  18, NvOdmWakeupPadPolarity_Low},     // Wake Event 18 - pwr_int (PMIC_INT)  //20100928, , PMU interrupt enable for RTC alarm
+    {NV_TRUE,  18, NvOdmWakeupPadPolarity_Low},     // Wake Event 18 - pwr_int (PMIC_INT)  //20100928, byoungwoo.yoon@lge.com, PMU interrupt enable for RTC alarm
     {NV_TRUE,  19, NvOdmWakeupPadPolarity_AnyEdge}, // Wake Event 19 - usb_vbus_wakeup[0] (USB_OUT_5V)
     {NV_FALSE, 20, NvOdmWakeupPadPolarity_High},    // Wake Event 20 - usb_vbus_wakeup[1]
     {NV_FALSE, 21, NvOdmWakeupPadPolarity_Low},     // Wake Event 21 - usb_iddig[0]
@@ -792,12 +791,12 @@ static NvOdmWakeupPadInfo s_NvOdmWakeupPadInfo[] =
     {NV_FALSE/*NV_TRUE*/, 27, NvOdmWakeupPadPolarity_High},    // Wake Event 27 - gp3_ps[0] (WLAN_HOST_WAKEUP_N)
     {NV_FALSE, 28, NvOdmWakeupPadPolarity_Low},     // Wake Event 28 - gp3_pq[6] (KB_ROW6)
     {NV_FALSE, 29, NvOdmWakeupPadPolarity_Low},     // Wake Event 29 - gp3_pq[7] (KB_ROW6)
-    {NV_FALSE, 30, NvOdmWakeupPadPolarity_High},    // Wake Event 30 - dap1_dout (DAP1_DOUT)
+    {NV_FALSE, 30, NvOdmWakeupPadPolarity_High}     // Wake Event 30 - dap1_dout (DAP1_DOUT)
 };
 #else
 #error STAR_HW not assigned
 #endif
-//20100413, , wakeup control [END]
+//20100413, cs77.ha@lge.com, wakeup control [END]
 
 /* --- Function Implementations ---*/
 
@@ -894,21 +893,29 @@ NvOdmQuerySpiGetDeviceInfo(
     NvU32 ChipSelect)
 {
 #ifdef CONFIG_SPI_TEGRA
-    static const NvOdmQuerySpiDeviceInfo s_Spi1Cs0Info_IfxRil =
-	 {NvOdmQuerySpiSignalMode_1, NV_FALSE, NV_FALSE};//{NvOdmQuerySpiSignalMode_1, NV_TRUE, NV_FALSE, NV_FALSE, 0, 0};
+	static const NvOdmQuerySpiDeviceInfo s_Spi1Cs0Info_IfxRil =
+#if defined (CONFIG_MODEM_MDM)
+	 {NvOdmQuerySpiSignalMode_1, NV_TRUE, NV_FALSE, NV_FALSE, 0, 0};
+#elif defined (CONFIG_MODEM_IFX)
+	{NvOdmQuerySpiSignalMode_1, NV_FALSE, NV_FALSE};
+#endif
 #else
     static const NvOdmQuerySpiDeviceInfo s_Spi1Cs0Info_IfxRil =
-        {NvOdmQuerySpiSignalMode_1, NV_TRUE, NV_TRUE, NV_FALSE, 0, 0};	//	{NvOdmQuerySpiSignalMode_1, NV_FALSE, NV_FALSE};
+        {NvOdmQuerySpiSignalMode_1, NV_TRUE, NV_TRUE, NV_FALSE, 0, 0};	//syblue.lee@lge.com	{NvOdmQuerySpiSignalMode_1, NV_FALSE, NV_FALSE};
 #endif
-//20100809-1, , Add SPI2 for AP-CP IPC [START]
+//20100809-1, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [START]
 #ifdef CONFIG_DUAL_SPI
 	static const NvOdmQuerySpiDeviceInfo s_Spi2Cs0Info =
 		{NvOdmQuerySpiSignalMode_1, NV_TRUE, NV_TRUE, NV_FALSE, 0, 0};
 #else
-	static const NvOdmQuerySpiDeviceInfo s_Spi2Cs0Info =
-        {NvOdmQuerySpiSignalMode_3, NV_TRUE, NV_FALSE};//{NvOdmQuerySpiSignalMode_3, NV_TRUE, NV_FALSE, NV_FALSE, 0, 0};
+    static const NvOdmQuerySpiDeviceInfo s_Spi2Cs0Info =
+#if defined (CONFIG_MODEM_MDM)
+        {NvOdmQuerySpiSignalMode_3, NV_TRUE, NV_FALSE, NV_FALSE, 0, 0};
+#elif defined (CONFIG_MODEM_IFX)
+		{NvOdmQuerySpiSignalMode_3, NV_TRUE, NV_FALSE};
 #endif
-//20100809, , Add SPI2 for AP-CP IPC [END]
+#endif
+//20100809, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [END]
 
     if ((OdmIoModule == NvOdmIoModule_Spi) &&
         (ControllerId == 0 ) && (ChipSelect == 0))
@@ -921,29 +928,29 @@ NvOdmQuerySpiGetDeviceInfo(
     return NULL;
 }
 
-//20101204-1, , NVIDIA's patch for setting signal level during idle state [START]
+//20101204-1, syblue.lee@lge.com, NVIDIA's patch for setting signal level during idle state [START]
 static const NvOdmQuerySpiIdleSignalState s_NvOdmQuerySpiIdleSignalStateLevel[] = 
 { 
 	{NV_FALSE, NvOdmQuerySpiSignalMode_1, NV_FALSE} // Spi 1 
 }; 
 
-const NvOdmQuerySpiIdleSignalState *
-NvOdmQuerySpiGetIdleSignalState(
-	NvOdmIoModule OdmIoModule,
-	NvU32 ControllerId)
+const NvOdmQuerySpiIdleSignalState * 
+NvOdmQuerySpiGetIdleSignalState( 
+	NvOdmIoModule OdmIoModule, 
+	NvU32 ControllerId) 
 { 
-	if (OdmIoModule == NvOdmIoModule_Spi)
+	if (OdmIoModule == NvOdmIoModule_Spi) 
 	{ 
 		if (ControllerId == 0) 
-			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
-#ifdef CONFIG_MACH_STAR_TMUS
+			return &s_NvOdmQuerySpiIdleSignalStateLevel[0]; 		
+#if defined (CONFIG_MODEM_MDM)
 		else if (ControllerId == 1) 
-			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
+			return &s_NvOdmQuerySpiIdleSignalStateLevel[0]; 
 #endif
 	} 
-	return NULL;
+	return NULL; 
 } 
-//20101204-1, , NVIDIA's patch for setting signal level during idle state [END]
+//20101204-1, syblue.lee@lge.com, NVIDIA's patch for setting signal level during idle state [END]
 
 const NvOdmQueryI2sInterfaceProperty *
 NvOdmQueryI2sGetInterfaceProperty(
@@ -973,16 +980,16 @@ NvOdmQueryDapPortGetProperty(
         { NvOdmDapPort_None, NvOdmDapPort_None, { 0, 0, 0, 0 } },
         // I2S1 (DAC1) <-> DAP1 <-> HIFICODEC
         { NvOdmDapPort_I2s1, NvOdmDapPort_HifiCodecType,
-          { 2, 24, 48000, NvOdmQueryI2sDataCommFormat_I2S } }, // Dap1
+          { 2, 16, 44100, NvOdmQueryI2sDataCommFormat_I2S } }, // Dap1
         // I2S2 (DAC2) <-> DAP2 <-> VOICECODEC
         {NvOdmDapPort_I2s2, NvOdmDapPort_VoiceCodecType,
-          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_Dsp } },   // Dap2
+          {2, 16, 8000, NvOdmQueryI2sDataCommFormat_Dsp } },   // Dap2
         // I2S2 (DAC2) <-> DAP3 <-> BASEBAND
         {NvOdmDapPort_I2s2, NvOdmDapPort_BaseBand,
-          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap3
+          {2, 16, 8000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap3
         // I2S2 (DAC2) <-> DAP4 <-> BLUETOOTH
         {NvOdmDapPort_I2s2, NvOdmDapPort_BlueTooth,
-          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap4
+          {2, 16, 8000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap4
     };
 
     if (DapPortId && DapPortId<NV_ARRAY_SIZE(s_Property))
@@ -1150,30 +1157,25 @@ const NvU8* NvOdmQueryProjectName(void)
 #endif
 
     { NvOdmPinRegister_Ap20_PullUpDown_C,
-#ifdef CONFIG_MACH_STAR_REV_F
-     NVODM_QUERY_PIN_AP20_PULLUPDOWN_C(0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x2, 0x1, 0x2, 0x2, 0x2, 0x2, 0x0, 0x0, 0x0) },
-#else
-     NVODM_QUERY_PIN_AP20_PULLUPDOWN_C(0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x2, 0x2, 0x2, 0x2, 0x0, 0x0, 0x0) },	//20110120-2, , SPI2 pulldown setting : 5th 0x2->0x1
+#if defined (CONFIG_MODEM_MDM)
+     NVODM_QUERY_PIN_AP20_PULLUPDOWN_C(0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x2, 0x2, 0x2, 0x2, 0x0, 0x0, 0x0) },	//20110120-2, syblue.lee@lge.com, SPI2 pulldown setting : 5th 0x2->0x1
+#elif defined (CONFIG_MODEM_IFX)
+	 NVODM_QUERY_PIN_AP20_PULLUPDOWN_C(0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x2, 0x1, 0x2, 0x2, 0x2, 0x2, 0x0, 0x0, 0x0) },
 #endif
-
-	//20100810  LCD one shot mode
+	//20100810 km.lee@lge.com LCD one shot mode
     { NvOdmPinRegister_Ap20_PullUpDown_D,
-#ifdef CONFIG_MACH_STAR_REV_F
-     //UAB : pull up -> pull down
-     NVODM_QUERY_PIN_AP20_PULLUPDOWN_D(0x2, 0x1, 0x0, 0x2, 0x2, 0x2, 0x1, 0x1, 0x1, 0x1, 0x0, 0x0, 0x1, 0x0, 0x2, 0x2) },
-#else
+#if defined (CONFIG_MODEM_MDM)
      NVODM_QUERY_PIN_AP20_PULLUPDOWN_D(0x2, 0x2, 0x0, 0x2, 0x2, 0x2, 0x1, 0x1, 0x1, 0x1, 0x2, 0x0, 0x1, 0x0, 0x2, 0x2) },
+#elif defined (CONFIG_MODEM_IFX)
+     NVODM_QUERY_PIN_AP20_PULLUPDOWN_D(0x2, 0x1, 0x0, 0x2, 0x2, 0x2, 0x1, 0x1, 0x1, 0x1, 0x0, 0x0, 0x1, 0x0, 0x2, 0x2) },
 #endif
-
-
     // Pull ups for the kbc pins
     { NvOdmPinRegister_Ap20_PullUpDown_E,
-#ifdef CONFIG_MACH_STAR_REV_F
-     NVODM_QUERY_PIN_AP20_PULLUPDOWN_E(0x2, 0x2, 0x0, 0x0, 0x0, 0x0, 0x2, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2, 0x2) },
-#else
+#if defined (CONFIG_MODEM_MDM)
      NVODM_QUERY_PIN_AP20_PULLUPDOWN_E(0x2, 0x2, 0x0, 0x0, 0x0, 0x0, 0x2, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2, 0x2) },
+#elif defined (CONFIG_MODEM_IFX)
+     NVODM_QUERY_PIN_AP20_PULLUPDOWN_E(0x2, 0x2, 0x0, 0x0, 0x0, 0x0, 0x2, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x2, 0x2) },	
 #endif
-
     // Set pad control for the sdio2 - - AOCFG1 and AOCFG2 pad control register
     { NvOdmPinRegister_Ap20_PadCtrl_AOCFG1PADCTRL,
       NVODM_QUERY_PIN_AP20_PADCTRL_AOCFG1PADCTRL(!HIGHSPEED, SCHMITT, OHM_50, 31, 31, 3, 3) },
@@ -1225,15 +1227,15 @@ const NvU8* NvOdmQueryProjectName(void)
 
     { NvOdmPinRegister_Ap20_PadCtrl_DAP3CFGPADCTRL,
       NVODM_QUERY_PIN_AP20_PADCTRL_AOCFG1PADCTRL(!HIGHSPEED, SCHMITT, OHM_400, 0, 0, 0, 0) },
-//20101210-1, , Nvidia's patch for spi signal strength [START]
-#ifdef CONFIG_MACH_STAR_TMUS
+#if defined (CONFIG_MODEM_MDM)
+//20101210-1, sybue.lee@lge.com, Nvidia's patch for spi signal strength [START]
 	{ NvOdmPinRegister_Ap20_PadCtrl_SPICFGPADCTRL, // for spi2
 	NVODM_QUERY_PIN_AP20_PADCTRL_AOCFG1PADCTRL(!HIGHSPEED, SCHMITT, OHM_50, 31, 31, 3, 3) },
 
 	{ NvOdmPinRegister_Ap20_PadCtrl_UADCFGPADCTRL, // for spi1
 	NVODM_QUERY_PIN_AP20_PADCTRL_AOCFG1PADCTRL(!HIGHSPEED, SCHMITT, OHM_50, 31, 31, 3, 3) },
+//20101210-1, sybue.lee@lge.com, Nvidia's patch for spi signal strength [END]
 #endif
-//20101210-1, , Nvidia's patch for spi signal strength [END]
 };
 
 
@@ -1252,7 +1254,7 @@ NvBool NvOdmQueryGetPmuProperty(NvOdmPmuProperty* pPmuProperty)
     pPmuProperty->IrqConnected = NV_FALSE;
 #endif
 
-    pPmuProperty->IrqConnected = NV_TRUE; // 20100928, , RTC alarm enable 
+    pPmuProperty->IrqConnected = NV_TRUE; // 20100928, byoungwoo.yoon@lge.com, RTC alarm enable 
 
     pPmuProperty->PowerGoodCount = 0x7E7E;
     pPmuProperty->IrqPolarity = NvOdmInterruptPolarity_Low;
@@ -1263,33 +1265,33 @@ NvBool NvOdmQueryGetPmuProperty(NvOdmPmuProperty* pPmuProperty)
     pPmuProperty->CorePowerReqPolarity = NvOdmCorePowerReqPolarity_High;
     pPmuProperty->SysClockReqPolarity = NvOdmSysClockReqPolarity_High;
 #ifndef CONFIG_MACH_STAR
-	//20100917 one PMIC (max8907B)
+	//20100917 cs77.ha@lge.com one PMIC (max8907B)
     pPmuProperty->CombinedPowerReq = NV_TRUE;
 #else
-	//20100917 CPU power separated (max8907C + max8952)
+	//20100917 cs77.ha@lge.com CPU power separated (max8907C + max8952)
     pPmuProperty->CombinedPowerReq = NV_FALSE;
 #endif
     pPmuProperty->CpuPowerGoodUs = 2000;
     pPmuProperty->AccuracyPercent = 3;
 
-    //20100917 system hang issue.
+    //20100917 cs77.ha@lge.com system hang issue.
 #ifndef CONFIG_MACH_STAR
-	//20100917 voltage output is restored to default level (max8907)
+	//20100917 cs77.ha@lge.com voltage output is restored to default level (max8907)
     pPmuProperty->VCpuOTPOnWakeup = NV_TRUE;
 #else
-	//20100917 voltage output is restored to before status (max8952)
+	//20100917 cs77.ha@lge.com voltage output is restored to before status (max8952)
     pPmuProperty->VCpuOTPOnWakeup = NV_FALSE;
 #endif
 
     /* Setting Power off count for 100 ms  -32KHz clock rate*/
     pPmuProperty->PowerOffCount = 0xc00;
-    //20100918  system hang issue [START]
+    //20100918 taewan.kim@lge.com system hang issue [START]
 #ifndef CONFIG_MACH_STAR
     pPmuProperty->CpuPowerOffUs = 1000;
 #else
     pPmuProperty->CpuPowerOffUs = 1500;
 #endif
-    //20100918  system hang issue [END]
+    //20100918 taewan.kim@lge.com system hang issue [END]
     return NV_TRUE;
 }
 
@@ -1462,15 +1464,8 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 
 NvU32 NvOdmQueryCarveoutSize(void)
 {
-    //20100802  increase carveout memory
-#if 0
+    //20100802 taewan.kim@lge.com increase carveout memory
     return 0x08000000; // 128 MB <- 64MB
-#else
-    extern unsigned int nvmap_carveout_size;
-    /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
-    pr_info("%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
-    return nvmap_carveout_size;
-#endif
 }
 
 NvU32 NvOdmQuerySecureRegionSize(void)

@@ -172,7 +172,11 @@ static int nvec_mouse_receive_thread(void *arg)
 
 	/* mouse event thread should be frozen before suspending the
 	 * mouse and NVEC drivers */
-	set_freezable();
+
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
+	//set_freezable_with_signal();
+	  set_freezable();
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
 
 	if (!NvOdmMouseEnableInterrupt(mouse->hDevice, mouse->semaphore)) {
 		pr_err("**nvec_mouse_receive_thread: EnableInterrupt: fail\n");

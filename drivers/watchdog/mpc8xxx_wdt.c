@@ -2,9 +2,9 @@
  * mpc8xxx_wdt.c - MPC8xx/MPC83xx/MPC86xx watchdog userspace interface
  *
  * Authors: Dave Updegraff <dave@cray.org>
- *	    Kumar Gala <galak@kernel.crashing.org>
- *		Attribution: from 83xx_wst: Florian Schirmer <jolt@tuxbox.org>
- *				..and from sc520_wdt
+ * 	    Kumar Gala <galak@kernel.crashing.org>
+ * 		Attribution: from 83xx_wst: Florian Schirmer <jolt@tuxbox.org>
+ * 				..and from sc520_wdt
  * Copyright (c) 2008  MontaVista Software, Inc.
  *                     Anton Vorontsov <avorontsov@ru.mvista.com>
  *
@@ -53,7 +53,7 @@ static int mpc8xxx_wdt_init_late(void);
 static u16 timeout = 0xffff;
 module_param(timeout, ushort, 0);
 MODULE_PARM_DESC(timeout,
-	"Watchdog timeout in ticks. (0<timeout<65536, default=65535)");
+	"Watchdog timeout in ticks. (0<timeout<65536, default=65535");
 
 static int reset = 1;
 module_param(reset, bool, 0);
@@ -148,7 +148,7 @@ static long mpc8xxx_wdt_ioctl(struct file *file, unsigned int cmd,
 {
 	void __user *argp = (void __user *)arg;
 	int __user *p = argp;
-	static const struct watchdog_info ident = {
+	static struct watchdog_info ident = {
 		.options = WDIOF_KEEPALIVEPING,
 		.firmware_version = 1,
 		.identity = "MPC8xxx",
@@ -185,20 +185,14 @@ static struct miscdevice mpc8xxx_wdt_miscdev = {
 	.fops	= &mpc8xxx_wdt_fops,
 };
 
-static const struct of_device_id mpc8xxx_wdt_match[];
-static int __devinit mpc8xxx_wdt_probe(struct platform_device *ofdev)
+static int __devinit mpc8xxx_wdt_probe(struct of_device *ofdev,
+				       const struct of_device_id *match)
 {
 	int ret;
-	const struct of_device_id *match;
-	struct device_node *np = ofdev->dev.of_node;
-	struct mpc8xxx_wdt_type *wdt_type;
+	struct device_node *np = ofdev->node;
+	struct mpc8xxx_wdt_type *wdt_type = match->data;
 	u32 freq = fsl_get_sys_freq();
 	bool enabled;
-
-	match = of_match_device(mpc8xxx_wdt_match, &ofdev->dev);
-	if (!match)
-		return -EINVAL;
-	wdt_type = match->data;
 
 	if (!freq || freq == -1)
 		return -EINVAL;
@@ -244,7 +238,7 @@ err_unmap:
 	return ret;
 }
 
-static int __devexit mpc8xxx_wdt_remove(struct platform_device *ofdev)
+static int __devexit mpc8xxx_wdt_remove(struct of_device *ofdev)
 {
 	mpc8xxx_wdt_pr_warn("watchdog removed");
 	del_timer_sync(&wdt_timer);
@@ -278,13 +272,13 @@ static const struct of_device_id mpc8xxx_wdt_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mpc8xxx_wdt_match);
 
-static struct platform_driver mpc8xxx_wdt_driver = {
+static struct of_platform_driver mpc8xxx_wdt_driver = {
+	.match_table	= mpc8xxx_wdt_match,
 	.probe		= mpc8xxx_wdt_probe,
 	.remove		= __devexit_p(mpc8xxx_wdt_remove),
-	.driver = {
-		.name = "mpc8xxx_wdt",
-		.owner = THIS_MODULE,
-		.of_match_table = mpc8xxx_wdt_match,
+	.driver		= {
+		.name	= "mpc8xxx_wdt",
+		.owner	= THIS_MODULE,
 	},
 };
 
@@ -314,13 +308,13 @@ module_init(mpc8xxx_wdt_init_late);
 
 static int __init mpc8xxx_wdt_init(void)
 {
-	return platform_driver_register(&mpc8xxx_wdt_driver);
+	return of_register_platform_driver(&mpc8xxx_wdt_driver);
 }
 arch_initcall(mpc8xxx_wdt_init);
 
 static void __exit mpc8xxx_wdt_exit(void)
 {
-	platform_driver_unregister(&mpc8xxx_wdt_driver);
+	of_unregister_platform_driver(&mpc8xxx_wdt_driver);
 }
 module_exit(mpc8xxx_wdt_exit);
 

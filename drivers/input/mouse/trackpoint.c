@@ -8,7 +8,6 @@
  * Trademarks are the property of their respective owners.
  */
 
-#include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/serio.h>
 #include <linux/module.h>
@@ -285,6 +284,7 @@ static int trackpoint_reconnect(struct psmouse *psmouse)
 
 int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 {
+	struct trackpoint_data *priv;
 	struct ps2dev *ps2dev = &psmouse->ps2dev;
 	unsigned char firmware_id;
 	unsigned char button_info;
@@ -301,9 +301,9 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 		button_info = 0;
 	}
 
-	psmouse->private = kzalloc(sizeof(struct trackpoint_data), GFP_KERNEL);
-	if (!psmouse->private)
-		return -ENOMEM;
+	psmouse->private = priv = kzalloc(sizeof(struct trackpoint_data), GFP_KERNEL);
+	if (!priv)
+		return -1;
 
 	psmouse->vendor = "IBM";
 	psmouse->name = "TrackPoint";
@@ -311,10 +311,7 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 	psmouse->reconnect = trackpoint_reconnect;
 	psmouse->disconnect = trackpoint_disconnect;
 
-	if ((button_info & 0x0f) >= 3)
-		__set_bit(BTN_MIDDLE, psmouse->dev->keybit);
-
-	trackpoint_defaults(psmouse->private);
+	trackpoint_defaults(priv);
 	trackpoint_sync(psmouse);
 
 	error = sysfs_create_group(&ps2dev->serio->dev.kobj, &trackpoint_attr_group);
@@ -322,8 +319,7 @@ int trackpoint_detect(struct psmouse *psmouse, bool set_properties)
 		printk(KERN_ERR
 			"trackpoint.c: failed to create sysfs attributes, error: %d\n",
 			error);
-		kfree(psmouse->private);
-		psmouse->private = NULL;
+		kfree(priv);
 		return -1;
 	}
 

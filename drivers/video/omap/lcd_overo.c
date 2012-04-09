@@ -21,13 +21,12 @@
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/i2c/twl.h>
+#include <linux/i2c/twl4030.h>
 
 #include <mach/gpio.h>
-#include <plat/mux.h>
+#include <mach/mux.h>
+#include <mach/omapfb.h>
 #include <asm/mach-types.h>
-
-#include "omapfb.h"
 
 #define LCD_ENABLE       144
 

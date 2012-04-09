@@ -52,7 +52,7 @@
 static int fs_enet_fec_mii_read(struct mii_bus *bus , int phy_id, int location)
 {
 	struct fec_info* fec = bus->priv;
-	struct fec __iomem *fecp = fec->fecp;
+	fec_t __iomem *fecp = fec->fecp;
 	int i, ret = -1;
 
 	BUG_ON((in_be32(&fecp->fec_r_cntrl) & FEC_RCNTRL_MII_MODE) == 0);
@@ -75,7 +75,7 @@ static int fs_enet_fec_mii_read(struct mii_bus *bus , int phy_id, int location)
 static int fs_enet_fec_mii_write(struct mii_bus *bus, int phy_id, int location, u16 val)
 {
 	struct fec_info* fec = bus->priv;
-	struct fec __iomem *fecp = fec->fecp;
+	fec_t __iomem *fecp = fec->fecp;
 	int i;
 
 	/* this must never happen */
@@ -101,20 +101,14 @@ static int fs_enet_fec_mii_reset(struct mii_bus *bus)
 	return 0;
 }
 
-static struct of_device_id fs_enet_mdio_fec_match[];
-static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
+static int __devinit fs_enet_mdio_probe(struct of_device *ofdev,
+                                        const struct of_device_id *match)
 {
-	const struct of_device_id *match;
 	struct resource res;
 	struct mii_bus *new_bus;
 	struct fec_info *fec;
-	int (*get_bus_freq)(struct device_node *);
+	int (*get_bus_freq)(struct device_node *) = match->data;
 	int ret = -ENOMEM, clock, speed;
-
-	match = of_match_device(fs_enet_mdio_fec_match, &ofdev->dev);
-	if (!match)
-		return -EINVAL;
-	get_bus_freq = match->data;
 
 	new_bus = mdiobus_alloc();
 	if (!new_bus)
@@ -130,7 +124,7 @@ static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
 	new_bus->write = &fs_enet_fec_mii_write;
 	new_bus->reset = &fs_enet_fec_mii_reset;
 
-	ret = of_address_to_resource(ofdev->dev.of_node, 0, &res);
+	ret = of_address_to_resource(ofdev->node, 0, &res);
 	if (ret)
 		goto out_res;
 
@@ -141,7 +135,7 @@ static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
 		goto out_fec;
 
 	if (get_bus_freq) {
-		clock = get_bus_freq(ofdev->dev.of_node);
+		clock = get_bus_freq(ofdev->node);
 		if (!clock) {
 			/* Use maximum divider if clock is unknown */
 			dev_warn(&ofdev->dev, "could not determine IPS clock\n");
@@ -178,7 +172,7 @@ static int __devinit fs_enet_mdio_probe(struct platform_device *ofdev)
 	new_bus->parent = &ofdev->dev;
 	dev_set_drvdata(&ofdev->dev, new_bus);
 
-	ret = of_mdiobus_register(new_bus, ofdev->dev.of_node);
+	ret = of_mdiobus_register(new_bus, ofdev->node);
 	if (ret)
 		goto out_free_irqs;
 
@@ -198,7 +192,7 @@ out:
 	return ret;
 }
 
-static int fs_enet_mdio_remove(struct platform_device *ofdev)
+static int fs_enet_mdio_remove(struct of_device *ofdev)
 {
 	struct mii_bus *bus = dev_get_drvdata(&ofdev->dev);
 	struct fec_info *fec = bus->priv;
@@ -227,24 +221,21 @@ static struct of_device_id fs_enet_mdio_fec_match[] = {
 };
 MODULE_DEVICE_TABLE(of, fs_enet_mdio_fec_match);
 
-static struct platform_driver fs_enet_fec_mdio_driver = {
-	.driver = {
-		.name = "fsl-fec-mdio",
-		.owner = THIS_MODULE,
-		.of_match_table = fs_enet_mdio_fec_match,
-	},
+static struct of_platform_driver fs_enet_fec_mdio_driver = {
+	.name = "fsl-fec-mdio",
+	.match_table = fs_enet_mdio_fec_match,
 	.probe = fs_enet_mdio_probe,
 	.remove = fs_enet_mdio_remove,
 };
 
 static int fs_enet_mdio_fec_init(void)
 {
-	return platform_driver_register(&fs_enet_fec_mdio_driver);
+	return of_register_platform_driver(&fs_enet_fec_mdio_driver);
 }
 
 static void fs_enet_mdio_fec_exit(void)
 {
-	platform_driver_unregister(&fs_enet_fec_mdio_driver);
+	of_unregister_platform_driver(&fs_enet_fec_mdio_driver);
 }
 
 module_init(fs_enet_mdio_fec_init);

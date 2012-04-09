@@ -23,13 +23,12 @@
 #include "xfs_sb.h"
 #include "xfs_ag.h"
 #include "xfs_dir2.h"
+#include "xfs_dmapi.h"
 #include "xfs_mount.h"
 #include "xfs_export.h"
 #include "xfs_vnodeops.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_inode.h"
-#include "xfs_inode_item.h"
-#include "xfs_trace.h"
 
 /*
  * Note that we only accept fileids which are long enough rather than allow
@@ -70,16 +69,8 @@ xfs_fs_encode_fh(
 	else
 		fileid_type = FILEID_INO32_GEN_PARENT;
 
-	/*
-	 * If the the filesystem may contain 64bit inode numbers, we need
-	 * to use larger file handles that can represent them.
-	 *
-	 * While we only allocate inodes that do not fit into 32 bits any
-	 * large enough filesystem may contain them, thus the slightly
-	 * confusing looking conditional below.
-	 */
-	if (!(XFS_M(inode->i_sb)->m_flags & XFS_MOUNT_SMALL_INUMS) ||
-	    (XFS_M(inode->i_sb)->m_flags & XFS_MOUNT_32BITINODES))
+	/* filesystem may contain 64bit inode numbers */
+	if (!(XFS_M(inode->i_sb)->m_flags & XFS_MOUNT_SMALL_INUMS))
 		fileid_type |= XFS_FILEID_TYPE_64FLAG;
 
 	/*
@@ -89,31 +80,29 @@ xfs_fs_encode_fh(
 	 * seven combinations work.  The real answer is "don't use v2".
 	 */
 	len = xfs_fileid_length(fileid_type);
-	if (*max_len < len) {
-		*max_len = len;
+	if (*max_len < len)
 		return 255;
-	}
 	*max_len = len;
 
 	switch (fileid_type) {
 	case FILEID_INO32_GEN_PARENT:
 		spin_lock(&dentry->d_lock);
-		fid->i32.parent_ino = XFS_I(dentry->d_parent->d_inode)->i_ino;
+		fid->i32.parent_ino = dentry->d_parent->d_inode->i_ino;
 		fid->i32.parent_gen = dentry->d_parent->d_inode->i_generation;
 		spin_unlock(&dentry->d_lock);
 		/*FALLTHRU*/
 	case FILEID_INO32_GEN:
-		fid->i32.ino = XFS_I(inode)->i_ino;
+		fid->i32.ino = inode->i_ino;
 		fid->i32.gen = inode->i_generation;
 		break;
 	case FILEID_INO32_GEN_PARENT | XFS_FILEID_TYPE_64FLAG:
 		spin_lock(&dentry->d_lock);
-		fid64->parent_ino = XFS_I(dentry->d_parent->d_inode)->i_ino;
+		fid64->parent_ino = dentry->d_parent->d_inode->i_ino;
 		fid64->parent_gen = dentry->d_parent->d_inode->i_generation;
 		spin_unlock(&dentry->d_lock);
 		/*FALLTHRU*/
 	case FILEID_INO32_GEN | XFS_FILEID_TYPE_64FLAG:
-		fid64->ino = XFS_I(inode)->i_ino;
+		fid64->ino = inode->i_ino;
 		fid64->gen = inode->i_generation;
 		break;
 	}
@@ -138,11 +127,13 @@ xfs_nfs_get_inode(
 		return ERR_PTR(-ESTALE);
 
 	/*
-	 * The XFS_IGET_UNTRUSTED means that an invalid inode number is just
-	 * fine and not an indication of a corrupted filesystem as clients can
-	 * send invalid file handles and we have to handle it gracefully..
+	 * The XFS_IGET_BULKSTAT means that an invalid inode number is just
+	 * fine and not an indication of a corrupted filesystem.  Because
+	 * clients can send any kind of invalid file handle, e.g. after
+	 * a restore on the server we have to deal with this case gracefully.
 	 */
-	error = xfs_iget(mp, NULL, ino, XFS_IGET_UNTRUSTED, 0, &ip);
+	error = xfs_iget(mp, NULL, ino, XFS_IGET_BULKSTAT,
+			 XFS_ILOCK_SHARED, &ip, 0);
 	if (error) {
 		/*
 		 * EINVAL means the inode cluster doesn't exist anymore.
@@ -157,10 +148,11 @@ xfs_nfs_get_inode(
 	}
 
 	if (ip->i_d.di_gen != generation) {
-		IRELE(ip);
+		xfs_iput_new(ip, XFS_ILOCK_SHARED);
 		return ERR_PTR(-ENOENT);
 	}
 
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
 	return VFS_I(ip);
 }
 
@@ -223,28 +215,9 @@ xfs_fs_get_parent(
 	return d_obtain_alias(VFS_I(cip));
 }
 
-STATIC int
-xfs_fs_nfs_commit_metadata(
-	struct inode		*inode)
-{
-	struct xfs_inode	*ip = XFS_I(inode);
-	struct xfs_mount	*mp = ip->i_mount;
-	int			error = 0;
-
-	xfs_ilock(ip, XFS_ILOCK_SHARED);
-	if (xfs_ipincount(ip)) {
-		error = _xfs_log_force_lsn(mp, ip->i_itemp->ili_last_lsn,
-				XFS_LOG_SYNC, NULL);
-	}
-	xfs_iunlock(ip, XFS_ILOCK_SHARED);
-
-	return error;
-}
-
 const struct export_operations xfs_export_operations = {
 	.encode_fh		= xfs_fs_encode_fh,
 	.fh_to_dentry		= xfs_fs_fh_to_dentry,
 	.fh_to_parent		= xfs_fs_fh_to_parent,
 	.get_parent		= xfs_fs_get_parent,
-	.commit_metadata	= xfs_fs_nfs_commit_metadata,
 };

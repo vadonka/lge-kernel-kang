@@ -126,14 +126,14 @@ void star_accel_disable_irq(void)
 	NvOdmGpioInterruptMask(g_accel->h_accel_intr, NV_TRUE);
 }
 
-static ssize_t motion_tap_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_tap_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&tap_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -148,14 +148,14 @@ static ssize_t motion_tap_onoff_store(struct device *dev, struct device_attribut
 	return count;
 }
 
-static ssize_t motion_flip_onoff_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t motion_flip_onoff_show(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = atomic_read(&flip_flag);
 	return sprintf(buf, "%d\n",val);
 }
 
-static ssize_t motion_flip_onoff_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+static ssize_t motion_flip_onoff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
 	u32    val;
 	val = simple_strtoul(buf, NULL, 10);
@@ -274,6 +274,7 @@ static bool star_accel_i2c_read_data( star_accel_device *accel, unsigned char re
     //NvOdmOsFree(transfer_data);
     return true;
 }
+
 
 static void star_accel_set_sample_rate( star_accel_device *accel, unsigned int samplerate )
 {
@@ -498,7 +499,7 @@ static void star_accel_whoami( void )
 	#endif
 }
 
-// 20100702  Power control bug fix [START]
+// 20100702 taewan.kim@lge.com Power control bug fix [START]
 static void star_accel_set_power_rail(NvU32 vdd_id, NvBool is_enable )
 {
 	NvOdmServicesPmuVddRailCapabilities vddrailcap;
@@ -532,7 +533,7 @@ static void star_accel_set_power_rail(NvU32 vdd_id, NvBool is_enable )
 	#endif
 	NvOdmServicesPmuClose(h_pmu);
 }
-// 20100702  Power control bug fix [END]
+// 20100702 taewan.kim@lge.com Power control bug fix [END]
 
 
 int lge_sensor_verify_kxtf9(void) 
@@ -643,7 +644,7 @@ static int star_accel_misc_open( struct inode *inode, struct file *file )
 	return nonseekable_open(inode, file);
 }
 
-static long star_accel_misc_ioctl(struct file *file, unsigned int cmd, unsigned long arg )
+static int star_accel_misc_ioctl( struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg )
 {
 	void __user *argp = (void __user *)arg;
 	NvS32 x=0, y=0, z=0;
@@ -668,7 +669,7 @@ static const struct file_operations star_accel_misc_fop =
 {
 	.owner = THIS_MODULE,
 	.open = star_accel_misc_open,
-	.unlocked_ioctl = star_accel_misc_ioctl,
+	.ioctl = star_accel_misc_ioctl,
 };
 
 static struct miscdevice star_accel_misc_device =
@@ -1075,7 +1076,7 @@ static void star_accel_irq_handler(void *arg)
 {
 	
 	//printk("%s() -- start\n\n", __func__);
-	schedule_work(&g_accel->work); //
+	schedule_work(&g_accel->work); //magoo@lge.com
 
 }
 
@@ -1144,7 +1145,7 @@ RELEASE_INT:
 
 }
 
-static int __devinit star_accel_probe( struct platform_device *pdev )
+static int __init star_accel_probe( struct platform_device *pdev )
 {
 	NvU32 I2cInstance = 0;
 	const NvOdmPeripheralConnectivity *pcon;
@@ -1176,11 +1177,11 @@ static int __devinit star_accel_probe( struct platform_device *pdev )
 		goto failtomemorydev;
     }
 
-    // 20100702  Power control bug fix [START]
+    // 20100702 taewan.kim@lge.com Power control bug fix [START]
 	/*g_accel->h_accel_pmu = NvOdmServicesPmuOpen();
 	if( !g_accel->h_accel_pmu )
 	{err=-ENOSYS; goto failtomemorydev;}*/
-    // 20100702  Power control bug fix [START]
+    // 20100702 taewan.kim@lge.com Power control bug fix [START]
 
 	pcon = (NvOdmPeripheralConnectivity*)NvOdmPeripheralGetGuid(NV_ODM_GUID('a','c','c','e','l','e','r','o'));
 	//pcon = (NvOdmPeripheralConnectivity*)NvOdmPeripheralGetGuid(NV_ODM_GUID('p','r','o','x','i','m','i','t'));
@@ -1204,7 +1205,7 @@ static int __devinit star_accel_probe( struct platform_device *pdev )
 				#if STAR_ACCEL_DEBUG
 					printk("[skhwang] KXTF9 POWER %d\n", g_accel->vdd_id );
 				#endif
-                // 20100702  Power control bug fix
+                // 20100702 taewan.kim@lge.com Power control bug fix
 				star_accel_set_power_rail(g_accel->vdd_id, NV_TRUE);
 				NvOdmOsWaitUS(30);
 				break;

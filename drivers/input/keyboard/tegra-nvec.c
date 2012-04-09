@@ -24,7 +24,6 @@
 #define NV_DEBUG 0
 
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/device.h>
 #include <linux/kthread.h>
@@ -268,7 +267,10 @@ static int nvec_keyboard_recv(void *arg)
 
 	/* keyboard event thread should be frozen before suspending the
 	 * keyboard and NVEC drivers */
-	set_freezable();
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
+	//set_freezable_with_signal();
+	  set_freezable();
+//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
 
 	while (!keyboard->shutdown) {
 		unsigned int pressed;

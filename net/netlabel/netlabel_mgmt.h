@@ -173,6 +173,7 @@ enum {
 	NLBL_MGMT_C_VERSION,
 	__NLBL_MGMT_C_MAX,
 };
+#define NLBL_MGMT_C_MAX (__NLBL_MGMT_C_MAX - 1)
 
 /* NetLabel Management attributes */
 enum {

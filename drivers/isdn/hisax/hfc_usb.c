@@ -39,7 +39,6 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/moduleparam.h>
-#include <linux/slab.h>
 #include "hisax.h"
 #include "hisax_if.h"
 #include "hfc_usb.h"
@@ -258,9 +257,11 @@ static void
 ctrl_complete(struct urb *urb)
 {
 	hfcusb_data *hfc = (hfcusb_data *) urb->context;
+	ctrl_buft *buf;
 
 	urb->dev = hfc->dev;
 	if (hfc->ctrl_cnt) {
+		buf = &hfc->ctrl_buff[hfc->ctrl_out_idx];
 		hfc->ctrl_cnt--;	/* decrement actual count */
 		if (++hfc->ctrl_out_idx >= HFC_CTRL_BUFSIZE)
 			hfc->ctrl_out_idx = 0;	/* pointer wrap */
@@ -1085,7 +1086,7 @@ hfc_usb_l2l1(struct hisax_if *my_hisax_if, int pr, void *arg)
 			break;
 		default:
 			DBG(HFCUSB_DBG_STATES,
-			       "HFC_USB: hfc_usb_d_l2l1: unknown state : %#x", pr);
+			       "HFC_USB: hfc_usb_d_l2l1: unkown state : %#x", pr);
 			break;
 	}
 }
@@ -1095,7 +1096,7 @@ static int
 hfc_usb_init(hfcusb_data * hfc)
 {
 	usb_fifo *fifo;
-	int i;
+	int i, err;
 	u_char b;
 	struct hisax_b_if *p_b_if[2];
 
@@ -1110,7 +1111,7 @@ hfc_usb_init(hfcusb_data * hfc)
 	}
 
 	/* first set the needed config, interface and alternate */
-	usb_set_interface(hfc->dev, hfc->if_used, hfc->alt_used);
+	err = usb_set_interface(hfc->dev, hfc->if_used, hfc->alt_used);
 
 	/* do Chip reset */
 	write_usb(hfc, HFCUSB_CIRM, 8);

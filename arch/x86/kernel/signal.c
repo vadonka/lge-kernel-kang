@@ -19,7 +19,6 @@
 #include <linux/stddef.h>
 #include <linux/personality.h>
 #include <linux/uaccess.h>
-#include <linux/user-return-notifier.h>
 
 #include <asm/processor.h>
 #include <asm/ucontext.h>
@@ -545,12 +544,22 @@ sys_sigaction(int sig, const struct old_sigaction __user *act,
 }
 #endif /* CONFIG_X86_32 */
 
-long
+#ifdef CONFIG_X86_32
+int sys_sigaltstack(struct pt_regs *regs)
+{
+	const stack_t __user *uss = (const stack_t __user *)regs->bx;
+	stack_t __user *uoss = (stack_t __user *)regs->cx;
+
+	return do_sigaltstack(uss, uoss, regs->sp);
+}
+#else /* !CONFIG_X86_32 */
+asmlinkage long
 sys_sigaltstack(const stack_t __user *uss, stack_t __user *uoss,
 		struct pt_regs *regs)
 {
 	return do_sigaltstack(uss, uoss, regs->sp);
 }
+#endif /* CONFIG_X86_32 */
 
 /*
  * Do a signal return; undo the signal stack.
@@ -601,7 +610,10 @@ long sys_rt_sigreturn(struct pt_regs *regs)
 		goto badframe;
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
-	set_current_blocked(&set);
+	spin_lock_irq(&current->sighand->siglock);
+	current->blocked = set;
+	recalc_sigpending();
+	spin_unlock_irq(&current->sighand->siglock);
 
 	if (restore_sigcontext(regs, &frame->uc.uc_mcontext, &ax))
 		goto badframe;
@@ -679,7 +691,6 @@ static int
 handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 	      sigset_t *oldset, struct pt_regs *regs)
 {
-	sigset_t blocked;
 	int ret;
 
 	/* Are we from a system call? */
@@ -739,10 +750,12 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 	 */
 	regs->flags &= ~X86_EFLAGS_TF;
 
-	sigorsets(&blocked, &current->blocked, &ka->sa.sa_mask);
+	spin_lock_irq(&current->sighand->siglock);
+	sigorsets(&current->blocked, &current->blocked, &ka->sa.sa_mask);
 	if (!(ka->sa.sa_flags & SA_NODEFER))
-		sigaddset(&blocked, sig);
-	set_current_blocked(&blocked);
+		sigaddset(&current->blocked, sig);
+	recalc_sigpending();
+	spin_unlock_irq(&current->sighand->siglock);
 
 	tracehook_signal_handler(sig, info, ka, regs,
 				 test_thread_flag(TIF_SINGLESTEP));
@@ -786,6 +799,15 @@ static void do_signal(struct pt_regs *regs)
 
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
+		/*
+		 * Re-enable any watchpoints before delivering the
+		 * signal to user space. The processor register will
+		 * have been cleared if the watchpoint triggered
+		 * inside the kernel.
+		 */
+		if (current->thread.debugreg7)
+			set_debugreg(current->thread.debugreg7, 7);
+
 		/* Whee! Actually deliver the signal.  */
 		if (handle_signal(signr, &info, &ka, oldset, regs) == 0) {
 			/*
@@ -850,8 +872,6 @@ do_notify_resume(struct pt_regs *regs, void *unused, __u32 thread_info_flags)
 		if (current->replacement_session_keyring)
 			key_replace_session_keyring();
 	}
-	if (thread_info_flags & _TIF_USER_RETURN_NOTIFY)
-		fire_user_return_notifiers();
 
 #ifdef CONFIG_X86_32
 	clear_thread_flag(TIF_IRET);

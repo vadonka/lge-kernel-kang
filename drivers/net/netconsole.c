@@ -37,7 +37,6 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/slab.h>
 #include <linux/console.h>
 #include <linux/moduleparam.h>
 #include <linux/string.h>
@@ -242,6 +241,34 @@ static struct netconsole_target *to_target(struct config_item *item)
 }
 
 /*
+ * Wrapper over simple_strtol (base 10) with sanity and range checking.
+ * We return (signed) long only because we may want to return errors.
+ * Do not use this to convert numbers that are allowed to be negative.
+ */
+static long strtol10_check_range(const char *cp, long min, long max)
+{
+	long ret;
+	char *p = (char *) cp;
+
+	WARN_ON(min < 0);
+	WARN_ON(max < min);
+
+	ret = simple_strtol(p, &p, 10);
+
+	if (*p && (*p != '\n')) {
+		printk(KERN_ERR "netconsole: invalid input\n");
+		return -EINVAL;
+	}
+	if ((ret < min) || (ret > max)) {
+		printk(KERN_ERR "netconsole: input %ld must be between "
+				"%ld and %ld\n", ret, min, max);
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+/*
  * Attribute operations for netconsole_target.
  */
 
@@ -299,19 +326,12 @@ static ssize_t store_enabled(struct netconsole_target *nt,
 			     const char *buf,
 			     size_t count)
 {
-	int enabled;
 	int err;
+	long enabled;
 
-	err = kstrtoint(buf, 10, &enabled);
-	if (err < 0)
-		return err;
-	if (enabled < 0 || enabled > 1)
-		return -EINVAL;
-	if (enabled == nt->enabled) {
-		printk(KERN_INFO "netconsole: network logging has already %s\n",
-				nt->enabled ? "started" : "stopped");
-		return -EINVAL;
-	}
+	enabled = strtol10_check_range(buf, 0, 1);
+	if (enabled < 0)
+		return enabled;
 
 	if (enabled) {	/* 1 */
 
@@ -363,7 +383,8 @@ static ssize_t store_local_port(struct netconsole_target *nt,
 				const char *buf,
 				size_t count)
 {
-	int rv;
+	long local_port;
+#define __U16_MAX	((__u16) ~0U)
 
 	if (nt->enabled) {
 		printk(KERN_ERR "netconsole: target (%s) is enabled, "
@@ -372,9 +393,12 @@ static ssize_t store_local_port(struct netconsole_target *nt,
 		return -EINVAL;
 	}
 
-	rv = kstrtou16(buf, 10, &nt->np.local_port);
-	if (rv < 0)
-		return rv;
+	local_port = strtol10_check_range(buf, 0, __U16_MAX);
+	if (local_port < 0)
+		return local_port;
+
+	nt->np.local_port = local_port;
+
 	return strnlen(buf, count);
 }
 
@@ -382,7 +406,8 @@ static ssize_t store_remote_port(struct netconsole_target *nt,
 				 const char *buf,
 				 size_t count)
 {
-	int rv;
+	long remote_port;
+#define __U16_MAX	((__u16) ~0U)
 
 	if (nt->enabled) {
 		printk(KERN_ERR "netconsole: target (%s) is enabled, "
@@ -391,9 +416,12 @@ static ssize_t store_remote_port(struct netconsole_target *nt,
 		return -EINVAL;
 	}
 
-	rv = kstrtou16(buf, 10, &nt->np.remote_port);
-	if (rv < 0)
-		return rv;
+	remote_port = strtol10_check_range(buf, 0, __U16_MAX);
+	if (remote_port < 0)
+		return remote_port;
+
+	nt->np.remote_port = remote_port;
+
 	return strnlen(buf, count);
 }
 
@@ -434,6 +462,8 @@ static ssize_t store_remote_mac(struct netconsole_target *nt,
 				size_t count)
 {
 	u8 remote_mac[ETH_ALEN];
+	char *p = (char *) buf;
+	int i;
 
 	if (nt->enabled) {
 		printk(KERN_ERR "netconsole: target (%s) is enabled, "
@@ -442,13 +472,23 @@ static ssize_t store_remote_mac(struct netconsole_target *nt,
 		return -EINVAL;
 	}
 
-	if (!mac_pton(buf, remote_mac))
-		return -EINVAL;
-	if (buf[3 * ETH_ALEN - 1] && buf[3 * ETH_ALEN - 1] != '\n')
-		return -EINVAL;
+	for (i = 0; i < ETH_ALEN - 1; i++) {
+		remote_mac[i] = simple_strtoul(p, &p, 16);
+		if (*p != ':')
+			goto invalid;
+		p++;
+	}
+	remote_mac[ETH_ALEN - 1] = simple_strtoul(p, &p, 16);
+	if (*p && (*p != '\n'))
+		goto invalid;
+
 	memcpy(nt->np.remote_mac, remote_mac, ETH_ALEN);
 
 	return strnlen(buf, count);
+
+invalid:
+	printk(KERN_ERR "netconsole: invalid input\n");
+	return -EINVAL;
 }
 
 /*
@@ -623,10 +663,8 @@ static int netconsole_netdev_event(struct notifier_block *this,
 	unsigned long flags;
 	struct netconsole_target *nt;
 	struct net_device *dev = ptr;
-	bool stopped = false;
 
-	if (!(event == NETDEV_CHANGENAME || event == NETDEV_UNREGISTER ||
-	      event == NETDEV_RELEASE || event == NETDEV_JOIN))
+	if (!(event == NETDEV_CHANGENAME || event == NETDEV_UNREGISTER))
 		goto done;
 
 	spin_lock_irqsave(&target_list_lock, flags);
@@ -637,46 +675,20 @@ static int netconsole_netdev_event(struct notifier_block *this,
 			case NETDEV_CHANGENAME:
 				strlcpy(nt->np.dev_name, dev->name, IFNAMSIZ);
 				break;
-			case NETDEV_RELEASE:
-			case NETDEV_JOIN:
 			case NETDEV_UNREGISTER:
-				/*
-				 * rtnl_lock already held
-				 */
-				if (nt->np.dev) {
-					spin_unlock_irqrestore(
-							      &target_list_lock,
-							      flags);
-					__netpoll_cleanup(&nt->np);
-					spin_lock_irqsave(&target_list_lock,
-							  flags);
-					dev_put(nt->np.dev);
-					nt->np.dev = NULL;
-					netconsole_target_put(nt);
-				}
+				if (!nt->enabled)
+					break;
+				netpoll_cleanup(&nt->np);
 				nt->enabled = 0;
-				stopped = true;
+				printk(KERN_INFO "netconsole: network logging stopped"
+					", interface %s unregistered\n",
+					dev->name);
 				break;
 			}
 		}
 		netconsole_target_put(nt);
 	}
 	spin_unlock_irqrestore(&target_list_lock, flags);
-	if (stopped) {
-		printk(KERN_INFO "netconsole: network logging stopped on "
-		       "interface %s as it ", dev->name);
-		switch (event) {
-		case NETDEV_UNREGISTER:
-			printk(KERN_CONT "unregistered\n");
-			break;
-		case NETDEV_RELEASE:
-			printk(KERN_CONT "released slaves\n");
-			break;
-		case NETDEV_JOIN:
-			printk(KERN_CONT "is joining a master device\n");
-			break;
-		}
-	}
 
 done:
 	return NOTIFY_DONE;

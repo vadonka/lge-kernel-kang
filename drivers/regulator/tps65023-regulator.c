@@ -24,7 +24,6 @@
 #include <linux/regulator/machine.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
-#include <linux/slab.h>
 
 /* Register definitions */
 #define	TPS65023_REG_VERSION		0
@@ -321,8 +320,7 @@ static int tps65023_dcdc_get_voltage(struct regulator_dev *dev)
 }
 
 static int tps65023_dcdc_set_voltage(struct regulator_dev *dev,
-				     int min_uV, int max_uV,
-				     unsigned *selector)
+				int min_uV, int max_uV)
 {
 	struct tps_pmic *tps = rdev_get_drvdata(dev);
 	int dcdc = rdev_get_id(dev);
@@ -346,8 +344,6 @@ static int tps65023_dcdc_set_voltage(struct regulator_dev *dev,
 		if (min_uV <= uV && uV <= max_uV)
 			break;
 	}
-
-	*selector = vsel;
 
 	/* write to the register in case we found a match */
 	if (vsel == tps->info[dcdc]->table_len)
@@ -374,7 +370,7 @@ static int tps65023_ldo_get_voltage(struct regulator_dev *dev)
 }
 
 static int tps65023_ldo_set_voltage(struct regulator_dev *dev,
-				    int min_uV, int max_uV, unsigned *selector)
+				int min_uV, int max_uV)
 {
 	struct tps_pmic *tps = rdev_get_drvdata(dev);
 	int data, vsel, ldo = rdev_get_id(dev);
@@ -398,8 +394,6 @@ static int tps65023_ldo_set_voltage(struct regulator_dev *dev,
 
 	if (vsel == tps->info[ldo]->table_len)
 		return -EINVAL;
-
-	*selector = vsel;
 
 	data = tps_65023_reg_read(tps, TPS65023_REG_LDO_CTRL);
 	if (data < 0)
@@ -463,15 +457,15 @@ static struct regulator_ops tps65023_ldo_ops = {
 	.list_voltage = tps65023_ldo_list_voltage,
 };
 
-static int __devinit tps_65023_probe(struct i2c_client *client,
-				     const struct i2c_device_id *id)
+static
+int tps_65023_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
+	static int desc_id;
 	const struct tps_info *info = (void *)id->driver_data;
 	struct regulator_init_data *init_data;
 	struct regulator_dev *rdev;
 	struct tps_pmic *tps;
 	int i;
-	int error;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EIO;
@@ -481,6 +475,7 @@ static int __devinit tps_65023_probe(struct i2c_client *client,
 	 * coming from the board-evm file.
 	 */
 	init_data = client->dev.platform_data;
+
 	if (!init_data)
 		return -EIO;
 
@@ -498,7 +493,7 @@ static int __devinit tps_65023_probe(struct i2c_client *client,
 		tps->info[i] = info;
 
 		tps->desc[i].name = info->name;
-		tps->desc[i].id = i;
+		tps->desc[i].id = desc_id++;
 		tps->desc[i].n_voltages = num_voltages[i];
 		tps->desc[i].ops = (i > TPS65023_DCDC_3 ?
 					&tps65023_ldo_ops : &tps65023_dcdc_ops);
@@ -507,12 +502,21 @@ static int __devinit tps_65023_probe(struct i2c_client *client,
 
 		/* Register the regulators */
 		rdev = regulator_register(&tps->desc[i], &client->dev,
-					  init_data, tps);
+								init_data, tps);
 		if (IS_ERR(rdev)) {
 			dev_err(&client->dev, "failed to register %s\n",
 				id->name);
-			error = PTR_ERR(rdev);
-			goto fail;
+
+			/* Unregister */
+			while (i)
+				regulator_unregister(tps->rdev[--i]);
+
+			tps->client = NULL;
+
+			/* clear the client data in i2c */
+			i2c_set_clientdata(client, NULL);
+			kfree(tps);
+			return PTR_ERR(rdev);
 		}
 
 		/* Save regulator for cleanup */
@@ -522,13 +526,6 @@ static int __devinit tps_65023_probe(struct i2c_client *client,
 	i2c_set_clientdata(client, tps);
 
 	return 0;
-
- fail:
-	while (--i >= 0)
-		regulator_unregister(tps->rdev[i]);
-
-	kfree(tps);
-	return error;
 }
 
 /**
@@ -545,6 +542,10 @@ static int __devexit tps_65023_remove(struct i2c_client *client)
 	for (i = 0; i < TPS65023_NUM_REGULATOR; i++)
 		regulator_unregister(tps->rdev[i]);
 
+	tps->client = NULL;
+
+	/* clear the client data in i2c */
+	i2c_set_clientdata(client, NULL);
 	kfree(tps);
 
 	return 0;
@@ -588,8 +589,6 @@ static const struct tps_info tps65023_regs[] = {
 
 static const struct i2c_device_id tps_65023_id[] = {
 	{.name = "tps65023",
-	.driver_data = (unsigned long) tps65023_regs,},
-	{.name = "tps65021",
 	.driver_data = (unsigned long) tps65023_regs,},
 	{ },
 };

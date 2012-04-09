@@ -14,7 +14,6 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/string.h>
-#include <linux/slab.h>
 #include <linux/pm.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>
@@ -234,7 +233,7 @@ static int pcap_ts_resume(struct device *dev)
 	return 0;
 }
 
-static const struct dev_pm_ops pcap_ts_pm_ops = {
+static struct dev_pm_ops pcap_ts_pm_ops = {
 	.suspend	= pcap_ts_suspend,
 	.resume		= pcap_ts_resume,
 };

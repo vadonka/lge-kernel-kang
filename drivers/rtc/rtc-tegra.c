@@ -71,12 +71,15 @@ static DEFINE_SPINLOCK(tegra_rtc_lock);
 static void __iomem *rtc_base; /* NULL if not initialized. */
 static int tegra_rtc_irq; /* alarm and periodic interrupt */
 
+/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
 //jaeseung.lee 20100825 for DRM [start]
 extern wait_queue_head_t drm_wait_queue;
 extern unsigned long drm_diffTime;
 extern int drm_sign;
 extern struct semaphore drm_mutex;
 //jaeseung.lee 20100825 for DRM [end]
+/*LGSI_CHANGE_E*/
+
 /* check is hardware is accessing APB. */
 static inline u32 tegra_rtc_check_busy(void)
 {
@@ -148,47 +151,49 @@ static int tegra_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 static int tegra_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
-	//jaeseung.lee 20100825 for DRM [start]
-	unsigned long prevTime, nextTime;
-	unsigned long msec;
-	int ret;
-	unsigned long sl_irq_flags;
+	/*LGSI_CHANGE_S [jyothishre.nk@lge.com] DRM porting*/
+        //jaeseung.lee 20100825 for DRM [start]
+        unsigned long prevTime, nextTime;
+        unsigned long msec;
+        int ret;
+        unsigned long sl_irq_flags;
 
-	/* convert tm to seconds. */
-	ret = rtc_valid_tm(tm);
-	if (ret) return ret;
-	rtc_tm_to_time(tm, &nextTime);
+        /* convert tm to seconds. */
+        ret = rtc_valid_tm(tm);
+        if (ret) return ret;
+        rtc_tm_to_time(tm, &nextTime);
 
-	dev_vdbg(dev, "time set to %lu. %d/%d/%d %d:%02u:%02u\n",
-		nextTime,
-		tm->tm_mon+1,
-		tm->tm_mday,
-		tm->tm_year+1900,
-		tm->tm_hour,
-		tm->tm_min,
-		tm->tm_sec
-	);
+        dev_vdbg(dev, "time set to %lu. %d/%d/%d %d:%02u:%02u\n",
+                nextTime,
+                tm->tm_mon+1,
+                tm->tm_mday,
+                tm->tm_year+1900,
+                tm->tm_hour,
+                tm->tm_min,
+                tm->tm_sec
+        );
 
-	spin_lock_irqsave(&tegra_rtc_lock, sl_irq_flags);
-	msec = tegra_rtc_read(RTC_TEGRA_REG_MILLI_SECONDS);
-	prevTime = tegra_rtc_read(RTC_TEGRA_REG_SHADOW_SECONDS);
-	spin_unlock_irqrestore(&tegra_rtc_lock, sl_irq_flags);
+        spin_lock_irqsave(&tegra_rtc_lock, sl_irq_flags);
+        msec = tegra_rtc_read(RTC_TEGRA_REG_MILLI_SECONDS);
+        prevTime = tegra_rtc_read(RTC_TEGRA_REG_SHADOW_SECONDS);
+        spin_unlock_irqrestore(&tegra_rtc_lock, sl_irq_flags);
 
-	down_interruptible(&drm_mutex);
-	if( nextTime < prevTime )
-	{
-		drm_diffTime = prevTime - nextTime;
-		drm_sign = 1;
-	}	
-	else
-	{
-		drm_diffTime = nextTime - prevTime;
-		drm_sign = -1;
-	}
-	wake_up_interruptible(&drm_wait_queue);
-	/* seconds only written if wait succeeded. */
-	ret = tegra_rtc_write_not_busy(dev, RTC_TEGRA_REG_SECONDS, nextTime);
-	//jaeseung.lee 20100825 for DRM [end]
+        down_interruptible(&drm_mutex);
+        if( nextTime < prevTime )
+        {
+                drm_diffTime = prevTime - nextTime;
+                drm_sign = 1;
+        }
+        else
+        {
+                drm_diffTime = nextTime - prevTime;
+                drm_sign = -1;
+        }
+        wake_up_interruptible(&drm_wait_queue);
+        /* seconds only written if wait succeeded. */
+        ret = tegra_rtc_write_not_busy(dev, RTC_TEGRA_REG_SECONDS, nextTime);
+        //jaeseung.lee 20100825 for DRM [end]
+	/*LGSI_CHANGE_E*/
 
 	dev_vdbg(
 		dev, "time read back as %d\n",

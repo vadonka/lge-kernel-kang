@@ -9,7 +9,6 @@
  * 2 of the Licence, or (at your option) any later version.
  */
 
-#include <linux/slab.h>
 #include <linux/mount.h>
 #include <linux/buffer_head.h>
 #include "internal.h"
@@ -197,7 +196,7 @@ struct fscache_object *cachefiles_grab_object(struct fscache_object *_object)
 }
 
 /*
- * update the auxiliary data for an object object on disk
+ * update the auxilliary data for an object object on disk
  */
 static void cachefiles_update_object(struct fscache_object *_object)
 {

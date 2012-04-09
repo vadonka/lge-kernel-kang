@@ -55,11 +55,11 @@
 #include "nvrm_priv_ap_general.h"
 #include "ap15/ap15rm_private.h"
 
-// LGE_UPDATE_S  -- ebs spi patch 20110706
+// LGE_UPDATE_S eungbo.shim@lge.com -- ebs spi patch 20110706
 #include "nvrm_clocks.h"
 #include "mach/iomap.h" //EBS 0707
 
-// LGE_UPDATE_E  -- ebs spi patch 20110706 
+// LGE_UPDATE_E eungbo.shim@lge.com -- ebs spi patch 20110706 
 
 #include "linux/module.h"
 #include "mach/dma.h"
@@ -73,7 +73,7 @@
 #endif
 #include "linux/err.h"
 
-// LGE_UPDATE_S  -- ebs spi patch 20110706 EBS SPI_PATCH S 
+// LGE_UPDATE_S eungbo.shim@lge.com -- ebs spi patch 20110706 EBS SPI_PATCH S 
 #include "linux/delay.h"
 
 #include "linux/io.h"
@@ -88,7 +88,7 @@ module_param(enable_synch_boost, uint, 0644);
 
 //#define ENABLE_SYNCH_BOOST 1
 //#define EBS_TEST_NVIDIA_SPI
-// LGE_UPDATE_E  -- ebs spi patch 20110706
+// LGE_UPDATE_E eungbo.shim@lge.com -- ebs spi patch 20110706
 
 
 
@@ -333,7 +333,7 @@ static const NvU32 s_Spi_Trigger[] = {
 
 // EBS 0707
 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 static void dump_address(unsigned int Add, unsigned int data_size)
 {
 	 int i;
@@ -371,7 +371,7 @@ static void debug_registers(void)
 	 dump_address(0x70000000, 0x100);
 }
 
-// LGE_UPDATE_E  0707
+// LGE_UPDATE_E eungbo.shim@lge.com 0707
 
 /**
  * Get the interfacing property for the device connected to given chip select Id.
@@ -397,19 +397,19 @@ SpiSlinkGetDeviceInfo(
         pDeviceInfo->CanUseHwBasedCs = NV_FALSE;
         pDeviceInfo->CsHoldTimeInClock = 0;
         pDeviceInfo->CsSetupTimeInClock = 0;
-// EBS // LGE_UPDATE_S  0707		
+// EBS // LGE_UPDATE_S eungbo.shim@lge.com 0707		
         pDeviceInfo->bIgnoreClockBoost = 0;
-// EBS // LGE_UPDATE_S  0707
-        return NV_FALSE;
+// EBS // LGE_UPDATE_S eungbo.shim@lge.com 0707
+		return NV_FALSE;
     }
     pDeviceInfo->SignalMode = pSpiDevInfo->SignalMode;
     pDeviceInfo->ChipSelectActiveLow = pSpiDevInfo->ChipSelectActiveLow;
     pDeviceInfo->CanUseHwBasedCs = pSpiDevInfo->CanUseHwBasedCs;
     pDeviceInfo->CsHoldTimeInClock = pSpiDevInfo->CsHoldTimeInClock;
     pDeviceInfo->CsSetupTimeInClock = pSpiDevInfo->CsSetupTimeInClock;
-// LGE_UPDATE_S  0707	
+// LGE_UPDATE_S eungbo.shim@lge.com 0707	
 	pDeviceInfo->bIgnoreClockBoost = pSpiDevInfo->bIgnoreClockBoost; // EBS 0707
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     return NV_TRUE;
 }
@@ -814,8 +814,8 @@ WaitForTransferCompletion(
         Error = NvOsSemaphoreWaitTimeout(hRmSpiSlink->hSynchSema, WaitTimeOutMS);
     }
 
-// LGE_UPDATE_S  0707
-    // If timeout happen then stop all transfer and exit.
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
+ // If timeout happen then stop all transfer and exit.
  
    if ((Error != NvSuccess) && (Error != NvError_Timeout))
             pr_err("%s(): The sema wait return unexpected error 0x%08X\n",__func__, Error);
@@ -827,10 +827,10 @@ WaitForTransferCompletion(
 
         // Return timeout only.
     	 Error = NvError_Timeout;
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
 	pr_err("Spi%d: %dms Timeout Error\n", hRmSpiSlink->InstanceId, WaitTimeOutMS);
-               //hRmSpiSlink->IsIntDoneDue = NV_TRUE;
+    	//hRmSpiSlink->IsIntDoneDue = NV_TRUE;
         // Disable the data flow first.
         hHwInt->HwSetDataFlowFxn(&hRmSpiSlink->HwRegs,
                                     hRmSpiSlink->CurrentDirection, NV_FALSE);
@@ -871,7 +871,7 @@ WaitForTransferCompletion(
             // All requested transfer has been done.
             CurrentSlinkPacketTransfer = hRmSpiSlink->CurrTransInfo.CurrPacketCount;
 		pr_err("Spi%d: CurrentSlinkPacketTransfer = %d, IsReady = %d\n", hRmSpiSlink->InstanceId, CurrentSlinkPacketTransfer, IsReady);
-                //Error = NvSuccess;
+            //Error = NvSuccess;
         }
         else
         {
@@ -1016,10 +1016,10 @@ WaitForTransferCompletion(
     return Error;
 }
 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
 #if 1//def EBS_TEST_NVIDIA_SPI
-// LGE_UPDATE_S  -- ebs spi patch 20110706
+// LGE_UPDATE_S eungbo.shim@lge.com -- ebs spi patch 20110706
 
 // return TRUE if the clocks are right = no boost requested, OR
 //                 the requested boost is implemented  OR
@@ -1048,7 +1048,7 @@ static NvBool IsRequestedBoostInEffect(NvRmSpiHandle hRmSpiSlink)
     return(NV_TRUE);
 }
 #endif
-// LGE_UPDATE_E  -- ebs spi patch 20110706
+// LGE_UPDATE_E eungbo.shim@lge.com -- ebs spi patch 20110706
 
 
 
@@ -1074,7 +1074,7 @@ RegisterSpiSlinkInterrupt(
             &hIntHandlers, hRmSpiSlink, &hRmSpiSlink->SpiInterruptHandle, NV_TRUE));
 }
 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
 // Boosting the Emc/Ahb/Apb/Cpu frequency
 static void
@@ -1145,7 +1145,7 @@ BoostFrequency(
                                        NvRmDfsBusyHintSyncMode_Async);
                 hRmSpiSlink->IsFreqBoosted = NV_TRUE;
 
-// LGE_UPDATE_S  -- ebs spi patch 20110707
+// LGE_UPDATE_S eungbo.shim@lge.com -- ebs spi patch 20110707
                 if( enable_synch_boost )
                 {
                    // now, block waiting for the clocks to come up
@@ -1179,7 +1179,7 @@ BoostFrequency(
 #endif
                  }
 
-// LGE_UPDATE_E  -- ebs spi patch 20110707
+// LGE_UPDATE_E eungbo.shim@lge.com -- ebs spi patch 20110707
 
 					
             }
@@ -2200,7 +2200,7 @@ static NvError MasterModeReadWriteDma(
     NvU32 PacketBitLength)
 {
     NvError Error = NvSuccess;
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
     NvError nvError = NvSuccess;
 #endif
     NvU32 CurrentTransWord;
@@ -2316,12 +2316,12 @@ static NvError MasterModeReadWriteDma(
             if (CurrentTransWord >= hRmSpiSlink->HwRegs.MaxWordTransfer)
             {
                 wmb();
-		  rmb();		//20101204-2, , NVIDIA's patch for syncing dma buffer copy.
+		  rmb();		//20101204-2, syblue.lee@lge.com, NVIDIA's patch for syncing dma buffer copy.
                 dsb();
                 outer_sync();
-//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
+//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
 		  NvOsWaitUS(50);
-//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
+//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
                 Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
 		SPI_DEBUG_PRINT("%s-%d\n", __FUNCTION__, __LINE__);
                 // Wait till fifo full if the transfer size is more than fifo size
@@ -2365,13 +2365,11 @@ static NvError MasterModeReadWriteDma(
             hRmSpiSlink->hHwInterface->HwStartTransferFxn(&hRmSpiSlink->HwRegs, NV_TRUE);
 
         if (!Error)
-
-#ifndef CONFIG_MACH_STAR_REV_F
-            WaitForTransferCompletion(hRmSpiSlink, 1000, NV_FALSE);	////20101218-3, , NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
-#else
-            nvError = WaitForTransferCompletion(hRmSpiSlink, 500, NV_FALSE);   ////20101218-3, , NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
+#if defined (CONFIG_MODEM_MDM)
+            WaitForTransferCompletion(hRmSpiSlink, 1000, NV_FALSE);	////20101218-3, syblue.lee@lge.com, NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
+#elif defined (CONFIG_MODEM_IFX)
+			nvError = WaitForTransferCompletion(hRmSpiSlink, 500, NV_FALSE);	////20101218-3, syblue.lee@lge.com, NVIDIA patch to protect infinite loop : WaitForTransferCompletion(hRmSpiSlink, NV_WAIT_INFINITE, NV_FALSE);
 #endif
-
         Error = (hRmSpiSlink->RxTransferStatus)? hRmSpiSlink->RxTransferStatus:
                                     hRmSpiSlink->TxTransferStatus;
         if (Error)
@@ -2397,11 +2395,10 @@ static NvError MasterModeReadWriteDma(
                                     hRmSpiSlink->CurrentDirection, NV_FALSE);
 
     *pPacketsTransferred = PacketsRequested - PacketsRemaining;
-#if defined (CONFIG_MACH_STAR_REV_F)
-       if(nvError!=NvSuccess)
-               Error = nvError;
+#if defined (CONFIG_MODEM_IFX)
+	if(nvError!=NvSuccess)
+		Error = nvError;
 #endif
-
     return Error;
 }
 static NvError SlaveModeSpiStartReadWriteCpu(
@@ -2577,12 +2574,12 @@ static NvError SlaveModeSpiStartReadWriteDma(
         hRmSpiSlink->CurrTransInfo.pTxBuff = hRmSpiSlink->pTxDmaBuffer;
         hRmSpiSlink->TxDmaReq.size = CurrentTransWord *4;
         wmb();
-	 rmb();		//20101204-2, , NVIDIA's patch for syncing dma buffer copy.
-        dsb();
-        outer_sync();
-//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
+	 rmb();		//20101204-2, syblue.lee@lge.com, NVIDIA's patch for syncing dma buffer copy.
+	 dsb();
+	 outer_sync();
+//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
 	 NvOsWaitUS(50);
-//20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
+//20101204-2, syblue.lee@lge.com, NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
         Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
         do
         {
@@ -2892,9 +2889,9 @@ void NvRmSpiMultipleTransactions(
         TotalTransByte += pTrans->len;
     }
 
-// LGE_UPDATE_S  0707  
+// LGE_UPDATE_S eungbo.shim@lge.com 0707  
     BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, TotalTransByte, ClockSpeedInKHz);
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     hRmSpi->CurrTransInfo.PacketsPerWord = PacketsPerWord;
     if (SpiPinMap)
@@ -2984,11 +2981,11 @@ void NvRmSpiMultipleTransactions(
 
 cleanup:
 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
     BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, TotalTransByte, ClockSpeedInKHz);
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
-    //  Re-tristate multi-plexed controllers, and re-multiplex the controller.
+	//  Re-tristate multi-plexed controllers, and re-multiplex the controller.
     if (SpiPinMap)
     {
         NvRmPinMuxConfigSetTristate(hRmSpi->hDevice,hRmSpi->RmIoModuleId,
@@ -3015,7 +3012,11 @@ cleanup:
 /**
  * Perform the data transfer.
  */
+#if defined (CONFIG_MODEM_MDM)
+void NvRmSpiTransaction(
+#elif defined (CONFIG_MODEM_IFX)
 NvError NvRmSpiTransaction(
+#endif
     NvRmSpiHandle hRmSpi,
     NvU32 SpiPinMap,
     NvU32 ChipSelectId,
@@ -3067,10 +3068,10 @@ NvError NvRmSpiTransaction(
     Error = SetPowerControl(hRmSpi, NV_TRUE);
     if (Error != NvSuccess)
         goto cleanup;
-
-// LGE_UPDATE_S  0707
+	
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
     BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, BytesRequested, ClockSpeedInKHz);
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     hRmSpi->CurrTransInfo.PacketsPerWord = PacketsPerWord;
 
@@ -3153,9 +3154,9 @@ NvError NvRmSpiTransaction(
                                    NV_FALSE, NV_FALSE);
 
 cleanup:
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
     BoostFrequency(hRmSpi, ChipSelectId, NV_FALSE, BytesRequested, 0);
- // LGE_UPDATE_S  0707
+ // LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     //  Re-tristate multi-plexed controllers, and re-multiplex the controller.
     if (SpiPinMap)
@@ -3181,9 +3182,9 @@ cleanup:
     NvOsMutexUnlock(hRmSpi->hChannelAccessMutex);
 
     NV_ASSERT(Error == NvSuccess);
-
-    return Error;
-
+#if defined (CONFIG_MODEM_IFX)
+	return Error;
+#endif
 }
 
 /**
@@ -3267,10 +3268,10 @@ NvError NvRmSpiStartTransaction(
     // Enable Power/Clock.
     Error = SetPowerControl(hRmSpi, NV_TRUE);
 
-// LGE_UPDATE_S  0707
-    if (!Error)
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
+	if (!Error)
         BoostFrequency(hRmSpi, ChipSelectId, NV_TRUE, BytesRequested, ClockSpeedInKHz); //EBS 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     if (!Error)
         Error = SetChipSelectSignalLevel(hRmSpi, ChipSelectId, ClockSpeedInKHz,
@@ -3318,9 +3319,9 @@ NvError NvRmSpiStartTransaction(
 cleanup:
 
     (void)SetChipSelectSignalLevel(hRmSpi, ChipSelectId, ClockSpeedInKHz, NV_FALSE, NV_TRUE);
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 	  BoostFrequency(hRmSpi, ChipSelectId, NV_FALSE, BytesRequested, 0); //EBS 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
 
     if (hRmSpi->IsIdleSignalTristate)
         NvRmPinMuxConfigSetTristate(hRmSpi->hDevice,hRmSpi->RmIoModuleId,
@@ -3359,9 +3360,9 @@ NvRmSpiGetTransactionData(
 
     // Disable Power/Clock.
     SetPowerControl(hRmSpiSlink, NV_FALSE);
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
      BoostFrequency(hRmSpiSlink, hRmSpiSlink->CurrTransferChipSelId, NV_FALSE, BytesRequested, 0); // EBS 
-// LGE_UPDATE_S  0707
+// LGE_UPDATE_S eungbo.shim@lge.com 0707
     NvOsMutexUnlock(hRmSpiSlink->hChannelAccessMutex);
     return Error;
 }

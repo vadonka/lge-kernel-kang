@@ -19,7 +19,6 @@
 #include <linux/inetdevice.h>
 #include <linux/proc_fs.h>
 #include <linux/mutex.h>
-#include <linux/slab.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 
@@ -27,7 +26,7 @@
 
 static DEFINE_MUTEX(afinfo_mutex);
 
-const struct nf_afinfo __rcu *nf_afinfo[NFPROTO_NUMPROTO] __read_mostly;
+const struct nf_afinfo *nf_afinfo[NFPROTO_NUMPROTO] __read_mostly;
 EXPORT_SYMBOL(nf_afinfo);
 
 int nf_register_afinfo(const struct nf_afinfo *afinfo)
@@ -105,8 +104,10 @@ EXPORT_SYMBOL(nf_register_hooks);
 
 void nf_unregister_hooks(struct nf_hook_ops *reg, unsigned int n)
 {
-	while (n-- > 0)
-		nf_unregister_hook(&reg[n]);
+	unsigned int i;
+
+	for (i = 0; i < n; i++)
+		nf_unregister_hook(&reg[i]);
 }
 EXPORT_SYMBOL(nf_unregister_hooks);
 
@@ -133,7 +134,6 @@ unsigned int nf_iterate(struct list_head *head,
 
 		/* Optimization: we don't need to hold module
 		   reference here, since function can't sleep. --RR */
-repeat:
 		verdict = elem->hook(hook, skb, indev, outdev, okfn);
 		if (verdict != NF_ACCEPT) {
 #ifdef CONFIG_NETFILTER_DEBUG
@@ -146,7 +146,7 @@ repeat:
 #endif
 			if (verdict != NF_REPEAT)
 				return verdict;
-			goto repeat;
+			*i = (*i)->prev;
 		}
 	}
 	return NF_ACCEPT;
@@ -174,23 +174,13 @@ next_hook:
 			     outdev, &elem, okfn, hook_thresh);
 	if (verdict == NF_ACCEPT || verdict == NF_STOP) {
 		ret = 1;
-	} else if ((verdict & NF_VERDICT_MASK) == NF_DROP) {
+	} else if (verdict == NF_DROP) {
 		kfree_skb(skb);
-		ret = NF_DROP_GETERR(verdict);
-		if (ret == 0)
-			ret = -EPERM;
+		ret = -EPERM;
 	} else if ((verdict & NF_VERDICT_MASK) == NF_QUEUE) {
-		ret = nf_queue(skb, elem, pf, hook, indev, outdev, okfn,
-			       verdict >> NF_VERDICT_QBITS);
-		if (ret < 0) {
-			if (ret == -ECANCELED)
-				goto next_hook;
-			if (ret == -ESRCH &&
-			   (verdict & NF_VERDICT_FLAG_QUEUE_BYPASS))
-				goto next_hook;
-			kfree_skb(skb);
-		}
-		ret = 0;
+		if (!nf_queue(skb, elem, pf, hook, indev, outdev, okfn,
+			      verdict >> NF_VERDICT_BITS))
+			goto next_hook;
 	}
 	rcu_read_unlock();
 	return ret;
@@ -223,7 +213,7 @@ EXPORT_SYMBOL(skb_make_writable);
 /* This does not belong here, but locally generated errors need it if connection
    tracking in use: without this, connection may not be in hash table, and hence
    manufactured ICMP or RST packets will not be associated with it. */
-void (*ip_ct_attach)(struct sk_buff *, struct sk_buff *) __rcu __read_mostly;
+void (*ip_ct_attach)(struct sk_buff *, struct sk_buff *);
 EXPORT_SYMBOL(ip_ct_attach);
 
 void nf_ct_attach(struct sk_buff *new, struct sk_buff *skb)
@@ -240,7 +230,7 @@ void nf_ct_attach(struct sk_buff *new, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(nf_ct_attach);
 
-void (*nf_ct_destroy)(struct nf_conntrack *) __rcu __read_mostly;
+void (*nf_ct_destroy)(struct nf_conntrack *);
 EXPORT_SYMBOL(nf_ct_destroy);
 
 void nf_conntrack_destroy(struct nf_conntrack *nfct)
@@ -283,8 +273,8 @@ void __init netfilter_init(void)
 
 #ifdef CONFIG_SYSCTL
 struct ctl_path nf_net_netfilter_sysctl_path[] = {
-	{ .procname = "net", },
-	{ .procname = "netfilter", },
+	{ .procname = "net", .ctl_name = CTL_NET, },
+	{ .procname = "netfilter", .ctl_name = NET_NETFILTER, },
 	{ }
 };
 EXPORT_SYMBOL_GPL(nf_net_netfilter_sysctl_path);

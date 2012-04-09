@@ -23,7 +23,6 @@
 #include <linux/input.h>
 #include <linux/workqueue.h>
 #include <linux/timer.h>
-#include <linux/slab.h>
 
 #define DRIVER_NAME "ats_event_log"
 
@@ -54,7 +53,7 @@ int is_started = 0;
 
 /* LGE_CHANGE
  * support MTC using diag port
- * 2010-07-11 
+ * 2010-07-11 taehung.kim@lge.com
  */
 #if defined (CONFIG_MACH_MSM7X27_THUNDERC) || defined(LG_FW_MTC)
 extern unsigned char g_diag_mtc_check;
@@ -317,13 +316,13 @@ EXPORT_SYMBOL(event_log_mask);
 /* [END] add ETA  key event logging for vs660 [younchan.kim 2010-05-31]*/
 
 
-static int __devinit ats_event_log_probe(struct platform_device *pdev)
+static int  __init ats_event_log_probe(struct platform_device *pdev)
 {
 	int rc = 0 ;
 	return rc;
 }
 
-static int __devexit ats_event_log_remove(struct platform_device *pdev)
+static int ats_event_log_remove(struct platform_device *pdev)
 {
 	input_unregister_device(ats_input_dev);
 	return 0;
@@ -335,7 +334,7 @@ static struct platform_driver ats_input_driver = {
 		.owner = THIS_MODULE,
 	},
 	.probe	 = ats_event_log_probe,
-	.remove = __devexit_p(ats_event_log_remove),
+	.remove = ats_event_log_remove,
 };
 
 static int __init ats_input_init(void)

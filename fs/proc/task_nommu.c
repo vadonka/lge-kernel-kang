@@ -5,7 +5,6 @@
 #include <linux/fs_struct.h>
 #include <linux/mount.h>
 #include <linux/ptrace.h>
-#include <linux/slab.h>
 #include <linux/seq_file.h>
 #include "internal.h"
 
@@ -92,14 +91,13 @@ unsigned long task_vsize(struct mm_struct *mm)
 	return vsize;
 }
 
-unsigned long task_statm(struct mm_struct *mm,
-			 unsigned long *shared, unsigned long *text,
-			 unsigned long *data, unsigned long *resident)
+int task_statm(struct mm_struct *mm, int *shared, int *text,
+	       int *data, int *resident)
 {
 	struct vm_area_struct *vma;
 	struct vm_region *region;
 	struct rb_node *p;
-	unsigned long size = kobjsize(mm);
+	int size = kobjsize(mm);
 
 	down_read(&mm->mmap_sem);
 	for (p = rb_first(&mm->mm_rb); p; p = rb_next(p)) {
@@ -112,23 +110,11 @@ unsigned long task_statm(struct mm_struct *mm,
 		}
 	}
 
-	*text = (PAGE_ALIGN(mm->end_code) - (mm->start_code & PAGE_MASK))
-		>> PAGE_SHIFT;
-	*data = (PAGE_ALIGN(mm->start_stack) - (mm->start_data & PAGE_MASK))
-		>> PAGE_SHIFT;
+	size += (*text = mm->end_code - mm->start_code);
+	size += (*data = mm->start_stack - mm->start_data);
 	up_read(&mm->mmap_sem);
-	size >>= PAGE_SHIFT;
-	size += *text + *data;
 	*resident = size;
 	return size;
-}
-
-static void pad_len_spaces(struct seq_file *m, int len)
-{
-	len = 25 + sizeof(void*) * 6 - len;
-	if (len < 1)
-		len = 1;
-	seq_printf(m, "%*c", len, ' ');
 }
 
 /*
@@ -136,7 +122,6 @@ static void pad_len_spaces(struct seq_file *m, int len)
  */
 static int nommu_vma_show(struct seq_file *m, struct vm_area_struct *vma)
 {
-	struct mm_struct *mm = vma->vm_mm;
 	unsigned long ino = 0;
 	struct file *file;
 	dev_t dev = 0;
@@ -165,14 +150,11 @@ static int nommu_vma_show(struct seq_file *m, struct vm_area_struct *vma)
 		   MAJOR(dev), MINOR(dev), ino, &len);
 
 	if (file) {
-		pad_len_spaces(m, len);
+		len = 25 + sizeof(void *) * 6 - len;
+		if (len < 1)
+			len = 1;
+		seq_printf(m, "%*c", len, ' ');
 		seq_path(m, &file->f_path, "");
-	} else if (mm) {
-		if (vma->vm_start <= mm->start_stack &&
-			vma->vm_end >= mm->start_stack) {
-			pad_len_spaces(m, len);
-			seq_puts(m, "[stack]");
-		}
 	}
 
 	seq_putc(m, '\n');
@@ -199,13 +181,13 @@ static void *m_start(struct seq_file *m, loff_t *pos)
 	/* pin the task and mm whilst we play with them */
 	priv->task = get_pid_task(priv->pid, PIDTYPE_PID);
 	if (!priv->task)
-		return ERR_PTR(-ESRCH);
+		return NULL;
 
 	mm = mm_for_maps(priv->task);
-	if (!mm || IS_ERR(mm)) {
+	if (!mm) {
 		put_task_struct(priv->task);
 		priv->task = NULL;
-		return mm;
+		return NULL;
 	}
 	down_read(&mm->mmap_sem);
 

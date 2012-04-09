@@ -14,17 +14,11 @@
 #define _ASM_POWERPC_PACA_H
 #ifdef __KERNEL__
 
-#ifdef CONFIG_PPC64
-
-#include <linux/init.h>
 #include <asm/types.h>
 #include <asm/lppaca.h>
 #include <asm/mmu.h>
 #include <asm/page.h>
 #include <asm/exception-64e.h>
-#ifdef CONFIG_KVM_BOOK3S_64_HANDLER
-#include <asm/kvm_book3s_asm.h>
-#endif
 
 register struct paca_struct *local_paca asm("r13");
 
@@ -82,19 +76,16 @@ struct paca_struct {
 	s16 hw_cpu_id;			/* Physical processor number */
 	u8 cpu_start;			/* At startup, processor spins until */
 					/* this becomes non-zero. */
-	u8 kexec_state;		/* set when kexec down has irqs off */
 #ifdef CONFIG_PPC_STD_MMU_64
 	struct slb_shadow *slb_shadow_ptr;
-	struct dtl_entry *dispatch_log;
-	struct dtl_entry *dispatch_log_end;
 
 	/*
 	 * Now, starting in cacheline 2, the exception save areas
 	 */
 	/* used for most interrupts/exceptions */
-	u64 exgen[11] __attribute__((aligned(0x80)));
-	u64 exmc[11];		/* used for machine checks */
-	u64 exslb[11];		/* used for SLB/segment table misses
+	u64 exgen[10] __attribute__((aligned(0x80)));
+	u64 exmc[10];		/* used for machine checks */
+	u64 exslb[10];		/* used for SLB/segment table misses
  				 * on the linear mapping */
 	/* SLB related definitions */
 	u16 vmalloc_sllp;
@@ -106,8 +97,7 @@ struct paca_struct {
 	pgd_t *pgd;			/* Current PGD */
 	pgd_t *kernel_pgd;		/* Kernel PGD */
 	u64 exgen[8] __attribute__((aligned(0x80)));
-	/* We can have up to 3 levels of reentrancy in the TLB miss handler */
-	u64 extlb[3][EX_TLB_SIZE / sizeof(u64)] __attribute__((aligned(0x80)));
+	u64 extlb[EX_TLB_SIZE*3] __attribute__((aligned(0x80)));
 	u64 exmc[8];		/* used for machine checks */
 	u64 excrit[8];		/* used for crit interrupts */
 	u64 exdbg[8];		/* used for debug interrupts */
@@ -126,45 +116,23 @@ struct paca_struct {
 	struct task_struct *__current;	/* Pointer to current */
 	u64 kstack;			/* Saved Kernel stack addr */
 	u64 stab_rr;			/* stab/slb round-robin counter */
-	u64 saved_r1;			/* r1 save for RTAS calls or PM */
+	u64 saved_r1;			/* r1 save for RTAS calls */
 	u64 saved_msr;			/* MSR saved here by enter_rtas */
 	u16 trap_save;			/* Used when bad stack is encountered */
 	u8 soft_enabled;		/* irq soft-enable flag */
 	u8 hard_enabled;		/* set if irqs are enabled in MSR */
 	u8 io_sync;			/* writel() needs spin_unlock sync */
-	u8 irq_work_pending;		/* IRQ_WORK interrupt while soft-disable */
+	u8 perf_event_pending;		/* PM interrupt while soft-disabled */
 
 	/* Stuff for accurate time accounting */
 	u64 user_time;			/* accumulated usermode TB ticks */
 	u64 system_time;		/* accumulated system TB ticks */
-	u64 user_time_scaled;		/* accumulated usermode SPURR ticks */
-	u64 starttime;			/* TB value snapshot */
-	u64 starttime_user;		/* TB value on exit to usermode */
+	u64 startpurr;			/* PURR/TB value snapshot */
 	u64 startspurr;			/* SPURR value snapshot */
-	u64 utime_sspurr;		/* ->user_time when ->startspurr set */
-	u64 stolen_time;		/* TB ticks taken by hypervisor */
-	u64 dtl_ridx;			/* read index in dispatch log */
-	struct dtl_entry *dtl_curr;	/* pointer corresponding to dtl_ridx */
-
-#ifdef CONFIG_KVM_BOOK3S_HANDLER
-	/* We use this to store guest state in */
-	struct kvmppc_book3s_shadow_vcpu shadow_vcpu;
-#endif
 };
 
-extern struct paca_struct *paca;
-extern __initdata struct paca_struct boot_paca;
-extern void initialise_paca(struct paca_struct *new_paca, int cpu);
-extern void setup_paca(struct paca_struct *new_paca);
-extern void allocate_pacas(void);
-extern void free_unused_pacas(void);
-
-#else /* CONFIG_PPC64 */
-
-static inline void allocate_pacas(void) { };
-static inline void free_unused_pacas(void) { };
-
-#endif /* CONFIG_PPC64 */
+extern struct paca_struct paca[];
+extern void initialise_pacas(void);
 
 #endif /* __KERNEL__ */
 #endif /* _ASM_POWERPC_PACA_H */

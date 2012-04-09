@@ -25,14 +25,6 @@
 #include <linux/kernel.h>
 #include <linux/utsname.h>
 
-
-#if defined USB_ETH_RNDIS
-#  undef USB_ETH_RNDIS
-#endif
-#ifdef CONFIG_USB_ETH_RNDIS
-#  define USB_ETH_RNDIS y
-#endif
-
 #include "u_ether.h"
 
 
@@ -74,7 +66,7 @@
 #define DRIVER_DESC		"Ethernet Gadget"
 #define DRIVER_VERSION		"Memorial Day 2008"
 
-#ifdef USB_ETH_RNDIS
+#ifdef CONFIG_USB_ETH_RNDIS
 #define PREFIX			"RNDIS/"
 #else
 #define PREFIX			""
@@ -95,7 +87,7 @@
 
 static inline bool has_rndis(void)
 {
-#ifdef	USB_ETH_RNDIS
+#ifdef	CONFIG_USB_ETH_RNDIS
 	return true;
 #else
 	return false;
@@ -118,7 +110,7 @@ static inline bool has_rndis(void)
 
 #include "f_ecm.c"
 #include "f_subset.c"
-#ifdef	USB_ETH_RNDIS
+#ifdef	CONFIG_USB_ETH_RNDIS
 #include "f_rndis.c"
 #include "rndis.c"
 #endif
@@ -251,6 +243,7 @@ static int __init rndis_do_config(struct usb_configuration *c)
 
 static struct usb_configuration rndis_config_driver = {
 	.label			= "RNDIS",
+	.bind			= rndis_do_config,
 	.bConfigurationValue	= 2,
 	/* .iConfiguration = DYNAMIC */
 	.bmAttributes		= USB_CONFIG_ATT_SELFPOWER,
@@ -288,6 +281,7 @@ static int __init eth_do_config(struct usb_configuration *c)
 
 static struct usb_configuration eth_config_driver = {
 	/* .label = f(hardware) */
+	.bind			= eth_do_config,
 	.bConfigurationValue	= 1,
 	/* .iConfiguration = DYNAMIC */
 	.bmAttributes		= USB_CONFIG_ATT_SELFPOWER,
@@ -371,13 +365,12 @@ static int __init eth_bind(struct usb_composite_dev *cdev)
 
 	/* register our configuration(s); RNDIS first, if it's used */
 	if (has_rndis()) {
-		status = usb_add_config(cdev, &rndis_config_driver,
-				rndis_do_config);
+		status = usb_add_config(cdev, &rndis_config_driver);
 		if (status < 0)
 			goto fail;
 	}
 
-	status = usb_add_config(cdev, &eth_config_driver, eth_do_config);
+	status = usb_add_config(cdev, &eth_config_driver);
 	if (status < 0)
 		goto fail;
 
@@ -401,6 +394,7 @@ static struct usb_composite_driver eth_driver = {
 	.name		= "g_ether",
 	.dev		= &device_desc,
 	.strings	= dev_strings,
+	.bind		= eth_bind,
 	.unbind		= __exit_p(eth_unbind),
 };
 
@@ -410,7 +404,7 @@ MODULE_LICENSE("GPL");
 
 static int __init init(void)
 {
-	return usb_composite_probe(&eth_driver, eth_bind);
+	return usb_composite_register(&eth_driver);
 }
 module_init(init);
 

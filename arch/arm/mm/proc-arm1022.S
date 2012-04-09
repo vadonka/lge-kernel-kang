@@ -53,7 +53,7 @@
 /*
  * This is the size at which it becomes more efficient to
  * clean the whole cache, rather than using the individual
- * cache line maintenance instructions.
+ * cache line maintainence instructions.
  */
 #define CACHE_DLIMIT	32768
 
@@ -68,11 +68,15 @@ ENTRY(cpu_arm1022_proc_init)
  * cpu_arm1022_proc_fin()
  */
 ENTRY(cpu_arm1022_proc_fin)
+	stmfd	sp!, {lr}
+	mov	ip, #PSR_F_BIT | PSR_I_BIT | SVC_MODE
+	msr	cpsr_c, ip
+	bl	arm1022_flush_kern_cache_all
 	mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
 	bic	r0, r0, #0x1000 		@ ...i............
 	bic	r0, r0, #0x000e 		@ ............wca.
 	mcr	p15, 0, r0, c1, c0, 0		@ disable caches
-	mov	pc, lr
+	ldmfd	sp!, {pc}
 
 /*
  * cpu_arm1022_reset(loc)
@@ -108,20 +112,6 @@ ENTRY(cpu_arm1022_do_idle)
 /* ================================= CACHE ================================ */
 
 	.align	5
-
-/*
- *	flush_icache_all()
- *
- *	Unconditionally clean and invalidate the entire icache.
- */
-ENTRY(arm1022_flush_icache_all)
-#ifndef CONFIG_CPU_ICACHE_DISABLE
-	mov	r0, #0
-	mcr	p15, 0, r0, c7, c5, 0		@ invalidate I cache
-#endif
-	mov	pc, lr
-ENDPROC(arm1022_flush_icache_all)
-
 /*
  *	flush_user_cache_all()
  *
@@ -340,7 +330,6 @@ ENTRY(arm1022_dma_unmap_area)
 ENDPROC(arm1022_dma_unmap_area)
 
 ENTRY(arm1022_cache_fns)
-	.long	arm1022_flush_icache_all
 	.long	arm1022_flush_kern_cache_all
 	.long	arm1022_flush_user_cache_all
 	.long	arm1022_flush_user_cache_range
@@ -411,7 +400,7 @@ ENTRY(cpu_arm1022_set_pte_ext)
 #endif /* CONFIG_MMU */
 	mov	pc, lr
 
-	__CPUINIT
+	__INIT
 
 	.type	__arm1022_setup, #function
 __arm1022_setup:
@@ -459,9 +448,6 @@ arm1022_processor_functions:
 	.word	cpu_arm1022_dcache_clean_area
 	.word	cpu_arm1022_switch_mm
 	.word	cpu_arm1022_set_pte_ext
-	.word	0
-	.word	0
-	.word	0
 	.size	arm1022_processor_functions, . - arm1022_processor_functions
 
 	.section ".rodata"

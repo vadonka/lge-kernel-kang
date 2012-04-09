@@ -29,6 +29,7 @@ struct svc_pool_stats {
 	unsigned long	packets;
 	unsigned long	sockets_queued;
 	unsigned long	threads_woken;
+	unsigned long	overloads_avoided;
 	unsigned long	threads_timedout;
 };
 
@@ -49,6 +50,7 @@ struct svc_pool {
 	struct list_head	sp_sockets;	/* pending sockets */
 	unsigned int		sp_nrthreads;	/* # of threads in pool */
 	struct list_head	sp_all_threads;	/* all server threads */
+	int			sp_nwaking;	/* number of threads woken but not yet active */
 	struct svc_pool_stats	sp_stats;	/* statistics on pool operation */
 } ____cacheline_aligned_in_smp;
 
@@ -99,7 +101,7 @@ struct svc_serv {
 	spinlock_t		sv_cb_lock;	/* protects the svc_cb_list */
 	wait_queue_head_t	sv_cb_waitq;	/* sleep here if there are no
 						 * entries in the svc_cb_list */
-	struct svc_xprt		*sv_bc_xprt;	/* callback on fore channel */
+	struct svc_xprt		*bc_xprt;
 #endif /* CONFIG_NFS_V4_1 */
 };
 
@@ -269,16 +271,20 @@ struct svc_rqst {
 	struct cache_req	rq_chandle;	/* handle passed to caches for 
 						 * request delaying 
 						 */
-	bool			rq_dropme;
 	/* Catering to nfsd */
 	struct auth_domain *	rq_client;	/* RPC peer info */
 	struct auth_domain *	rq_gssclient;	/* "gss/"-style peer info */
 	struct svc_cacherep *	rq_cacherep;	/* cache info */
+	struct knfsd_fh *	rq_reffh;	/* Referrence filehandle, used to
+						 * determine what device number
+						 * to report (real or virtual)
+						 */
 	int			rq_splice_ok;   /* turned off in gss privacy
 						 * to prevent encrypting page
 						 * cache pages */
 	wait_queue_head_t	rq_wait;	/* synchronization */
 	struct task_struct	*rq_task;	/* service thread */
+	int			rq_waking;	/* 1 if thread is being woken */
 };
 
 /*

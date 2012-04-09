@@ -18,7 +18,6 @@
 
 #include <net/ipv6.h>
 #include <linux/sunrpc/clnt.h>
-#include <linux/slab.h>
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 
@@ -56,8 +55,16 @@ static size_t rpc_ntop6_noscopeid(const struct sockaddr *sap,
 
 	/*
 	 * RFC 4291, Section 2.2.1
+	 *
+	 * To keep the result as short as possible, especially
+	 * since we don't shorthand, we don't want leading zeros
+	 * in each halfword, so avoid %pI6.
 	 */
-	return snprintf(buf, buflen, "%pI6c", addr);
+	return snprintf(buf, buflen, "%x:%x:%x:%x:%x:%x:%x:%x",
+		ntohs(addr->s6_addr16[0]), ntohs(addr->s6_addr16[1]),
+		ntohs(addr->s6_addr16[2]), ntohs(addr->s6_addr16[3]),
+		ntohs(addr->s6_addr16[4]), ntohs(addr->s6_addr16[5]),
+		ntohs(addr->s6_addr16[6]), ntohs(addr->s6_addr16[7]));
 }
 
 static size_t rpc_ntop6(const struct sockaddr *sap,
@@ -72,9 +79,8 @@ static size_t rpc_ntop6(const struct sockaddr *sap,
 	if (unlikely(len == 0))
 		return len;
 
-	if (!(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL))
-		return len;
-	if (sin6->sin6_scope_id == 0)
+	if (!(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL) &&
+	    !(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_SITELOCAL))
 		return len;
 
 	rc = snprintf(scopebuf, sizeof(scopebuf), "%c%u",
@@ -151,7 +157,7 @@ static size_t rpc_pton4(const char *buf, const size_t buflen,
 		return 0;
 
 	sin->sin_family = AF_INET;
-	return sizeof(struct sockaddr_in);
+	return sizeof(struct sockaddr_in);;
 }
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
@@ -167,7 +173,8 @@ static int rpc_parse_scope_id(const char *buf, const size_t buflen,
 	if (*delim != IPV6_SCOPE_DELIMITER)
 		return 0;
 
-	if (!(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL))
+	if (!(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL) &&
+	    !(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_SITELOCAL))
 		return 0;
 
 	len = (buf + buflen) - delim - 1;

@@ -3,7 +3,6 @@
  * See copyright notice in main.c
  */
 #include <linux/kernel.h>
-#include <linux/slab.h>
 #include <linux/firmware.h>
 #include <linux/device.h>
 
@@ -29,12 +28,6 @@ static const struct fw_info orinoco_fw[] = {
 	{ NULL, "prism_sta_fw.bin", "prism_ap_fw.bin", 0, 1024 },
 	{ "symbol_sp24t_prim_fw", "symbol_sp24t_sec_fw", NULL, 0x00003100, 512 }
 };
-MODULE_FIRMWARE("agere_sta_fw.bin");
-MODULE_FIRMWARE("agere_ap_fw.bin");
-MODULE_FIRMWARE("prism_sta_fw.bin");
-MODULE_FIRMWARE("prism_ap_fw.bin");
-MODULE_FIRMWARE("symbol_sp24t_prim_fw");
-MODULE_FIRMWARE("symbol_sp24t_sec_fw");
 
 /* Structure used to access fields in FW
  * Make sure LE decoding macros are used
@@ -49,7 +42,7 @@ struct orinoco_fw_header {
 	__le32 pri_offset;      /* Offset to primary plug data */
 	__le32 compat_offset;   /* Offset to compatibility data*/
 	char signature[0];      /* FW signature length headersize-20 */
-} __packed;
+} __attribute__ ((packed));
 
 /* Check the range of various header entries. Return a pointer to a
  * description of the problem, or NULL if everything checks out. */
@@ -122,7 +115,7 @@ orinoco_dl_firmware(struct orinoco_private *priv,
 	dev_dbg(dev, "Attempting to download firmware %s\n", firmware);
 
 	/* Read current plug data */
-	err = hw->ops->read_pda(hw, pda, fw->pda_addr, fw->pda_size);
+	err = hermes_read_pda(hw, pda, fw->pda_addr, fw->pda_size, 0);
 	dev_dbg(dev, "Read PDA returned %d\n", err);
 	if (err)
 		goto free;
@@ -149,7 +142,7 @@ orinoco_dl_firmware(struct orinoco_private *priv,
 	}
 
 	/* Enable aux port to allow programming */
-	err = hw->ops->program_init(hw, le32_to_cpu(hdr->entry_point));
+	err = hermesi_program_init(hw, le32_to_cpu(hdr->entry_point));
 	dev_dbg(dev, "Program init returned %d\n", err);
 	if (err != 0)
 		goto abort;
@@ -177,7 +170,7 @@ orinoco_dl_firmware(struct orinoco_private *priv,
 		goto abort;
 
 	/* Tell card we've finished */
-	err = hw->ops->program_end(hw);
+	err = hermesi_program_end(hw);
 	dev_dbg(dev, "Program end returned %d\n", err);
 	if (err != 0)
 		goto abort;
@@ -224,7 +217,7 @@ symbol_dl_image(struct orinoco_private *priv, const struct fw_info *fw,
 		if (!pda)
 			return -ENOMEM;
 
-		ret = hw->ops->read_pda(hw, pda, fw->pda_addr, fw->pda_size);
+		ret = hermes_read_pda(hw, pda, fw->pda_addr, fw->pda_size, 1);
 		if (ret)
 			goto free;
 	}
@@ -260,7 +253,7 @@ symbol_dl_image(struct orinoco_private *priv, const struct fw_info *fw,
 	}
 
 	/* Reset hermes chip and make sure it responds */
-	ret = hw->ops->init(hw);
+	ret = hermes_init(hw);
 
 	/* hermes_reset() should return 0 with the secondary firmware */
 	if (secondary && ret != 0)

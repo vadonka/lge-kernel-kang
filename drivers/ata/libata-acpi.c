@@ -15,7 +15,6 @@
 #include <linux/acpi.h>
 #include <linux/libata.h>
 #include <linux/pci.h>
-#include <linux/slab.h>
 #include <scsi/scsi_device.h>
 #include "libata.h"
 
@@ -65,7 +64,7 @@ void ata_acpi_associate_sata_port(struct ata_port *ap)
 	WARN_ON(!(ap->flags & ATA_FLAG_ACPI_SATA));
 
 	if (!sata_pmp_attached(ap)) {
-		u64 adr = SATA_ADR(ap->port_no, NO_PORT_MULT);
+		acpi_integer adr = SATA_ADR(ap->port_no, NO_PORT_MULT);
 
 		ap->link.device->acpi_handle =
 			acpi_get_child(ap->host->acpi_handle, adr);
@@ -75,7 +74,7 @@ void ata_acpi_associate_sata_port(struct ata_port *ap)
 		ap->link.device->acpi_handle = NULL;
 
 		ata_for_each_link(link, ap, EDGE) {
-			u64 adr = SATA_ADR(ap->port_no, link->pmp);
+			acpi_integer adr = SATA_ADR(ap->port_no, link->pmp);
 
 			link->device->acpi_handle =
 				acpi_get_child(ap->host->acpi_handle, adr);
@@ -145,6 +144,12 @@ static void ata_acpi_handle_hotplug(struct ata_port *ap, struct ata_device *dev,
 	struct ata_eh_info *ehi = &ap->link.eh_info;
 	int wait = 0;
 	unsigned long flags;
+	acpi_handle handle;
+
+	if (dev)
+		handle = dev->acpi_handle;
+	else
+		handle = ap->acpi_handle;
 
 	spin_lock_irqsave(ap->lock, flags);
 	/*
@@ -660,7 +665,8 @@ static int ata_acpi_filter_tf(struct ata_device *dev,
  * @dev: target ATA device
  * @gtf: raw ATA taskfile register set (0x1f1 - 0x1f7)
  *
- * Outputs ATA taskfile to standard ATA host controller.
+ * Outputs ATA taskfile to standard ATA host controller using MMIO
+ * or PIO as indicated by the ATA_FLAG_MMIO flag.
  * Writes the control, feature, nsect, lbal, lbam, and lbah registers.
  * Optionally (ATA_TFLAG_LBA48) writes hob_feature, hob_nsect,
  * hob_lbal, hob_lbam, and hob_lbah.
@@ -801,11 +807,12 @@ static int ata_acpi_exec_tfs(struct ata_device *dev, int *nr_executed)
  * EH context.
  *
  * RETURNS:
- * 0 on success, -ENOENT if _SDD doesn't exist, -errno on failure.
+ * 0 on success, -errno on failure.
  */
 static int ata_acpi_push_id(struct ata_device *dev)
 {
 	struct ata_port *ap = dev->link->ap;
+	int err;
 	acpi_status status;
 	struct acpi_object_list input;
 	union acpi_object in_params[1];
@@ -828,16 +835,12 @@ static int ata_acpi_push_id(struct ata_device *dev)
 	status = acpi_evaluate_object(dev->acpi_handle, "_SDD", &input, NULL);
 	swap_buf_le16(dev->id, ATA_ID_WORDS);
 
-	if (status == AE_NOT_FOUND)
-		return -ENOENT;
-
-	if (ACPI_FAILURE(status)) {
+	err = ACPI_FAILURE(status) ? -EIO : 0;
+	if (err < 0)
 		ata_dev_printk(dev, KERN_WARNING,
 			       "ACPI _SDD failed (AE 0x%x)\n", status);
-		return -EIO;
-	}
 
-	return 0;
+	return err;
 }
 
 /**
@@ -968,7 +971,7 @@ int ata_acpi_on_devcfg(struct ata_device *dev)
 	/* do _SDD if SATA */
 	if (acpi_sata) {
 		rc = ata_acpi_push_id(dev);
-		if (rc && rc != -ENOENT)
+		if (rc)
 			goto acpi_err;
 	}
 

@@ -28,6 +28,7 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/types.h>
+#include <linux/slab.h>
 #include <linux/highmem.h>
 #include <linux/init.h>
 #include <linux/sysctl.h>
@@ -92,27 +93,19 @@ int __dlm_lockres_has_locks(struct dlm_lock_resource *res)
  * truly ready to be freed. */
 int __dlm_lockres_unused(struct dlm_lock_resource *res)
 {
-	int bit;
-
-	if (__dlm_lockres_has_locks(res))
-		return 0;
-
-	if (!list_empty(&res->dirty) || res->state & DLM_LOCK_RES_DIRTY)
-		return 0;
-
-	if (res->state & DLM_LOCK_RES_RECOVERING)
-		return 0;
-
-	bit = find_next_bit(res->refmap, O2NM_MAX_NODES, 0);
-	if (bit < O2NM_MAX_NODES)
-		return 0;
-
-	/*
-	 * since the bit for dlm->node_num is not set, inflight_locks better
-	 * be zero
-	 */
-	BUG_ON(res->inflight_locks != 0);
-	return 1;
+	if (!__dlm_lockres_has_locks(res) &&
+	    (list_empty(&res->dirty) && !(res->state & DLM_LOCK_RES_DIRTY))) {
+		/* try not to scan the bitmap unless the first two
+		 * conditions are already true */
+		int bit = find_next_bit(res->refmap, O2NM_MAX_NODES, 0);
+		if (bit >= O2NM_MAX_NODES) {
+			/* since the bit for dlm->node_num is not
+			 * set, inflight_locks better be zero */
+			BUG_ON(res->inflight_locks != 0);
+			return 1;
+		}
+	}
+	return 0;
 }
 
 
@@ -122,13 +115,15 @@ int __dlm_lockres_unused(struct dlm_lock_resource *res)
 void __dlm_lockres_calc_usage(struct dlm_ctxt *dlm,
 			      struct dlm_lock_resource *res)
 {
+	mlog_entry("%.*s\n", res->lockname.len, res->lockname.name);
+
 	assert_spin_locked(&dlm->spinlock);
 	assert_spin_locked(&res->spinlock);
 
 	if (__dlm_lockres_unused(res)){
 		if (list_empty(&res->purge)) {
-			mlog(0, "%s: Adding res %.*s to purge list\n",
-			     dlm->name, res->lockname.len, res->lockname.name);
+			mlog(0, "putting lockres %.*s:%p onto purge list\n",
+			     res->lockname.len, res->lockname.name, res);
 
 			res->last_used = jiffies;
 			dlm_lockres_get(res);
@@ -136,8 +131,8 @@ void __dlm_lockres_calc_usage(struct dlm_ctxt *dlm,
 			dlm->purge_count++;
 		}
 	} else if (!list_empty(&res->purge)) {
-		mlog(0, "%s: Removing res %.*s from purge list\n",
-		     dlm->name, res->lockname.len, res->lockname.name);
+		mlog(0, "removing lockres %.*s:%p from purge list, owner=%u\n",
+		     res->lockname.len, res->lockname.name, res, res->owner);
 
 		list_del_init(&res->purge);
 		dlm_lockres_put(res);
@@ -148,6 +143,7 @@ void __dlm_lockres_calc_usage(struct dlm_ctxt *dlm,
 void dlm_lockres_calc_usage(struct dlm_ctxt *dlm,
 			    struct dlm_lock_resource *res)
 {
+	mlog_entry("%.*s\n", res->lockname.len, res->lockname.name);
 	spin_lock(&dlm->spinlock);
 	spin_lock(&res->spinlock);
 
@@ -157,24 +153,45 @@ void dlm_lockres_calc_usage(struct dlm_ctxt *dlm,
 	spin_unlock(&dlm->spinlock);
 }
 
-static void dlm_purge_lockres(struct dlm_ctxt *dlm,
+static int dlm_purge_lockres(struct dlm_ctxt *dlm,
 			     struct dlm_lock_resource *res)
 {
 	int master;
 	int ret = 0;
 
-	assert_spin_locked(&dlm->spinlock);
-	assert_spin_locked(&res->spinlock);
+	spin_lock(&res->spinlock);
+	if (!__dlm_lockres_unused(res)) {
+		mlog(0, "%s:%.*s: tried to purge but not unused\n",
+		     dlm->name, res->lockname.len, res->lockname.name);
+		__dlm_print_one_lock_resource(res);
+		spin_unlock(&res->spinlock);
+		BUG();
+	}
+
+	if (res->state & DLM_LOCK_RES_MIGRATING) {
+		mlog(0, "%s:%.*s: Delay dropref as this lockres is "
+		     "being remastered\n", dlm->name, res->lockname.len,
+		     res->lockname.name);
+		/* Re-add the lockres to the end of the purge list */
+		if (!list_empty(&res->purge)) {
+			list_del_init(&res->purge);
+			list_add_tail(&res->purge, &dlm->purge_list);
+		}
+		spin_unlock(&res->spinlock);
+		return 0;
+	}
 
 	master = (res->owner == dlm->node_num);
 
-	mlog(0, "%s: Purging res %.*s, master %d\n", dlm->name,
-	     res->lockname.len, res->lockname.name, master);
+	if (!master)
+		res->state |= DLM_LOCK_RES_DROPPING_REF;
+	spin_unlock(&res->spinlock);
+
+	mlog(0, "purging lockres %.*s, master = %d\n", res->lockname.len,
+	     res->lockname.name, master);
 
 	if (!master) {
-		res->state |= DLM_LOCK_RES_DROPPING_REF;
 		/* drop spinlock...  retake below */
-		spin_unlock(&res->spinlock);
 		spin_unlock(&dlm->spinlock);
 
 		spin_lock(&res->spinlock);
@@ -185,40 +202,38 @@ static void dlm_purge_lockres(struct dlm_ctxt *dlm,
 		/* clear our bit from the master's refmap, ignore errors */
 		ret = dlm_drop_lockres_ref(dlm, res);
 		if (ret < 0) {
-			mlog(ML_ERROR, "%s: deref %.*s failed %d\n", dlm->name,
-			     res->lockname.len, res->lockname.name, ret);
+			mlog_errno(ret);
 			if (!dlm_is_host_down(ret))
 				BUG();
 		}
+		mlog(0, "%s:%.*s: dlm_deref_lockres returned %d\n",
+		     dlm->name, res->lockname.len, res->lockname.name, ret);
 		spin_lock(&dlm->spinlock);
-		spin_lock(&res->spinlock);
 	}
 
+	spin_lock(&res->spinlock);
 	if (!list_empty(&res->purge)) {
-		mlog(0, "%s: Removing res %.*s from purgelist, master %d\n",
-		     dlm->name, res->lockname.len, res->lockname.name, master);
+		mlog(0, "removing lockres %.*s:%p from purgelist, "
+		     "master = %d\n", res->lockname.len, res->lockname.name,
+		     res, master);
 		list_del_init(&res->purge);
+		spin_unlock(&res->spinlock);
 		dlm_lockres_put(res);
 		dlm->purge_count--;
-	}
-
-	if (!__dlm_lockres_unused(res)) {
-		mlog(ML_ERROR, "%s: res %.*s in use after deref\n",
-		     dlm->name, res->lockname.len, res->lockname.name);
-		__dlm_print_one_lock_resource(res);
-		BUG();
-	}
+	} else
+		spin_unlock(&res->spinlock);
 
 	__dlm_unhash_lockres(res);
 
 	/* lockres is not in the hash now.  drop the flag and wake up
 	 * any processes waiting in dlm_get_lock_resource. */
 	if (!master) {
+		spin_lock(&res->spinlock);
 		res->state &= ~DLM_LOCK_RES_DROPPING_REF;
 		spin_unlock(&res->spinlock);
 		wake_up(&res->wq);
-	} else
-		spin_unlock(&res->spinlock);
+	}
+	return 0;
 }
 
 static void dlm_run_purge_list(struct dlm_ctxt *dlm,
@@ -237,7 +252,17 @@ static void dlm_run_purge_list(struct dlm_ctxt *dlm,
 		lockres = list_entry(dlm->purge_list.next,
 				     struct dlm_lock_resource, purge);
 
+		/* Status of the lockres *might* change so double
+		 * check. If the lockres is unused, holding the dlm
+		 * spinlock will prevent people from getting and more
+		 * refs on it -- there's no need to keep the lockres
+		 * spinlock. */
 		spin_lock(&lockres->spinlock);
+		unused = __dlm_lockres_unused(lockres);
+		spin_unlock(&lockres->spinlock);
+
+		if (!unused)
+			continue;
 
 		purge_jiffies = lockres->last_used +
 			msecs_to_jiffies(DLM_PURGE_INTERVAL_MS);
@@ -249,29 +274,15 @@ static void dlm_run_purge_list(struct dlm_ctxt *dlm,
 			 * in tail order, we can stop at the first
 			 * unpurgable resource -- anyone added after
 			 * him will have a greater last_used value */
-			spin_unlock(&lockres->spinlock);
 			break;
-		}
-
-		/* Status of the lockres *might* change so double
-		 * check. If the lockres is unused, holding the dlm
-		 * spinlock will prevent people from getting and more
-		 * refs on it. */
-		unused = __dlm_lockres_unused(lockres);
-		if (!unused ||
-		    (lockres->state & DLM_LOCK_RES_MIGRATING)) {
-			mlog(0, "%s: res %.*s is in use or being remastered, "
-			     "used %d, state %d\n", dlm->name,
-			     lockres->lockname.len, lockres->lockname.name,
-			     !unused, lockres->state);
-			list_move_tail(&dlm->purge_list, &lockres->purge);
-			spin_unlock(&lockres->spinlock);
-			continue;
 		}
 
 		dlm_lockres_get(lockres);
 
-		dlm_purge_lockres(dlm, lockres);
+		/* This may drop and reacquire the dlm spinlock if it
+		 * has to do migration. */
+		if (dlm_purge_lockres(dlm, lockres))
+			BUG();
 
 		dlm_lockres_put(lockres);
 
@@ -290,13 +301,15 @@ static void dlm_shuffle_lists(struct dlm_ctxt *dlm,
 	struct list_head *head;
 	int can_grant = 1;
 
-	/*
-	 * Because this function is called with the lockres
+	//mlog(0, "res->lockname.len=%d\n", res->lockname.len);
+	//mlog(0, "res->lockname.name=%p\n", res->lockname.name);
+	//mlog(0, "shuffle res %.*s\n", res->lockname.len,
+	//	  res->lockname.name);
+
+	/* because this function is called with the lockres
 	 * spinlock, and because we know that it is not migrating/
 	 * recovering/in-progress, it is fine to reserve asts and
-	 * basts right before queueing them all throughout
-	 */
-	assert_spin_locked(&dlm->ast_lock);
+	 * basts right before queueing them all throughout */
 	assert_spin_locked(&res->spinlock);
 	BUG_ON((res->state & (DLM_LOCK_RES_MIGRATING|
 			      DLM_LOCK_RES_RECOVERING|
@@ -305,13 +318,13 @@ static void dlm_shuffle_lists(struct dlm_ctxt *dlm,
 converting:
 	if (list_empty(&res->converting))
 		goto blocked;
-	mlog(0, "%s: res %.*s has locks on the convert queue\n", dlm->name,
-	     res->lockname.len, res->lockname.name);
+	mlog(0, "res %.*s has locks on a convert queue\n", res->lockname.len,
+	     res->lockname.name);
 
 	target = list_entry(res->converting.next, struct dlm_lock, list);
 	if (target->ml.convert_type == LKM_IVMODE) {
-		mlog(ML_ERROR, "%s: res %.*s converting lock to invalid mode\n",
-		     dlm->name, res->lockname.len, res->lockname.name);
+		mlog(ML_ERROR, "%.*s: converting a lock with no "
+		     "convert_type!\n", res->lockname.len, res->lockname.name);
 		BUG();
 	}
 	head = &res->granted;
@@ -325,7 +338,7 @@ converting:
 			/* queue the BAST if not already */
 			if (lock->ml.highest_blocked == LKM_IVMODE) {
 				__dlm_lockres_reserve_ast(res);
-				__dlm_queue_bast(dlm, lock);
+				dlm_queue_bast(dlm, lock);
 			}
 			/* update the highest_blocked if needed */
 			if (lock->ml.highest_blocked < target->ml.convert_type)
@@ -343,7 +356,7 @@ converting:
 			can_grant = 0;
 			if (lock->ml.highest_blocked == LKM_IVMODE) {
 				__dlm_lockres_reserve_ast(res);
-				__dlm_queue_bast(dlm, lock);
+				dlm_queue_bast(dlm, lock);
 			}
 			if (lock->ml.highest_blocked < target->ml.convert_type)
 				lock->ml.highest_blocked =
@@ -356,12 +369,9 @@ converting:
 		spin_lock(&target->spinlock);
 		BUG_ON(target->ml.highest_blocked != LKM_IVMODE);
 
-		mlog(0, "%s: res %.*s, AST for Converting lock %u:%llu, type "
-		     "%d => %d, node %u\n", dlm->name, res->lockname.len,
-		     res->lockname.name,
-		     dlm_get_lock_cookie_node(be64_to_cpu(target->ml.cookie)),
-		     dlm_get_lock_cookie_seq(be64_to_cpu(target->ml.cookie)),
-		     target->ml.type,
+		mlog(0, "calling ast for converting lock: %.*s, have: %d, "
+		     "granting: %d, node: %u\n", res->lockname.len,
+		     res->lockname.name, target->ml.type,
 		     target->ml.convert_type, target->ml.node);
 
 		target->ml.type = target->ml.convert_type;
@@ -374,7 +384,7 @@ converting:
 		spin_unlock(&target->spinlock);
 
 		__dlm_lockres_reserve_ast(res);
-		__dlm_queue_ast(dlm, target);
+		dlm_queue_ast(dlm, target);
 		/* go back and check for more */
 		goto converting;
 	}
@@ -393,7 +403,7 @@ blocked:
 			can_grant = 0;
 			if (lock->ml.highest_blocked == LKM_IVMODE) {
 				__dlm_lockres_reserve_ast(res);
-				__dlm_queue_bast(dlm, lock);
+				dlm_queue_bast(dlm, lock);
 			}
 			if (lock->ml.highest_blocked < target->ml.type)
 				lock->ml.highest_blocked = target->ml.type;
@@ -409,7 +419,7 @@ blocked:
 			can_grant = 0;
 			if (lock->ml.highest_blocked == LKM_IVMODE) {
 				__dlm_lockres_reserve_ast(res);
-				__dlm_queue_bast(dlm, lock);
+				dlm_queue_bast(dlm, lock);
 			}
 			if (lock->ml.highest_blocked < target->ml.type)
 				lock->ml.highest_blocked = target->ml.type;
@@ -422,14 +432,11 @@ blocked:
 		spin_lock(&target->spinlock);
 		BUG_ON(target->ml.highest_blocked != LKM_IVMODE);
 
-		mlog(0, "%s: res %.*s, AST for Blocked lock %u:%llu, type %d, "
-		     "node %u\n", dlm->name, res->lockname.len,
-		     res->lockname.name,
-		     dlm_get_lock_cookie_node(be64_to_cpu(target->ml.cookie)),
-		     dlm_get_lock_cookie_seq(be64_to_cpu(target->ml.cookie)),
+		mlog(0, "calling ast for blocked lock: %.*s, granting: %d, "
+		     "node: %u\n", res->lockname.len, res->lockname.name,
 		     target->ml.type, target->ml.node);
 
-		/* target->ml.type is already correct */
+		// target->ml.type is already correct
 		list_move_tail(&target->list, &res->granted);
 
 		BUG_ON(!target->lksb);
@@ -438,7 +445,7 @@ blocked:
 		spin_unlock(&target->spinlock);
 
 		__dlm_lockres_reserve_ast(res);
-		__dlm_queue_ast(dlm, target);
+		dlm_queue_ast(dlm, target);
 		/* go back and check for more */
 		goto converting;
 	}
@@ -450,6 +457,7 @@ leave:
 /* must have NO locks when calling this with res !=NULL * */
 void dlm_kick_thread(struct dlm_ctxt *dlm, struct dlm_lock_resource *res)
 {
+	mlog_entry("dlm=%p, res=%p\n", dlm, res);
 	if (res) {
 		spin_lock(&dlm->spinlock);
 		spin_lock(&res->spinlock);
@@ -462,6 +470,8 @@ void dlm_kick_thread(struct dlm_ctxt *dlm, struct dlm_lock_resource *res)
 
 void __dlm_dirty_lockres(struct dlm_ctxt *dlm, struct dlm_lock_resource *res)
 {
+	mlog_entry("dlm=%p, res=%p\n", dlm, res);
+
 	assert_spin_locked(&dlm->spinlock);
 	assert_spin_locked(&res->spinlock);
 
@@ -478,16 +488,13 @@ void __dlm_dirty_lockres(struct dlm_ctxt *dlm, struct dlm_lock_resource *res)
 			res->state |= DLM_LOCK_RES_DIRTY;
 		}
 	}
-
-	mlog(0, "%s: res %.*s\n", dlm->name, res->lockname.len,
-	     res->lockname.name);
 }
 
 
 /* Launch the NM thread for the mounted volume */
 int dlm_launch_thread(struct dlm_ctxt *dlm)
 {
-	mlog(0, "Starting dlm_thread...\n");
+	mlog(0, "starting dlm thread...\n");
 
 	dlm->dlm_thread_task = kthread_run(dlm_thread, dlm, "dlm_thread");
 	if (IS_ERR(dlm->dlm_thread_task)) {
@@ -502,7 +509,7 @@ int dlm_launch_thread(struct dlm_ctxt *dlm)
 void dlm_complete_thread(struct dlm_ctxt *dlm)
 {
 	if (dlm->dlm_thread_task) {
-		mlog(ML_KTHREAD, "Waiting for dlm thread to exit\n");
+		mlog(ML_KTHREAD, "waiting for dlm thread to exit\n");
 		kthread_stop(dlm->dlm_thread_task);
 		dlm->dlm_thread_task = NULL;
 	}
@@ -533,12 +540,7 @@ static void dlm_flush_asts(struct dlm_ctxt *dlm)
 		/* get an extra ref on lock */
 		dlm_lock_get(lock);
 		res = lock->lockres;
-		mlog(0, "%s: res %.*s, Flush AST for lock %u:%llu, type %d, "
-		     "node %u\n", dlm->name, res->lockname.len,
-		     res->lockname.name,
-		     dlm_get_lock_cookie_node(be64_to_cpu(lock->ml.cookie)),
-		     dlm_get_lock_cookie_seq(be64_to_cpu(lock->ml.cookie)),
-		     lock->ml.type, lock->ml.node);
+		mlog(0, "delivering an ast for this lockres\n");
 
 		BUG_ON(!lock->ast_pending);
 
@@ -559,9 +561,9 @@ static void dlm_flush_asts(struct dlm_ctxt *dlm)
 		/* possible that another ast was queued while
 		 * we were delivering the last one */
 		if (!list_empty(&lock->ast_list)) {
-			mlog(0, "%s: res %.*s, AST queued while flushing last "
-			     "one\n", dlm->name, res->lockname.len,
-			     res->lockname.name);
+			mlog(0, "aha another ast got queued while "
+			     "we were finishing the last one.  will "
+			     "keep the ast_pending flag set.\n");
 		} else
 			lock->ast_pending = 0;
 
@@ -592,12 +594,8 @@ static void dlm_flush_asts(struct dlm_ctxt *dlm)
 		dlm_lock_put(lock);
 		spin_unlock(&dlm->ast_lock);
 
-		mlog(0, "%s: res %.*s, Flush BAST for lock %u:%llu, "
-		     "blocked %d, node %u\n",
-		     dlm->name, res->lockname.len, res->lockname.name,
-		     dlm_get_lock_cookie_node(be64_to_cpu(lock->ml.cookie)),
-		     dlm_get_lock_cookie_seq(be64_to_cpu(lock->ml.cookie)),
-		     hi, lock->ml.node);
+		mlog(0, "delivering a bast for this lockres "
+		     "(blocked = %d\n", hi);
 
 		if (lock->ml.node != dlm->node_num) {
 			ret = dlm_send_proxy_bast(dlm, res, lock, hi);
@@ -611,9 +609,9 @@ static void dlm_flush_asts(struct dlm_ctxt *dlm)
 		/* possible that another bast was queued while
 		 * we were delivering the last one */
 		if (!list_empty(&lock->bast_list)) {
-			mlog(0, "%s: res %.*s, BAST queued while flushing last "
-			     "one\n", dlm->name, res->lockname.len,
-			     res->lockname.name);
+			mlog(0, "aha another bast got queued while "
+			     "we were finishing the last one.  will "
+			     "keep the bast_pending flag set.\n");
 		} else
 			lock->bast_pending = 0;
 
@@ -677,16 +675,14 @@ static int dlm_thread(void *data)
 		 	/* lockres can be re-dirtied/re-added to the
 			 * dirty_list in this gap, but that is ok */
 
-			spin_lock(&dlm->ast_lock);
 			spin_lock(&res->spinlock);
 			if (res->owner != dlm->node_num) {
 				__dlm_print_one_lock_resource(res);
-				mlog(ML_ERROR, "%s: inprog %d, mig %d, reco %d,"
-				     " dirty %d\n", dlm->name,
-				     !!(res->state & DLM_LOCK_RES_IN_PROGRESS),
-				     !!(res->state & DLM_LOCK_RES_MIGRATING),
-				     !!(res->state & DLM_LOCK_RES_RECOVERING),
-				     !!(res->state & DLM_LOCK_RES_DIRTY));
+				mlog(ML_ERROR, "inprog:%s, mig:%s, reco:%s, dirty:%s\n",
+				     res->state & DLM_LOCK_RES_IN_PROGRESS ? "yes" : "no",
+				     res->state & DLM_LOCK_RES_MIGRATING ? "yes" : "no",
+				     res->state & DLM_LOCK_RES_RECOVERING ? "yes" : "no",
+				     res->state & DLM_LOCK_RES_DIRTY ? "yes" : "no");
 			}
 			BUG_ON(res->owner != dlm->node_num);
 
@@ -699,9 +695,8 @@ static int dlm_thread(void *data)
 				/* move it to the tail and keep going */
 				res->state &= ~DLM_LOCK_RES_DIRTY;
 				spin_unlock(&res->spinlock);
-				spin_unlock(&dlm->ast_lock);
-				mlog(0, "%s: res %.*s, inprogress, delay list "
-				     "shuffle, state %d\n", dlm->name,
+				mlog(0, "delaying list shuffling for in-"
+				     "progress lockres %.*s, state=%d\n",
 				     res->lockname.len, res->lockname.name,
 				     res->state);
 				delay = 1;
@@ -713,11 +708,14 @@ static int dlm_thread(void *data)
 			 * spinlock and do NOT have the dlm lock.
 			 * safe to reserve/queue asts and run the lists. */
 
+			mlog(0, "calling dlm_shuffle_lists with dlm=%s, "
+			     "res=%.*s\n", dlm->name,
+			     res->lockname.len, res->lockname.name);
+
 			/* called while holding lockres lock */
 			dlm_shuffle_lists(dlm, res);
 			res->state &= ~DLM_LOCK_RES_DIRTY;
 			spin_unlock(&res->spinlock);
-			spin_unlock(&dlm->ast_lock);
 
 			dlm_lockres_calc_usage(dlm, res);
 
@@ -736,8 +734,7 @@ in_progress:
 			/* unlikely, but we may need to give time to
 			 * other tasks */
 			if (!--n) {
-				mlog(0, "%s: Throttling dlm thread\n",
-				     dlm->name);
+				mlog(0, "throttling dlm_thread\n");
 				break;
 			}
 		}

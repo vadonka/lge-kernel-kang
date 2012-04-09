@@ -46,24 +46,20 @@ xattr_permission(struct inode *inode, const char *name, int mask)
 		return 0;
 
 	/*
-	 * The trusted.* namespace can only be accessed by privileged users.
+	 * The trusted.* namespace can only be accessed by a privileged user.
 	 */
-	if (!strncmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN)) {
-		if (!capable(CAP_SYS_ADMIN))
-			return (mask & MAY_WRITE) ? -EPERM : -ENODATA;
-		return 0;
-	}
+	if (!strncmp(name, XATTR_TRUSTED_PREFIX, XATTR_TRUSTED_PREFIX_LEN))
+		return (capable(CAP_SYS_ADMIN) ? 0 : -EPERM);
 
-	/*
-	 * In the user.* namespace, only regular files and directories can have
+	/* In user.* namespace, only regular files and directories can have
 	 * extended attributes. For sticky directories, only the owner and
-	 * privileged users can write attributes.
+	 * privileged user can write attributes.
 	 */
 	if (!strncmp(name, XATTR_USER_PREFIX, XATTR_USER_PREFIX_LEN)) {
 		if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode))
-			return (mask & MAY_WRITE) ? -EPERM : -ENODATA;
+			return -EPERM;
 		if (S_ISDIR(inode->i_mode) && (inode->i_mode & S_ISVTX) &&
-		    (mask & MAY_WRITE) && !inode_owner_or_capable(inode))
+		    (mask & MAY_WRITE) && !is_owner_or_cap(inode))
 			return -EPERM;
 	}
 
@@ -91,11 +87,7 @@ int __vfs_setxattr_noperm(struct dentry *dentry, const char *name,
 {
 	struct inode *inode = dentry->d_inode;
 	int error = -EOPNOTSUPP;
-	int issec = !strncmp(name, XATTR_SECURITY_PREFIX,
-				   XATTR_SECURITY_PREFIX_LEN);
 
-	if (issec)
-		inode->i_flags &= ~S_NOSEC;
 	if (inode->i_op->setxattr) {
 		error = inode->i_op->setxattr(dentry, name, value, size, flags);
 		if (!error) {
@@ -103,7 +95,8 @@ int __vfs_setxattr_noperm(struct dentry *dentry, const char *name,
 			security_inode_post_setxattr(dentry, name, value,
 						     size, flags);
 		}
-	} else if (issec) {
+	} else if (!strncmp(name, XATTR_SECURITY_PREFIX,
+				XATTR_SECURITY_PREFIX_LEN)) {
 		const char *suffix = name + XATTR_SECURITY_PREFIX_LEN;
 		error = security_inode_setsecurity(inode, suffix, value,
 						   size, flags);
@@ -597,10 +590,10 @@ strcmp_prefix(const char *a, const char *a_prefix)
 /*
  * Find the xattr_handler with the matching prefix.
  */
-static const struct xattr_handler *
-xattr_resolve_name(const struct xattr_handler **handlers, const char **name)
+static struct xattr_handler *
+xattr_resolve_name(struct xattr_handler **handlers, const char **name)
 {
-	const struct xattr_handler *handler;
+	struct xattr_handler *handler;
 
 	if (!*name)
 		return NULL;
@@ -621,12 +614,13 @@ xattr_resolve_name(const struct xattr_handler **handlers, const char **name)
 ssize_t
 generic_getxattr(struct dentry *dentry, const char *name, void *buffer, size_t size)
 {
-	const struct xattr_handler *handler;
+	struct xattr_handler *handler;
+	struct inode *inode = dentry->d_inode;
 
-	handler = xattr_resolve_name(dentry->d_sb->s_xattr, &name);
+	handler = xattr_resolve_name(inode->i_sb->s_xattr, &name);
 	if (!handler)
 		return -EOPNOTSUPP;
-	return handler->get(dentry, name, buffer, size, handler->flags);
+	return handler->get(inode, name, buffer, size);
 }
 
 /*
@@ -636,20 +630,18 @@ generic_getxattr(struct dentry *dentry, const char *name, void *buffer, size_t s
 ssize_t
 generic_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 {
-	const struct xattr_handler *handler, **handlers = dentry->d_sb->s_xattr;
+	struct inode *inode = dentry->d_inode;
+	struct xattr_handler *handler, **handlers = inode->i_sb->s_xattr;
 	unsigned int size = 0;
 
 	if (!buffer) {
-		for_each_xattr_handler(handlers, handler) {
-			size += handler->list(dentry, NULL, 0, NULL, 0,
-					      handler->flags);
-		}
+		for_each_xattr_handler(handlers, handler)
+			size += handler->list(inode, NULL, 0, NULL, 0);
 	} else {
 		char *buf = buffer;
 
 		for_each_xattr_handler(handlers, handler) {
-			size = handler->list(dentry, buf, buffer_size,
-					     NULL, 0, handler->flags);
+			size = handler->list(inode, buf, buffer_size, NULL, 0);
 			if (size > buffer_size)
 				return -ERANGE;
 			buf += size;
@@ -666,14 +658,15 @@ generic_listxattr(struct dentry *dentry, char *buffer, size_t buffer_size)
 int
 generic_setxattr(struct dentry *dentry, const char *name, const void *value, size_t size, int flags)
 {
-	const struct xattr_handler *handler;
+	struct xattr_handler *handler;
+	struct inode *inode = dentry->d_inode;
 
 	if (size == 0)
 		value = "";  /* empty EA, do not remove */
-	handler = xattr_resolve_name(dentry->d_sb->s_xattr, &name);
+	handler = xattr_resolve_name(inode->i_sb->s_xattr, &name);
 	if (!handler)
 		return -EOPNOTSUPP;
-	return handler->set(dentry, name, value, size, flags, handler->flags);
+	return handler->set(inode, name, value, size, flags);
 }
 
 /*
@@ -683,13 +676,13 @@ generic_setxattr(struct dentry *dentry, const char *name, const void *value, siz
 int
 generic_removexattr(struct dentry *dentry, const char *name)
 {
-	const struct xattr_handler *handler;
+	struct xattr_handler *handler;
+	struct inode *inode = dentry->d_inode;
 
-	handler = xattr_resolve_name(dentry->d_sb->s_xattr, &name);
+	handler = xattr_resolve_name(inode->i_sb->s_xattr, &name);
 	if (!handler)
 		return -EOPNOTSUPP;
-	return handler->set(dentry, name, NULL, 0,
-			    XATTR_REPLACE, handler->flags);
+	return handler->set(inode, name, NULL, 0, XATTR_REPLACE);
 }
 
 EXPORT_SYMBOL(generic_getxattr);

@@ -19,7 +19,6 @@
 
 static int __init no_halt(char *s)
 {
-	WARN_ONCE(1, "\"no-hlt\" is deprecated, please use \"idle=poll\"\n");
 	boot_cpu_data.hlt_works_ok = 0;
 	return 1;
 }
@@ -87,7 +86,7 @@ static void __init check_fpu(void)
 
 static void __init check_hlt(void)
 {
-	if (boot_cpu_data.x86 >= 5 || paravirt_enabled())
+	if (paravirt_enabled())
 		return;
 
 	printk(KERN_INFO "Checking 'hlt' instruction... ");

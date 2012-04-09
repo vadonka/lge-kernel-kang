@@ -13,15 +13,11 @@
  *  Do not include any C declarations in this file - it is included by
  *  assembler source.
  */
-#ifndef __ASM_ASSEMBLER_H__
-#define __ASM_ASSEMBLER_H__
-
 #ifndef __ASSEMBLY__
 #error "Only include this from assembly code"
 #endif
 
 #include <asm/ptrace.h>
-#include <asm/domain.h>
 
 /*
  * Endian independent macros for shifting bytes within registers.
@@ -137,11 +133,6 @@
 	disable_irq
 	.endm
 
-	.macro	save_and_disable_irqs_notrace, oldcpsr
-	mrs	\oldcpsr, cpsr
-	disable_irq_notrace
-	.endm
-
 /*
  * Restore interrupt state previously stored in a register.  We don't
  * guarantee that this will preserve the flags.
@@ -158,60 +149,21 @@
 
 #define USER(x...)				\
 9999:	x;					\
-	.pushsection __ex_table,"a";		\
+	.section __ex_table,"a";		\
 	.align	3;				\
 	.long	9999b,9001f;			\
-	.popsection
-
-#ifdef CONFIG_SMP
-#define ALT_SMP(instr...)					\
-9998:	instr
-/*
- * Note: if you get assembler errors from ALT_UP() when building with
- * CONFIG_THUMB2_KERNEL, you almost certainly need to use
- * ALT_SMP( W(instr) ... )
- */
-#define ALT_UP(instr...)					\
-	.pushsection ".alt.smp.init", "a"			;\
-	.long	9998b						;\
-9997:	instr							;\
-	.if . - 9997b != 4					;\
-		.error "ALT_UP() content must assemble to exactly 4 bytes";\
-	.endif							;\
-	.popsection
-#define ALT_UP_B(label)					\
-	.equ	up_b_offset, label - 9998b			;\
-	.pushsection ".alt.smp.init", "a"			;\
-	.long	9998b						;\
-	W(b)	. + up_b_offset					;\
-	.popsection
-#else
-#define ALT_SMP(instr...)
-#define ALT_UP(instr...) instr
-#define ALT_UP_B(label) b label
-#endif
+	.previous
 
 /*
  * SMP data memory barrier
  */
-	.macro	smp_dmb mode
+	.macro	smp_dmb
 #ifdef CONFIG_SMP
 #if __LINUX_ARM_ARCH__ >= 7
-	.ifeqs "\mode","arm"
-	ALT_SMP(dmb)
-	.else
-	ALT_SMP(W(dmb))
-	.endif
+	dmb
 #elif __LINUX_ARM_ARCH__ == 6
-	ALT_SMP(mcr	p15, 0, r0, c7, c10, 5)	@ dmb
-#else
-#error Incompatible SMP platform
+	mcr	p15, 0, r0, c7, c10, 5	@ dmb
 #endif
-	.ifeqs "\mode","arm"
-	ALT_UP(nop)
-	.else
-	ALT_UP(W(nop))
-	.endif
 #endif
 	.endm
 
@@ -231,20 +183,20 @@
  */
 #ifdef CONFIG_THUMB2_KERNEL
 
-	.macro	usraccoff, instr, reg, ptr, inc, off, cond, abort, t=T()
+	.macro	usraccoff, instr, reg, ptr, inc, off, cond, abort
 9999:
 	.if	\inc == 1
-	\instr\cond\()b\()\t\().w \reg, [\ptr, #\off]
+	\instr\cond\()bt \reg, [\ptr, #\off]
 	.elseif	\inc == 4
-	\instr\cond\()\t\().w \reg, [\ptr, #\off]
+	\instr\cond\()t \reg, [\ptr, #\off]
 	.else
 	.error	"Unsupported inc macro argument"
 	.endif
 
-	.pushsection __ex_table,"a"
+	.section __ex_table,"a"
 	.align	3
 	.long	9999b, \abort
-	.popsection
+	.previous
 	.endm
 
 	.macro	usracc, instr, reg, ptr, inc, cond, rept, abort
@@ -263,7 +215,7 @@
 	@ Slightly optimised to avoid incrementing the pointer twice
 	usraccoff \instr, \reg, \ptr, \inc, 0, \cond, \abort
 	.if	\rept == 2
-	usraccoff \instr, \reg, \ptr, \inc, \inc, \cond, \abort
+	usraccoff \instr, \reg, \ptr, \inc, 4, \cond, \abort
 	.endif
 
 	add\cond \ptr, #\rept * \inc
@@ -271,21 +223,21 @@
 
 #else	/* !CONFIG_THUMB2_KERNEL */
 
-	.macro	usracc, instr, reg, ptr, inc, cond, rept, abort, t=T()
+	.macro	usracc, instr, reg, ptr, inc, cond, rept, abort
 	.rept	\rept
 9999:
 	.if	\inc == 1
-	\instr\cond\()b\()\t \reg, [\ptr], #\inc
+	\instr\cond\()bt \reg, [\ptr], #\inc
 	.elseif	\inc == 4
-	\instr\cond\()\t \reg, [\ptr], #\inc
+	\instr\cond\()t \reg, [\ptr], #\inc
 	.else
 	.error	"Unsupported inc macro argument"
 	.endif
 
-	.pushsection __ex_table,"a"
+	.section __ex_table,"a"
 	.align	3
 	.long	9999b, \abort
-	.popsection
+	.previous
 	.endr
 	.endm
 
@@ -298,4 +250,3 @@
 	.macro	ldrusr, reg, ptr, inc, cond=al, rept=1, abort=9001f
 	usracc	ldr, \reg, \ptr, \inc, \cond, \rept, \abort
 	.endm
-#endif /* __ASM_ASSEMBLER_H__ */

@@ -53,30 +53,17 @@ s32 igb_get_bus_info_pcie(struct e1000_hw *hw)
 	u16 pcie_link_status;
 
 	bus->type = e1000_bus_type_pci_express;
+	bus->speed = e1000_bus_speed_2500;
 
 	ret_val = igb_read_pcie_cap_reg(hw,
-					PCI_EXP_LNKSTA,
-					&pcie_link_status);
-	if (ret_val) {
+					  PCIE_LINK_STATUS,
+					  &pcie_link_status);
+	if (ret_val)
 		bus->width = e1000_bus_width_unknown;
-		bus->speed = e1000_bus_speed_unknown;
-	} else {
-		switch (pcie_link_status & PCI_EXP_LNKSTA_CLS) {
-		case PCI_EXP_LNKSTA_CLS_2_5GB:
-			bus->speed = e1000_bus_speed_2500;
-			break;
-		case PCI_EXP_LNKSTA_CLS_5_0GB:
-			bus->speed = e1000_bus_speed_5000;
-			break;
-		default:
-			bus->speed = e1000_bus_speed_unknown;
-			break;
-		}
-
+	else
 		bus->width = (enum e1000_bus_width)((pcie_link_status &
-						     PCI_EXP_LNKSTA_NLW) >>
-						     PCI_EXP_LNKSTA_NLW_SHIFT);
-	}
+						     PCIE_LINK_WIDTH_MASK) >>
+						     PCIE_LINK_WIDTH_SHIFT);
 
 	reg = rd32(E1000_STATUS);
 	bus->func = (reg & E1000_STATUS_FUNC_MASK) >> E1000_STATUS_FUNC_SHIFT;
@@ -181,7 +168,7 @@ s32 igb_vfta_set(struct e1000_hw *hw, u32 vid, bool add)
  *  address and must override the actual permanent MAC address.  If an
  *  alternate MAC address is fopund it is saved in the hw struct and
  *  prgrammed into RAR0 and the cuntion returns success, otherwise the
- *  function returns an error.
+ *  fucntion returns an error.
  **/
 s32 igb_check_alt_mac_addr(struct e1000_hw *hw)
 {
@@ -198,12 +185,13 @@ s32 igb_check_alt_mac_addr(struct e1000_hw *hw)
 	}
 
 	if (nvm_alt_mac_addr_offset == 0xFFFF) {
-		/* There is no Alternate MAC Address */
+		ret_val = -(E1000_NOT_IMPLEMENTED);
 		goto out;
 	}
 
 	if (hw->bus.func == E1000_FUNC_1)
-		nvm_alt_mac_addr_offset += E1000_ALT_MAC_ADDRESS_OFFSET_LAN1;
+		nvm_alt_mac_addr_offset += ETH_ALEN/sizeof(u16);
+
 	for (i = 0; i < ETH_ALEN; i += 2) {
 		offset = nvm_alt_mac_addr_offset + (i >> 1);
 		ret_val = hw->nvm.ops.read(hw, offset, 1, &nvm_data);
@@ -218,16 +206,14 @@ s32 igb_check_alt_mac_addr(struct e1000_hw *hw)
 
 	/* if multicast bit is set, the alternate address will not be used */
 	if (alt_mac_addr[0] & 0x01) {
-		hw_dbg("Ignoring Alternate Mac Address with MC bit set\n");
+		ret_val = -(E1000_NOT_IMPLEMENTED);
 		goto out;
 	}
 
-	/*
-	 * We have a valid alternate MAC address, and we want to treat it the
-	 * same as the normal permanent MAC address stored by the HW into the
-	 * RAR. Do this by mapping this address into RAR0.
-	 */
-	hw->mac.ops.rar_set(hw, alt_mac_addr, 0);
+	for (i = 0; i < ETH_ALEN; i++)
+		hw->mac.addr[i] = hw->mac.perm_addr[i] = alt_mac_addr[i];
+
+	hw->mac.ops.rar_set(hw, hw->mac.perm_addr, 0);
 
 out:
 	return ret_val;
@@ -260,15 +246,8 @@ void igb_rar_set(struct e1000_hw *hw, u8 *addr, u32 index)
 	if (rar_low || rar_high)
 		rar_high |= E1000_RAH_AV;
 
-	/*
-	 * Some bridges will combine consecutive 32-bit writes into
-	 * a single burst write, which will malfunction on some parts.
-	 * The flushes avoid this.
-	 */
 	wr32(E1000_RAL(index), rar_low);
-	wrfl();
 	wr32(E1000_RAH(index), rar_high);
-	wrfl();
 }
 
 /**
@@ -420,43 +399,45 @@ void igb_update_mc_addr_list(struct e1000_hw *hw,
  **/
 void igb_clear_hw_cntrs_base(struct e1000_hw *hw)
 {
-	rd32(E1000_CRCERRS);
-	rd32(E1000_SYMERRS);
-	rd32(E1000_MPC);
-	rd32(E1000_SCC);
-	rd32(E1000_ECOL);
-	rd32(E1000_MCC);
-	rd32(E1000_LATECOL);
-	rd32(E1000_COLC);
-	rd32(E1000_DC);
-	rd32(E1000_SEC);
-	rd32(E1000_RLEC);
-	rd32(E1000_XONRXC);
-	rd32(E1000_XONTXC);
-	rd32(E1000_XOFFRXC);
-	rd32(E1000_XOFFTXC);
-	rd32(E1000_FCRUC);
-	rd32(E1000_GPRC);
-	rd32(E1000_BPRC);
-	rd32(E1000_MPRC);
-	rd32(E1000_GPTC);
-	rd32(E1000_GORCL);
-	rd32(E1000_GORCH);
-	rd32(E1000_GOTCL);
-	rd32(E1000_GOTCH);
-	rd32(E1000_RNBC);
-	rd32(E1000_RUC);
-	rd32(E1000_RFC);
-	rd32(E1000_ROC);
-	rd32(E1000_RJC);
-	rd32(E1000_TORL);
-	rd32(E1000_TORH);
-	rd32(E1000_TOTL);
-	rd32(E1000_TOTH);
-	rd32(E1000_TPR);
-	rd32(E1000_TPT);
-	rd32(E1000_MPTC);
-	rd32(E1000_BPTC);
+	u32 temp;
+
+	temp = rd32(E1000_CRCERRS);
+	temp = rd32(E1000_SYMERRS);
+	temp = rd32(E1000_MPC);
+	temp = rd32(E1000_SCC);
+	temp = rd32(E1000_ECOL);
+	temp = rd32(E1000_MCC);
+	temp = rd32(E1000_LATECOL);
+	temp = rd32(E1000_COLC);
+	temp = rd32(E1000_DC);
+	temp = rd32(E1000_SEC);
+	temp = rd32(E1000_RLEC);
+	temp = rd32(E1000_XONRXC);
+	temp = rd32(E1000_XONTXC);
+	temp = rd32(E1000_XOFFRXC);
+	temp = rd32(E1000_XOFFTXC);
+	temp = rd32(E1000_FCRUC);
+	temp = rd32(E1000_GPRC);
+	temp = rd32(E1000_BPRC);
+	temp = rd32(E1000_MPRC);
+	temp = rd32(E1000_GPTC);
+	temp = rd32(E1000_GORCL);
+	temp = rd32(E1000_GORCH);
+	temp = rd32(E1000_GOTCL);
+	temp = rd32(E1000_GOTCH);
+	temp = rd32(E1000_RNBC);
+	temp = rd32(E1000_RUC);
+	temp = rd32(E1000_RFC);
+	temp = rd32(E1000_ROC);
+	temp = rd32(E1000_RJC);
+	temp = rd32(E1000_TORL);
+	temp = rd32(E1000_TORH);
+	temp = rd32(E1000_TOTL);
+	temp = rd32(E1000_TOTH);
+	temp = rd32(E1000_TPR);
+	temp = rd32(E1000_TPT);
+	temp = rd32(E1000_MPTC);
+	temp = rd32(E1000_BPTC);
 }
 
 /**
@@ -982,7 +963,7 @@ out:
 }
 
 /**
- *  igb_get_speed_and_duplex_copper - Retrieve current speed/duplex
+ *  igb_get_speed_and_duplex_copper - Retreive current speed/duplex
  *  @hw: pointer to the HW structure
  *  @speed: stores the current speed
  *  @duplex: stores the current duplex
@@ -1317,6 +1298,76 @@ out:
 }
 
 /**
+ *  igb_reset_adaptive - Reset Adaptive Interframe Spacing
+ *  @hw: pointer to the HW structure
+ *
+ *  Reset the Adaptive Interframe Spacing throttle to default values.
+ **/
+void igb_reset_adaptive(struct e1000_hw *hw)
+{
+	struct e1000_mac_info *mac = &hw->mac;
+
+	if (!mac->adaptive_ifs) {
+		hw_dbg("Not in Adaptive IFS mode!\n");
+		goto out;
+	}
+
+	if (!mac->ifs_params_forced) {
+		mac->current_ifs_val = 0;
+		mac->ifs_min_val = IFS_MIN;
+		mac->ifs_max_val = IFS_MAX;
+		mac->ifs_step_size = IFS_STEP;
+		mac->ifs_ratio = IFS_RATIO;
+	}
+
+	mac->in_ifs_mode = false;
+	wr32(E1000_AIT, 0);
+out:
+	return;
+}
+
+/**
+ *  igb_update_adaptive - Update Adaptive Interframe Spacing
+ *  @hw: pointer to the HW structure
+ *
+ *  Update the Adaptive Interframe Spacing Throttle value based on the
+ *  time between transmitted packets and time between collisions.
+ **/
+void igb_update_adaptive(struct e1000_hw *hw)
+{
+	struct e1000_mac_info *mac = &hw->mac;
+
+	if (!mac->adaptive_ifs) {
+		hw_dbg("Not in Adaptive IFS mode!\n");
+		goto out;
+	}
+
+	if ((mac->collision_delta * mac->ifs_ratio) > mac->tx_packet_delta) {
+		if (mac->tx_packet_delta > MIN_NUM_XMITS) {
+			mac->in_ifs_mode = true;
+			if (mac->current_ifs_val < mac->ifs_max_val) {
+				if (!mac->current_ifs_val)
+					mac->current_ifs_val = mac->ifs_min_val;
+				else
+					mac->current_ifs_val +=
+						mac->ifs_step_size;
+				wr32(E1000_AIT,
+						mac->current_ifs_val);
+			}
+		}
+	} else {
+		if (mac->in_ifs_mode &&
+		    (mac->tx_packet_delta <= MIN_NUM_XMITS)) {
+			mac->current_ifs_val = 0;
+			mac->in_ifs_mode = false;
+			wr32(E1000_AIT, 0);
+		}
+	}
+out:
+	return;
+}
+
+/**
  *  igb_validate_mdi_setting - Verify MDI/MDIx settings
  *  @hw: pointer to the HW structure
  *
@@ -1380,8 +1431,7 @@ out:
  *  igb_enable_mng_pass_thru - Enable processing of ARP's
  *  @hw: pointer to the HW structure
  *
- *  Verifies the hardware needs to leave interface enabled so that frames can
- *  be directed to and from the management interface.
+ *  Verifies the hardware needs to allow ARPs to be processed by the host.
  **/
 bool igb_enable_mng_pass_thru(struct e1000_hw *hw)
 {
@@ -1394,7 +1444,8 @@ bool igb_enable_mng_pass_thru(struct e1000_hw *hw)
 
 	manc = rd32(E1000_MANC);
 
-	if (!(manc & E1000_MANC_RCV_TCO_EN))
+	if (!(manc & E1000_MANC_RCV_TCO_EN) ||
+	    !(manc & E1000_MANC_EN_MAC_ADDR_FILTER))
 		goto out;
 
 	if (hw->mac.arc_subsystem_valid) {

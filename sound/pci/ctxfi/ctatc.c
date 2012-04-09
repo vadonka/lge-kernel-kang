@@ -24,7 +24,6 @@
 #include "ctdaio.h"
 #include "cttimer.h"
 #include <linux/delay.h>
-#include <linux/slab.h>
 #include <sound/pcm.h>
 #include <sound/control.h>
 #include <sound/asoundef.h>
@@ -230,7 +229,7 @@ static int select_rom(unsigned int pitch)
 	} else if (pitch == 0x02000000) {
 		/* pitch == 2 */
 		return 3;
-	} else if (pitch <= 0x08000000) {
+	} else if (pitch >= 0x0 && pitch <= 0x08000000) {
 		/* 0 <= pitch <= 8 */
 		return 0;
 	} else {
@@ -869,7 +868,7 @@ spdif_passthru_playback_setup(struct ct_atc *atc, struct ct_atc_pcm *apcm)
 	mutex_lock(&atc->atc_mutex);
 	dao->ops->get_spos(dao, &status);
 	if (((status >> 24) & IEC958_AES3_CON_FS) != iec958_con_fs) {
-		status &= ~(IEC958_AES3_CON_FS << 24);
+		status &= ((~IEC958_AES3_CON_FS) << 24);
 		status |= (iec958_con_fs << 24);
 		dao->ops->set_spos(dao, status);
 		dao->ops->commit_write(dao);
@@ -1215,11 +1214,10 @@ static int atc_dev_free(struct snd_device *dev)
 	return ct_atc_destroy(atc);
 }
 
-static int __devinit atc_identify_card(struct ct_atc *atc, unsigned int ssid)
+static int __devinit atc_identify_card(struct ct_atc *atc)
 {
 	const struct snd_pci_quirk *p;
 	const struct snd_pci_quirk *list;
-	u16 vendor_id, device_id;
 
 	switch (atc->chip_type) {
 	case ATC20K1:
@@ -1233,19 +1231,13 @@ static int __devinit atc_identify_card(struct ct_atc *atc, unsigned int ssid)
 	default:
 		return -ENOENT;
 	}
-	if (ssid) {
-		vendor_id = ssid >> 16;
-		device_id = ssid & 0xffff;
-	} else {
-		vendor_id = atc->pci->subsystem_vendor;
-		device_id = atc->pci->subsystem_device;
-	}
-	p = snd_pci_quirk_lookup_id(vendor_id, device_id, list);
+	p = snd_pci_quirk_lookup(atc->pci, list);
 	if (p) {
 		if (p->value < 0) {
 			printk(KERN_ERR "ctxfi: "
 			       "Device %04x:%04x is black-listed\n",
-			       vendor_id, device_id);
+			       atc->pci->subsystem_vendor,
+			       atc->pci->subsystem_device);
 			return -ENOENT;
 		}
 		atc->model = p->value;
@@ -1258,7 +1250,8 @@ static int __devinit atc_identify_card(struct ct_atc *atc, unsigned int ssid)
 	atc->model_name = ct_subsys_name[atc->model];
 	snd_printd("ctxfi: chip %s model %s (%04x:%04x) is found\n",
 		   atc->chip_name, atc->model_name,
-		   vendor_id, device_id);
+		   atc->pci->subsystem_vendor,
+		   atc->pci->subsystem_device);
 	return 0;
 }
 
@@ -1627,13 +1620,12 @@ static struct ct_atc atc_preset __devinitdata = {
  *  Creates and initializes a hardware manager.
  *
  *  Creates kmallocated ct_atc structure. Initializes hardware.
- *  Returns 0 if succeeds, or negative error code if fails.
+ *  Returns 0 if suceeds, or negative error code if fails.
  */
 
 int __devinit ct_atc_create(struct snd_card *card, struct pci_dev *pci,
 			    unsigned int rsr, unsigned int msr,
-			    int chip_type, unsigned int ssid,
-			    struct ct_atc **ratc)
+			    int chip_type, struct ct_atc **ratc)
 {
 	struct ct_atc *atc;
 	static struct snd_device_ops ops = {
@@ -1659,7 +1651,7 @@ int __devinit ct_atc_create(struct snd_card *card, struct pci_dev *pci,
 	mutex_init(&atc->atc_mutex);
 
 	/* Find card model */
-	err = atc_identify_card(atc, ssid);
+	err = atc_identify_card(atc);
 	if (err < 0) {
 		printk(KERN_ERR "ctatc: Card not recognised\n");
 		goto error1;

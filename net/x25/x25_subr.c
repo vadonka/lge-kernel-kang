@@ -23,7 +23,6 @@
  *						restriction on response.
  */
 
-#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/skbuff.h>
@@ -226,12 +225,6 @@ void x25_write_internal(struct sock *sk, int frametype)
 			break;
 
 		case X25_CLEAR_REQUEST:
-			dptr    = skb_put(skb, 3);
-			*dptr++ = frametype;
-			*dptr++ = x25->causediag.cause;
-			*dptr++ = x25->causediag.diagnostic;
-			break;
-
 		case X25_RESET_REQUEST:
 			dptr    = skb_put(skb, 3);
 			*dptr++ = frametype;

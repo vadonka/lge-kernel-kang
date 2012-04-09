@@ -1,3 +1,5 @@
+# drivers/mtd/maps/Kconfig
+
 menu "Self-contained MTD device drivers"
 	depends on MTD!=n
 
@@ -318,3 +320,4 @@ config MTD_DOCPROBE_55AA
 	  you have managed to wipe the first block.
 
 endmenu
+

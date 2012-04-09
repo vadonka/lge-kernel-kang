@@ -5,6 +5,7 @@
 #include <linux/ctype.h>
 #include <linux/pnp.h>
 #include <linux/string.h>
+#include <linux/slab.h>
 
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
@@ -190,7 +191,7 @@ static unsigned char *pnpbios_parse_allocated_resource_data(struct pnp_dev *dev,
 			return (unsigned char *)p;
 			break;
 
-		default:	/* an unknown tag */
+		default:	/* an unkown tag */
 len_err:
 			dev_err(&dev->dev, "unknown tag %#x length %d\n",
 				tag, len);
@@ -404,7 +405,7 @@ pnpbios_parse_resource_option_data(unsigned char *p, unsigned char *end,
 		case SMALL_TAG_END:
 			return p + 2;
 
-		default:	/* an unknown tag */
+		default:	/* an unkown tag */
 len_err:
 			dev_err(&dev->dev, "unknown tag %#x length %d\n",
 				tag, len);
@@ -474,7 +475,7 @@ static unsigned char *pnpbios_parse_compatible_ids(unsigned char *p,
 			return (unsigned char *)p;
 			break;
 
-		default:	/* an unknown tag */
+		default:	/* an unkown tag */
 len_err:
 			dev_err(&dev->dev, "unknown tag %#x length %d\n",
 				tag, len);
@@ -743,7 +744,7 @@ static unsigned char *pnpbios_encode_allocated_resource_data(struct pnp_dev
 			return (unsigned char *)p;
 			break;
 
-		default:	/* an unknown tag */
+		default:	/* an unkown tag */
 len_err:
 			dev_err(&dev->dev, "unknown tag %#x length %d\n",
 				tag, len);

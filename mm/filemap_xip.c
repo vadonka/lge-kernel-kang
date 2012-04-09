@@ -17,7 +17,6 @@
 #include <linux/sched.h>
 #include <linux/seqlock.h>
 #include <linux/mutex.h>
-#include <linux/gfp.h>
 #include <asm/tlbflush.h>
 #include <asm/io.h>
 
@@ -183,7 +182,7 @@ __xip_unmap (struct address_space * mapping,
 		return;
 
 retry:
-	mutex_lock(&mapping->i_mmap_mutex);
+	spin_lock(&mapping->i_mmap_lock);
 	vma_prio_tree_foreach(vma, &iter, &mapping->i_mmap, pgoff, pgoff) {
 		mm = vma->vm_mm;
 		address = vma->vm_start +
@@ -195,13 +194,13 @@ retry:
 			flush_cache_page(vma, address, pte_pfn(*pte));
 			pteval = ptep_clear_flush_notify(vma, address, pte);
 			page_remove_rmap(page);
-			dec_mm_counter(mm, MM_FILEPAGES);
+			dec_mm_counter(mm, file_rss);
 			BUG_ON(pte_dirty(pteval));
 			pte_unmap_unlock(pte, ptl);
 			page_cache_release(page);
 		}
 	}
-	mutex_unlock(&mapping->i_mmap_mutex);
+	spin_unlock(&mapping->i_mmap_lock);
 
 	if (locked) {
 		mutex_unlock(&xip_sparse_mutex);
@@ -263,12 +262,7 @@ found:
 							xip_pfn);
 		if (err == -ENOMEM)
 			return VM_FAULT_OOM;
-		/*
-		 * err == -EBUSY is fine, we've raced against another thread
-		 * that faulted-in the same page
-		 */
-		if (err != -EBUSY)
-			BUG_ON(err);
+		BUG_ON(err);
 		return VM_FAULT_NOPAGE;
 	} else {
 		int err, ret = VM_FAULT_OOM;

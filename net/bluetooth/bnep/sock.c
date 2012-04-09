@@ -30,6 +30,7 @@
 #include <linux/capability.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/slab.h>
 #include <linux/poll.h>
 #include <linux/fcntl.h>
 #include <linux/skbuff.h>
@@ -38,11 +39,10 @@
 #include <linux/file.h>
 #include <linux/init.h>
 #include <linux/compat.h>
-#include <linux/gfp.h>
-#include <linux/uaccess.h>
 #include <net/sock.h>
 
 #include <asm/system.h>
+#include <asm/uaccess.h>
 
 #include "bnep.h"
 
@@ -88,7 +88,6 @@ static int bnep_sock_ioctl(struct socket *sock, unsigned int cmd, unsigned long 
 			sockfd_put(nsock);
 			return -EBADFD;
 		}
-		ca.device[sizeof(ca.device)-1] = 0;
 
 		err = bnep_add_connection(&ca, nsock);
 		if (!err) {
@@ -196,8 +195,7 @@ static struct proto bnep_proto = {
 	.obj_size	= sizeof(struct bt_sock)
 };
 
-static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
-			    int kern)
+static int bnep_sock_create(struct net *net, struct socket *sock, int protocol)
 {
 	struct sock *sk;
 
@@ -224,7 +222,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
-static const struct net_proto_family bnep_sock_family_ops = {
+static struct net_proto_family bnep_sock_family_ops = {
 	.family = PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
 	.create = bnep_sock_create

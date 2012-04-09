@@ -12,18 +12,15 @@
  *  'linux/arch/arm/lib/traps.S'.  Mostly a debugging aid, but will probably
  *  kill the offending process.
  */
+#include <linux/module.h>
 #include <linux/signal.h>
+#include <linux/spinlock.h>
 #include <linux/personality.h>
 #include <linux/kallsyms.h>
-#include <linux/spinlock.h>
-#include <linux/uaccess.h>
-#include <linux/hardirq.h>
-#include <linux/kdebug.h>
-#include <linux/module.h>
-#include <linux/kexec.h>
 #include <linux/delay.h>
+#include <linux/hardirq.h>
 #include <linux/init.h>
-#include <linux/sched.h>
+#include <linux/uaccess.h>
 
 #include <asm/atomic.h>
 #include <asm/cacheflush.h>
@@ -32,11 +29,10 @@
 #include <asm/traps.h>
 #include <asm/unwind.h>
 
+#include "ptrace.h"
 #include "signal.h"
 
 static const char *handler[]= { "prefetch abort", "data abort", "address exception", "interrupt" };
-
-void *vectors_page;
 
 #ifdef CONFIG_DEBUG_USER
 unsigned int user_debug;
@@ -54,7 +50,10 @@ static void dump_mem(const char *, const char *, unsigned long, unsigned long);
 void dump_backtrace_entry(unsigned long where, unsigned long from, unsigned long frame)
 {
 #ifdef CONFIG_KALLSYMS
-	printk("[<%08lx>] (%pS) from [<%08lx>] (%pS)\n", where, (void *)where, from, (void *)from);
+	char sym1[KSYM_SYMBOL_LEN], sym2[KSYM_SYMBOL_LEN];
+	sprint_symbol(sym1, where);
+	sprint_symbol(sym2, from);
+	printk("[<%08lx>] (%s) from [<%08lx>] (%s)\n", where, sym1, from, sym2);
 #else
 	printk("Function entered at [<%08lx>] from [<%08lx>]\n", where, from);
 #endif
@@ -138,7 +137,7 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 	fs = get_fs();
 	set_fs(KERNEL_DS);
 
-	for (i = -4; i < 1 + !!thumb; i++) {
+	for (i = -4; i < 1; i++) {
 		unsigned int val, bad;
 
 		if (thumb)
@@ -225,20 +224,17 @@ void show_stack(struct task_struct *tsk, unsigned long *sp)
 #define S_SMP ""
 #endif
 
-static int __die(const char *str, int err, struct thread_info *thread, struct pt_regs *regs)
+static void __die(const char *str, int err, struct thread_info *thread, struct pt_regs *regs)
 {
 	struct task_struct *tsk = thread->task;
 	static int die_counter;
-	int ret;
 
+#if defined(CONFIG_MACH_STAR)
+	set_default_loglevel(); /* 20100916 taewan.kim@lge.com set default loglevel */
+#endif
 	printk(KERN_EMERG "Internal error: %s: %x [#%d]" S_PREEMPT S_SMP "\n",
 	       str, err, ++die_counter);
-
-	/* trap and error numbers are mostly meaningless on ARM */
-	ret = notify_die(DIE_OOPS, str, regs, err, tsk->thread.trap_no, SIGSEGV);
-	if (ret == NOTIFY_STOP)
-		return ret;
-
+	sysfs_printk_last_file();
 	print_modules();
 	__show_regs(regs);
 	printk(KERN_EMERG "Process %.*s (pid: %d, stack limit = 0x%p)\n",
@@ -250,30 +246,23 @@ static int __die(const char *str, int err, struct thread_info *thread, struct pt
 		dump_backtrace(regs, tsk);
 		dump_instr(KERN_EMERG, regs);
 	}
-
-	return ret;
 }
 
-static DEFINE_SPINLOCK(die_lock);
+DEFINE_SPINLOCK(die_lock);
 
 /*
  * This function is protected against re-entrancy.
  */
-void die(const char *str, struct pt_regs *regs, int err)
+NORET_TYPE void die(const char *str, struct pt_regs *regs, int err)
 {
 	struct thread_info *thread = current_thread_info();
-	int ret;
 
 	oops_enter();
 
 	spin_lock_irq(&die_lock);
 	console_verbose();
 	bust_spinlocks(1);
-	ret = __die(str, err, thread, regs);
-
-	if (regs && kexec_should_crash(thread->task))
-		crash_kexec(regs);
-
+	__die(str, err, thread, regs);
 	bust_spinlocks(0);
 	add_taint(TAINT_DIE);
 	spin_unlock_irq(&die_lock);
@@ -281,10 +270,11 @@ void die(const char *str, struct pt_regs *regs, int err)
 
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
+
 	if (panic_on_oops)
 		panic("Fatal exception");
-	if (ret != NOTIFY_STOP)
-		do_exit(SIGSEGV);
+
+	do_exit(SIGSEGV);
 }
 
 void arm_notify_die(const char *str, struct pt_regs *regs,
@@ -408,7 +398,8 @@ static int bad_syscall(int n, struct pt_regs *regs)
 	struct thread_info *thread = current_thread_info();
 	siginfo_t info;
 
-	if ((current->personality & PER_MASK) != PER_LINUX &&
+	if (current->personality != PER_LINUX &&
+	    current->personality != PER_LINUX_32BIT &&
 	    thread->exec_domain->handler) {
 		thread->exec_domain->handler(n, regs);
 		return regs->ARM_r0;
@@ -567,7 +558,7 @@ asmlinkage int arm_syscall(int no, struct pt_regs *regs)
 		if (!pmd_present(*pmd))
 			goto bad_access;
 		pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
-		if (!pte_present(*pte) || !pte_write(*pte) || !pte_dirty(*pte)) {
+		if (!pte_present(*pte) || !pte_dirty(*pte)) {
 			pte_unmap_unlock(pte, ptl);
 			goto bad_access;
 		}
@@ -712,19 +703,19 @@ void __readwrite_bug(const char *fn)
 }
 EXPORT_SYMBOL(__readwrite_bug);
 
-void __pte_error(const char *file, int line, pte_t pte)
+void __pte_error(const char *file, int line, unsigned long val)
 {
-	printk("%s:%d: bad pte %08llx.\n", file, line, (long long)pte_val(pte));
+	printk("%s:%d: bad pte %08lx.\n", file, line, val);
 }
 
-void __pmd_error(const char *file, int line, pmd_t pmd)
+void __pmd_error(const char *file, int line, unsigned long val)
 {
-	printk("%s:%d: bad pmd %08llx.\n", file, line, (long long)pmd_val(pmd));
+	printk("%s:%d: bad pmd %08lx.\n", file, line, val);
 }
 
-void __pgd_error(const char *file, int line, pgd_t pgd)
+void __pgd_error(const char *file, int line, unsigned long val)
 {
-	printk("%s:%d: bad pgd %08llx.\n", file, line, (long long)pgd_val(pgd));
+	printk("%s:%d: bad pgd %08lx.\n", file, line, val);
 }
 
 asmlinkage void __div0(void)
@@ -750,11 +741,7 @@ void __init trap_init(void)
 
 void __init early_trap_init(void)
 {
-#if defined(CONFIG_CPU_USE_DOMAINS)
 	unsigned long vectors = CONFIG_VECTORS_BASE;
-#else
-	unsigned long vectors = (unsigned long)vectors_page;
-#endif
 	extern char __stubs_start[], __stubs_end[];
 	extern char __vectors_start[], __vectors_end[];
 	extern char __kuser_helper_start[], __kuser_helper_end[];
@@ -773,10 +760,10 @@ void __init early_trap_init(void)
 	 * Copy signal return handlers into the vector page, and
 	 * set sigreturn to be a pointer to these.
 	 */
-	memcpy((void *)(vectors + KERN_SIGRETURN_CODE - CONFIG_VECTORS_BASE),
-	       sigreturn_codes, sizeof(sigreturn_codes));
-	memcpy((void *)(vectors + KERN_RESTART_CODE - CONFIG_VECTORS_BASE),
-	       syscall_restart_code, sizeof(syscall_restart_code));
+	memcpy((void *)KERN_SIGRETURN_CODE, sigreturn_codes,
+	       sizeof(sigreturn_codes));
+	memcpy((void *)KERN_RESTART_CODE, syscall_restart_code,
+	       sizeof(syscall_restart_code));
 
 	flush_icache_range(vectors, vectors + PAGE_SIZE);
 	modify_domain(DOMAIN_USER, DOMAIN_CLIENT);

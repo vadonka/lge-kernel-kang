@@ -21,10 +21,14 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
-#include <linux/platform_data/ram_console.h>
 
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 #include <linux/rslib.h>
+#endif
+
+
+#if 1
+void *reserved_buffer;
 #endif
 
 struct ram_console_buffer {
@@ -143,7 +147,7 @@ ram_console_write(struct console *console, const char *s, unsigned int count)
 static struct console ram_console = {
 	.name	= "ram",
 	.write	= ram_console_write,
-	.flags	= CON_PRINTBUFFER | CON_ENABLED | CON_ANYTIME,
+	.flags	= CON_PRINTBUFFER | CON_ENABLED,
 	.index	= -1,
 };
 
@@ -156,20 +160,14 @@ void ram_console_enable_console(int enabled)
 }
 
 static void __init
-ram_console_save_old(struct ram_console_buffer *buffer, const char *bootinfo,
-	char *dest)
+ram_console_save_old(struct ram_console_buffer *buffer, char *dest)
 {
 	size_t old_log_size = buffer->size;
-	size_t bootinfo_size = 0;
-	size_t total_size = old_log_size;
-	char *ptr;
-	const char *bootinfo_label = "Boot info:\n";
-
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 	uint8_t *block;
 	uint8_t *par;
 	char strbuf[80];
-	int strbuf_len = 0;
+	int strbuf_len;
 
 	block = buffer->data;
 	par = ram_console_par_buffer;
@@ -204,15 +202,11 @@ ram_console_save_old(struct ram_console_buffer *buffer, const char *bootinfo,
 				      "\nNo errors detected\n");
 	if (strbuf_len >= sizeof(strbuf))
 		strbuf_len = sizeof(strbuf) - 1;
-	total_size += strbuf_len;
+	old_log_size += strbuf_len;
 #endif
 
-	if (bootinfo)
-		bootinfo_size = strlen(bootinfo) + strlen(bootinfo_label);
-	total_size += bootinfo_size;
-
 	if (dest == NULL) {
-		dest = kmalloc(total_size, GFP_KERNEL);
+		dest = kmalloc(old_log_size, GFP_KERNEL);
 		if (dest == NULL) {
 			printk(KERN_ERR
 			       "ram_console: failed to allocate buffer\n");
@@ -221,27 +215,19 @@ ram_console_save_old(struct ram_console_buffer *buffer, const char *bootinfo,
 	}
 
 	ram_console_old_log = dest;
-	ram_console_old_log_size = total_size;
+	ram_console_old_log_size = old_log_size;
 	memcpy(ram_console_old_log,
 	       &buffer->data[buffer->start], buffer->size - buffer->start);
 	memcpy(ram_console_old_log + buffer->size - buffer->start,
 	       &buffer->data[0], buffer->start);
-	ptr = ram_console_old_log + old_log_size;
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
-	memcpy(ptr, strbuf, strbuf_len);
-	ptr += strbuf_len;
+	memcpy(ram_console_old_log + old_log_size - strbuf_len,
+	       strbuf, strbuf_len);
 #endif
-	if (bootinfo) {
-		memcpy(ptr, bootinfo_label, strlen(bootinfo_label));
-		ptr += strlen(bootinfo_label);
-		memcpy(ptr, bootinfo, bootinfo_size);
-		ptr += bootinfo_size;
-	}
 }
 
 static int __init ram_console_init(struct ram_console_buffer *buffer,
-				   size_t buffer_size, const char *bootinfo,
-				   char *old_buf)
+				   size_t buffer_size, char *old_buf)
 {
 #ifdef CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 	int numerr;
@@ -308,7 +294,7 @@ static int __init ram_console_init(struct ram_console_buffer *buffer,
 			printk(KERN_INFO "ram_console: found existing buffer, "
 			       "size %d, start %d\n",
 			       buffer->size, buffer->start);
-			ram_console_save_old(buffer, bootinfo, old_buf);
+			ram_console_save_old(buffer, old_buf);
 		}
 	} else {
 		printk(KERN_INFO "ram_console: no valid data in buffer "
@@ -332,7 +318,6 @@ static int __init ram_console_early_init(void)
 	return ram_console_init((struct ram_console_buffer *)
 		CONFIG_ANDROID_RAM_CONSOLE_EARLY_ADDR,
 		CONFIG_ANDROID_RAM_CONSOLE_EARLY_SIZE,
-		NULL,
 		ram_console_old_log_init_buffer);
 }
 #else
@@ -342,8 +327,11 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 	size_t start;
 	size_t buffer_size;
 	void *buffer;
-	const char *bootinfo = NULL;
-	struct ram_console_platform_data *pdata = pdev->dev.platform_data;
+
+#if 1
+        size_t reserved_start;
+        size_t reserved_size;
+#endif
 
 	if (res == NULL || pdev->num_resources != 1 ||
 	    !(res->flags & IORESOURCE_MEM)) {
@@ -361,11 +349,40 @@ static int ram_console_driver_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
-	if (pdata)
-		bootinfo = pdata->bootinfo;
+#if 1
+       //fix it
+       #define RAM_RESERVED_SIZE 100*1024
+       reserved_start = start+ buffer_size;
+       reserved_buffer = ioremap(reserved_start, RAM_RESERVED_SIZE);
+       //memset(reserved_buffer, 0x00, 100*1024);
+       printk ("ram console : ram_console virtual addr = 0x%x \n", buffer);
+       printk ("ram console : reserved_buffer virtual = 0x%x \n", reserved_buffer);
+       printk ("ram console : reserved_buffer physical= 0x%x \n", reserved_start);
+ 
+#endif
 
-	return ram_console_init(buffer, buffer_size, bootinfo, NULL/* allocate */);
+	return ram_console_init(buffer, buffer_size, NULL/* allocate */);
 }
+
+/* 
+void *get_reserved_buffer()
+{
+	return reserved_buffer;
+}
+*/
+
+void write_cmd_reserved_buffer(unsigned char *buf, size_t len)
+{
+	memcpy(reserved_buffer, buf, len);
+}
+
+void read_cmd_reserved_buffer(unsigned char *buf, size_t len)
+{
+	memcpy(buf, reserved_buffer, len);
+}
+
+EXPORT_SYMBOL_GPL(write_cmd_reserved_buffer);
+EXPORT_SYMBOL_GPL(read_cmd_reserved_buffer);
 
 static struct platform_driver ram_console_driver = {
 	.probe = ram_console_driver_probe,

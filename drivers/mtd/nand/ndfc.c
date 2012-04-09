@@ -28,30 +28,29 @@
 #include <linux/mtd/nand_ecc.h>
 #include <linux/mtd/partitions.h>
 #include <linux/mtd/ndfc.h>
-#include <linux/slab.h>
 #include <linux/mtd/mtd.h>
 #include <linux/of_platform.h>
 #include <asm/io.h>
 
-#define NDFC_MAX_CS    4
 
 struct ndfc_controller {
-	struct platform_device *ofdev;
+	struct of_device *ofdev;
 	void __iomem *ndfcbase;
 	struct mtd_info mtd;
 	struct nand_chip chip;
 	int chip_select;
 	struct nand_hw_control ndfc_control;
+#ifdef CONFIG_MTD_PARTITIONS
 	struct mtd_partition *parts;
+#endif
 };
 
-static struct ndfc_controller ndfc_ctrl[NDFC_MAX_CS];
+static struct ndfc_controller ndfc_ctrl;
 
 static void ndfc_select_chip(struct mtd_info *mtd, int chip)
 {
 	uint32_t ccr;
-	struct nand_chip *nchip = mtd->priv;
-	struct ndfc_controller *ndfc = nchip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 
 	ccr = in_be32(ndfc->ndfcbase + NDFC_CCR);
 	if (chip >= 0) {
@@ -64,8 +63,7 @@ static void ndfc_select_chip(struct mtd_info *mtd, int chip)
 
 static void ndfc_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 
 	if (cmd == NAND_CMD_NONE)
 		return;
@@ -78,8 +76,7 @@ static void ndfc_hwcontrol(struct mtd_info *mtd, int cmd, unsigned int ctrl)
 
 static int ndfc_ready(struct mtd_info *mtd)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 
 	return in_be32(ndfc->ndfcbase + NDFC_STAT) & NDFC_STAT_IS_READY;
 }
@@ -87,8 +84,7 @@ static int ndfc_ready(struct mtd_info *mtd)
 static void ndfc_enable_hwecc(struct mtd_info *mtd, int mode)
 {
 	uint32_t ccr;
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 
 	ccr = in_be32(ndfc->ndfcbase + NDFC_CCR);
 	ccr |= NDFC_CCR_RESET_ECC;
@@ -99,8 +95,7 @@ static void ndfc_enable_hwecc(struct mtd_info *mtd, int mode)
 static int ndfc_calculate_ecc(struct mtd_info *mtd,
 			      const u_char *dat, u_char *ecc_code)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 	uint32_t ecc;
 	uint8_t *p = (uint8_t *)&ecc;
 
@@ -123,8 +118,7 @@ static int ndfc_calculate_ecc(struct mtd_info *mtd,
  */
 static void ndfc_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 	uint32_t *p = (uint32_t *) buf;
 
 	for(;len > 0; len -= 4)
@@ -133,8 +127,7 @@ static void ndfc_read_buf(struct mtd_info *mtd, uint8_t *buf, int len)
 
 static void ndfc_write_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 	uint32_t *p = (uint32_t *) buf;
 
 	for(;len > 0; len -= 4)
@@ -143,8 +136,7 @@ static void ndfc_write_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 
 static int ndfc_verify_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 {
-	struct nand_chip *chip = mtd->priv;
-	struct ndfc_controller *ndfc = chip->priv;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
 	uint32_t *p = (uint32_t *) buf;
 
 	for(;len > 0; len -= 4)
@@ -159,10 +151,12 @@ static int ndfc_verify_buf(struct mtd_info *mtd, const uint8_t *buf, int len)
 static int ndfc_chip_init(struct ndfc_controller *ndfc,
 			  struct device_node *node)
 {
+#ifdef CONFIG_MTD_PARTITIONS
 #ifdef CONFIG_MTD_CMDLINE_PARTS
 	static const char *part_types[] = { "cmdlinepart", NULL };
 #else
 	static const char *part_types[] = { NULL };
+#endif
 #endif
 	struct device_node *flash_np;
 	struct nand_chip *chip = &ndfc->chip;
@@ -184,7 +178,6 @@ static int ndfc_chip_init(struct ndfc_controller *ndfc,
 	chip->ecc.mode = NAND_ECC_HW;
 	chip->ecc.size = 256;
 	chip->ecc.bytes = 3;
-	chip->priv = ndfc;
 
 	ndfc->mtd.priv = chip;
 	ndfc->mtd.owner = THIS_MODULE;
@@ -204,18 +197,25 @@ static int ndfc_chip_init(struct ndfc_controller *ndfc,
 	if (ret)
 		goto err;
 
+#ifdef CONFIG_MTD_PARTITIONS
 	ret = parse_mtd_partitions(&ndfc->mtd, part_types, &ndfc->parts, 0);
 	if (ret < 0)
 		goto err;
 
+#ifdef CONFIG_MTD_OF_PARTS
 	if (ret == 0) {
 		ret = of_mtd_parse_partitions(&ndfc->ofdev->dev, flash_np,
 					      &ndfc->parts);
 		if (ret < 0)
 			goto err;
 	}
+#endif
 
-	ret = mtd_device_register(&ndfc->mtd, ndfc->parts, ret);
+	if (ret > 0)
+		ret = add_mtd_partitions(&ndfc->mtd, ndfc->parts, ret);
+	else
+#endif
+		ret = add_mtd_device(&ndfc->mtd);
 
 err:
 	of_node_put(flash_np);
@@ -224,35 +224,28 @@ err:
 	return ret;
 }
 
-static int __devinit ndfc_probe(struct platform_device *ofdev)
+static int __devinit ndfc_probe(struct of_device *ofdev,
+				const struct of_device_id *match)
 {
-	struct ndfc_controller *ndfc;
-	const __be32 *reg;
+	struct ndfc_controller *ndfc = &ndfc_ctrl;
+	const u32 *reg;
 	u32 ccr;
-	int err, len, cs;
-
-	/* Read the reg property to get the chip select */
-	reg = of_get_property(ofdev->dev.of_node, "reg", &len);
-	if (reg == NULL || len != 12) {
-		dev_err(&ofdev->dev, "unable read reg property (%d)\n", len);
-		return -ENOENT;
-	}
-
-	cs = be32_to_cpu(reg[0]);
-	if (cs >= NDFC_MAX_CS) {
-		dev_err(&ofdev->dev, "invalid CS number (%d)\n", cs);
-		return -EINVAL;
-	}
-
-	ndfc = &ndfc_ctrl[cs];
-	ndfc->chip_select = cs;
+	int err, len;
 
 	spin_lock_init(&ndfc->ndfc_control.lock);
 	init_waitqueue_head(&ndfc->ndfc_control.wq);
 	ndfc->ofdev = ofdev;
 	dev_set_drvdata(&ofdev->dev, ndfc);
 
-	ndfc->ndfcbase = of_iomap(ofdev->dev.of_node, 0);
+	/* Read the reg property to get the chip select */
+	reg = of_get_property(ofdev->node, "reg", &len);
+	if (reg == NULL || len != 12) {
+		dev_err(&ofdev->dev, "unable read reg property (%d)\n", len);
+		return -ENOENT;
+	}
+	ndfc->chip_select = reg[0];
+
+	ndfc->ndfcbase = of_iomap(ofdev->node, 0);
 	if (!ndfc->ndfcbase) {
 		dev_err(&ofdev->dev, "failed to get memory\n");
 		return -EIO;
@@ -261,20 +254,20 @@ static int __devinit ndfc_probe(struct platform_device *ofdev)
 	ccr = NDFC_CCR_BS(ndfc->chip_select);
 
 	/* It is ok if ccr does not exist - just default to 0 */
-	reg = of_get_property(ofdev->dev.of_node, "ccr", NULL);
+	reg = of_get_property(ofdev->node, "ccr", NULL);
 	if (reg)
-		ccr |= be32_to_cpup(reg);
+		ccr |= *reg;
 
 	out_be32(ndfc->ndfcbase + NDFC_CCR, ccr);
 
 	/* Set the bank settings if given */
-	reg = of_get_property(ofdev->dev.of_node, "bank-settings", NULL);
+	reg = of_get_property(ofdev->node, "bank-settings", NULL);
 	if (reg) {
 		int offset = NDFC_BCFG0 + (ndfc->chip_select << 2);
-		out_be32(ndfc->ndfcbase + offset, be32_to_cpup(reg));
+		out_be32(ndfc->ndfcbase + offset, *reg);
 	}
 
-	err = ndfc_chip_init(ndfc, ofdev->dev.of_node);
+	err = ndfc_chip_init(ndfc, ofdev->node);
 	if (err) {
 		iounmap(ndfc->ndfcbase);
 		return err;
@@ -283,7 +276,7 @@ static int __devinit ndfc_probe(struct platform_device *ofdev)
 	return 0;
 }
 
-static int __devexit ndfc_remove(struct platform_device *ofdev)
+static int __devexit ndfc_remove(struct of_device *ofdev)
 {
 	struct ndfc_controller *ndfc = dev_get_drvdata(&ofdev->dev);
 
@@ -298,24 +291,23 @@ static const struct of_device_id ndfc_match[] = {
 };
 MODULE_DEVICE_TABLE(of, ndfc_match);
 
-static struct platform_driver ndfc_driver = {
+static struct of_platform_driver ndfc_driver = {
 	.driver = {
-		.name = "ndfc",
-		.owner = THIS_MODULE,
-		.of_match_table = ndfc_match,
+		.name	= "ndfc",
 	},
+	.match_table = ndfc_match,
 	.probe = ndfc_probe,
 	.remove = __devexit_p(ndfc_remove),
 };
 
 static int __init ndfc_nand_init(void)
 {
-	return platform_driver_register(&ndfc_driver);
+	return of_register_platform_driver(&ndfc_driver);
 }
 
 static void __exit ndfc_nand_exit(void)
 {
-	platform_driver_unregister(&ndfc_driver);
+	of_unregister_platform_driver(&ndfc_driver);
 }
 
 module_init(ndfc_nand_init);

@@ -32,7 +32,6 @@
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <asm/unaligned.h>
-#include <asm/dwarf.h>
 
 void *module_alloc(unsigned long size)
 {
@@ -93,8 +92,6 @@ int apply_relocate_add(Elf32_Shdr *sechdrs,
 #endif
 
 		switch (ELF32_R_TYPE(rel[i].r_info)) {
-		case R_SH_NONE:
-			break;
 		case R_SH_DIR32:
 			value = get_unaligned(location);
 			value += relocation;
@@ -148,14 +145,10 @@ int module_finalize(const Elf_Ehdr *hdr,
 		    const Elf_Shdr *sechdrs,
 		    struct module *me)
 {
-	int ret = 0;
-
-	ret |= module_dwarf_finalize(hdr, sechdrs, me);
-
-	return ret;
+	return module_bug_finalize(hdr, sechdrs, me);
 }
 
 void module_arch_cleanup(struct module *mod)
 {
-	module_dwarf_cleanup(mod);
+	module_bug_cleanup(mod);
 }

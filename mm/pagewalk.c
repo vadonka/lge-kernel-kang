@@ -33,35 +33,18 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 
 	pmd = pmd_offset(pud, addr);
 	do {
-again:
 		next = pmd_addr_end(addr, end);
-		if (pmd_none(*pmd)) {
+		if (pmd_none_or_clear_bad(pmd)) {
 			if (walk->pte_hole)
 				err = walk->pte_hole(addr, next, walk);
 			if (err)
 				break;
 			continue;
 		}
-		/*
-		 * This implies that each ->pmd_entry() handler
-		 * needs to know about pmd_trans_huge() pmds
-		 */
 		if (walk->pmd_entry)
 			err = walk->pmd_entry(pmd, addr, next, walk);
-		if (err)
-			break;
-
-		/*
-		 * Check this here so we only break down trans_huge
-		 * pages when we _need_ to
-		 */
-		if (!walk->pte_entry)
-			continue;
-
-		split_huge_page_pmd(walk->mm, pmd);
-		if (pmd_none_or_trans_huge_or_clear_bad(pmd))
-			goto again;
-		err = walk_pte_range(pmd, addr, next, walk);
+		if (!err && walk->pte_entry)
+			err = walk_pte_range(pmd, addr, next, walk);
 		if (err)
 			break;
 	} while (pmd++, addr = next, addr != end);
@@ -97,37 +80,6 @@ static int walk_pud_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 	return err;
 }
 
-#ifdef CONFIG_HUGETLB_PAGE
-static unsigned long hugetlb_entry_end(struct hstate *h, unsigned long addr,
-				       unsigned long end)
-{
-	unsigned long boundary = (addr & huge_page_mask(h)) + huge_page_size(h);
-	return boundary < end ? boundary : end;
-}
-
-static int walk_hugetlb_range(struct vm_area_struct *vma,
-			      unsigned long addr, unsigned long end,
-			      struct mm_walk *walk)
-{
-	struct hstate *h = hstate_vma(vma);
-	unsigned long next;
-	unsigned long hmask = huge_page_mask(h);
-	pte_t *pte;
-	int err = 0;
-
-	do {
-		next = hugetlb_entry_end(h, addr, end);
-		pte = huge_pte_offset(walk->mm, addr & hmask);
-		if (pte && walk->hugetlb_entry)
-			err = walk->hugetlb_entry(pte, hmask, addr, next, walk);
-		if (err)
-			return err;
-	} while (addr = next, addr != end);
-
-	return 0;
-}
-#endif
-
 /**
  * walk_page_range - walk a memory map's page tables with a callback
  * @mm: memory map to walk
@@ -156,6 +108,7 @@ int walk_page_range(unsigned long addr, unsigned long end,
 	pgd_t *pgd;
 	unsigned long next;
 	int err = 0;
+	struct vm_area_struct *vma;
 
 	if (addr >= end)
 		return err;
@@ -165,31 +118,17 @@ int walk_page_range(unsigned long addr, unsigned long end,
 
 	pgd = pgd_offset(walk->mm, addr);
 	do {
-		struct vm_area_struct *uninitialized_var(vma);
-
 		next = pgd_addr_end(addr, end);
 
-#ifdef CONFIG_HUGETLB_PAGE
-		/*
-		 * handle hugetlb vma individually because pagetable walk for
-		 * the hugetlb page is dependent on the architecture and
-		 * we can't handled it in the same manner as non-huge pages.
-		 */
+		/* skip hugetlb vma to avoid hugepage PMD being cleared
+		 * in pmd_none_or_clear_bad(). */
 		vma = find_vma(walk->mm, addr);
 		if (vma && is_vm_hugetlb_page(vma)) {
 			if (vma->vm_end < next)
 				next = vma->vm_end;
-			/*
-			 * Hugepage is very tightly coupled with vma, so
-			 * walk through hugetlb entries within a given vma.
-			 */
-			err = walk_hugetlb_range(vma, addr, next, walk);
-			if (err)
-				break;
-			pgd = pgd_offset(walk->mm, next);
 			continue;
 		}
-#endif
+
 		if (pgd_none_or_clear_bad(pgd)) {
 			if (walk->pte_hole)
 				err = walk->pte_hole(addr, next, walk);

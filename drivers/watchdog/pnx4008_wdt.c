@@ -4,7 +4,7 @@
  * Watchdog driver for PNX4008 board
  *
  * Authors: Dmitry Chigirev <source@mvista.com>,
- *	    Vitaly Wool <vitalywool@gmail.com>
+ * 	    Vitaly Wool <vitalywool@gmail.com>
  * Based on sa1100 driver,
  * Copyright (C) 2000 Oleg Drokin <green@crimea.edu>
  *
@@ -30,7 +30,6 @@
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
-#include <linux/slab.h>
 #include <mach/hardware.h>
 
 #define MODULE_NAME "PNX4008-WDT: "
@@ -97,6 +96,9 @@ static void wdt_enable(void)
 {
 	spin_lock(&io_lock);
 
+	if (wdt_clk)
+		clk_set_rate(wdt_clk, 1);
+
 	/* stop counter, initiate counter reset */
 	__raw_writel(RESET_COUNT, WDTIM_CTRL(wdt_base));
 	/*wait for reset to complete. 100% guarantee event */
@@ -123,24 +125,18 @@ static void wdt_disable(void)
 	spin_lock(&io_lock);
 
 	__raw_writel(0, WDTIM_CTRL(wdt_base));	/*stop counter */
+	if (wdt_clk)
+		clk_set_rate(wdt_clk, 0);
 
 	spin_unlock(&io_lock);
 }
 
 static int pnx4008_wdt_open(struct inode *inode, struct file *file)
 {
-	int ret;
-
 	if (test_and_set_bit(WDT_IN_USE, &wdt_status))
 		return -EBUSY;
 
 	clear_bit(WDT_OK_TO_CLOSE, &wdt_status);
-
-	ret = clk_enable(wdt_clk);
-	if (ret) {
-		clear_bit(WDT_IN_USE, &wdt_status);
-		return ret;
-	}
 
 	wdt_enable();
 
@@ -229,7 +225,6 @@ static int pnx4008_wdt_release(struct inode *inode, struct file *file)
 		printk(KERN_WARNING "WATCHDOG: Device closed unexpectdly\n");
 
 	wdt_disable();
-	clk_disable(wdt_clk);
 	clear_bit(WDT_IN_USE, &wdt_status);
 	clear_bit(WDT_OK_TO_CLOSE, &wdt_status);
 
@@ -254,6 +249,7 @@ static struct miscdevice pnx4008_wdt_miscdev = {
 static int __devinit pnx4008_wdt_probe(struct platform_device *pdev)
 {
 	int ret = 0, size;
+	struct resource *res;
 
 	if (heartbeat < 1 || heartbeat > MAX_HEARTBEAT)
 		heartbeat = DEFAULT_HEARTBEAT;
@@ -261,49 +257,41 @@ static int __devinit pnx4008_wdt_probe(struct platform_device *pdev)
 	printk(KERN_INFO MODULE_NAME
 		"PNX4008 Watchdog Timer: heartbeat %d sec\n", heartbeat);
 
-	wdt_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (wdt_mem == NULL) {
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (res == NULL) {
 		printk(KERN_INFO MODULE_NAME
 			"failed to get memory region resouce\n");
 		return -ENOENT;
 	}
 
-	size = resource_size(wdt_mem);
+	size = res->end - res->start + 1;
+	wdt_mem = request_mem_region(res->start, size, pdev->name);
 
-	if (!request_mem_region(wdt_mem->start, size, pdev->name)) {
+	if (wdt_mem == NULL) {
 		printk(KERN_INFO MODULE_NAME "failed to get memory region\n");
 		return -ENOENT;
 	}
-	wdt_base = (void __iomem *)IO_ADDRESS(wdt_mem->start);
+	wdt_base = (void __iomem *)IO_ADDRESS(res->start);
 
-	wdt_clk = clk_get(&pdev->dev, NULL);
+	wdt_clk = clk_get(&pdev->dev, "wdt_ck");
 	if (IS_ERR(wdt_clk)) {
 		ret = PTR_ERR(wdt_clk);
-		release_mem_region(wdt_mem->start, size);
-		wdt_mem = NULL;
+		release_resource(wdt_mem);
+		kfree(wdt_mem);
 		goto out;
-	}
-
-	ret = clk_enable(wdt_clk);
-	if (ret) {
-		release_mem_region(wdt_mem->start, size);
-		wdt_mem = NULL;
-		clk_put(wdt_clk);
-		goto out;
-	}
+	} else
+		clk_set_rate(wdt_clk, 1);
 
 	ret = misc_register(&pnx4008_wdt_miscdev);
 	if (ret < 0) {
 		printk(KERN_ERR MODULE_NAME "cannot register misc device\n");
-		release_mem_region(wdt_mem->start, size);
-		wdt_mem = NULL;
-		clk_disable(wdt_clk);
-		clk_put(wdt_clk);
+		release_resource(wdt_mem);
+		kfree(wdt_mem);
+		clk_set_rate(wdt_clk, 0);
 	} else {
 		boot_status = (__raw_readl(WDTIM_RES(wdt_base)) & WDOG_RESET) ?
 		    WDIOF_CARDRESET : 0;
 		wdt_disable();		/*disable for now */
-		clk_disable(wdt_clk);
 		set_bit(WDT_DEVICE_INITED, &wdt_status);
 	}
 
@@ -314,12 +302,14 @@ out:
 static int __devexit pnx4008_wdt_remove(struct platform_device *pdev)
 {
 	misc_deregister(&pnx4008_wdt_miscdev);
-
-	clk_disable(wdt_clk);
-	clk_put(wdt_clk);
-
+	if (wdt_clk) {
+		clk_set_rate(wdt_clk, 0);
+		clk_put(wdt_clk);
+		wdt_clk = NULL;
+	}
 	if (wdt_mem) {
-		release_mem_region(wdt_mem->start, resource_size(wdt_mem));
+		release_resource(wdt_mem);
+		kfree(wdt_mem);
 		wdt_mem = NULL;
 	}
 	return 0;

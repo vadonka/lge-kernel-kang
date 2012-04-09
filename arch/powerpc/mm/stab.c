@@ -12,7 +12,7 @@
  *      2 of the License, or (at your option) any later version.
  */
 
-#include <linux/memblock.h>
+#include <linux/lmb.h>
 
 #include <asm/pgtable.h>
 #include <asm/mmu.h>
@@ -243,7 +243,7 @@ void __init stabs_alloc(void)
 {
 	int cpu;
 
-	if (mmu_has_feature(MMU_FTR_SLB))
+	if (cpu_has_feature(CPU_FTR_SLB))
 		return;
 
 	for_each_possible_cpu(cpu) {
@@ -252,7 +252,7 @@ void __init stabs_alloc(void)
 		if (cpu == 0)
 			continue; /* stab for CPU 0 is statically allocated */
 
-		newstab = memblock_alloc_base(HW_PAGE_SIZE, HW_PAGE_SIZE,
+		newstab = lmb_alloc_base(HW_PAGE_SIZE, HW_PAGE_SIZE,
 					 1<<SID_SHIFT);
 		newstab = (unsigned long)__va(newstab);
 

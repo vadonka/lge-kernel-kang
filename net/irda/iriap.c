@@ -31,7 +31,6 @@
 #include <linux/string.h>
 #include <linux/init.h>
 #include <linux/seq_file.h>
-#include <linux/slab.h>
 
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
@@ -87,8 +86,6 @@ static inline void iriap_start_watchdog_timer(struct iriap_cb *self,
 			 iriap_watchdog_timer_expired);
 }
 
-static struct lock_class_key irias_objects_key;
-
 /*
  * Function iriap_init (void)
  *
@@ -115,9 +112,6 @@ int __init iriap_init(void)
 		hashbin_delete(iriap, NULL);
 		return -ENOMEM;
 	}
-
-	lockdep_set_class_and_name(&irias_objects->hb_spinlock, &irias_objects_key,
-				   "irias_objects");
 
 	/*
 	 *  Register some default services for IrLMP
@@ -507,8 +501,7 @@ static void iriap_getvaluebyclass_confirm(struct iriap_cb *self,
 		IRDA_DEBUG(4, "%s(), strlen=%d\n", __func__, value_len);
 
 		/* Make sure the string is null-terminated */
-		if (n + value_len < skb->len)
-			fp[n + value_len] = 0x00;
+		fp[n+value_len] = 0x00;
 		IRDA_DEBUG(4, "Got string %s\n", fp+n);
 
 		/* Will truncate to IAS_MAX_STRING bytes */
@@ -661,16 +654,10 @@ static void iriap_getvaluebyclass_indication(struct iriap_cb *self,
 	n = 1;
 
 	name_len = fp[n++];
-
-	IRDA_ASSERT(name_len < IAS_MAX_CLASSNAME + 1, return;);
-
 	memcpy(name, fp+n, name_len); n+=name_len;
 	name[name_len] = '\0';
 
 	attr_len = fp[n++];
-
-	IRDA_ASSERT(attr_len < IAS_MAX_ATTRIBNAME + 1, return;);
-
 	memcpy(attr, fp+n, attr_len); n+=attr_len;
 	attr[attr_len] = '\0';
 
@@ -697,6 +684,8 @@ static void iriap_getvaluebyclass_indication(struct iriap_cb *self,
 	/* We have a match; send the value.  */
 	iriap_getvaluebyclass_response(self, obj->id, IAS_SUCCESS,
 				       attrib->value);
+
+	return;
 }
 
 /*

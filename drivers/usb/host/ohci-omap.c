@@ -24,10 +24,10 @@
 #include <asm/io.h>
 #include <asm/mach-types.h>
 
-#include <plat/mux.h>
+#include <mach/mux.h>
 #include <mach/irqs.h>
-#include <plat/fpga.h>
-#include <plat/usb.h>
+#include <mach/fpga.h>
+#include <mach/usb.h>
 
 
 /* OMAP-1510 OHCI has its own MMU for DMA */

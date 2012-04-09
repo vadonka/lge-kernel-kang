@@ -73,7 +73,7 @@ static const NvOdmGpioPinInfo s_hdmi[] =
     { NVODM_PORT('n'), 7, NvOdmGpioPinActiveState_Low },
 };
 
-//20100802  gpio key mapping [START]
+//20100802 taewan.kim@lge.com gpio key mapping [START]
 #if defined(CONFIG_KEYBOARD_GPIO)
 static const NvOdmGpioPinKeyInfo s_key_gpio_map[] = {
     {KEY_VOLUMEDOWN, 10, NV_TRUE},
@@ -85,7 +85,7 @@ static const NvOdmGpioPinInfo s_nvgpio_key_info[] = {
     {NVODM_PORT('g'), 1, NvOdmGpioPinActiveState_Low, &s_key_gpio_map[1]},
 };
 #endif
-//20100802  gpio key mapping [END]
+//20100802 taewan.kim@lge.com gpio key mapping [END]
 
 const NvOdmGpioPinInfo *NvOdmQueryGpioPinMap(NvOdmGpioPinGroup Group,
     NvU32 Instance, NvU32 *pCount)
@@ -136,13 +136,13 @@ const NvOdmGpioPinInfo *NvOdmQueryGpioPinMap(NvOdmGpioPinGroup Group,
             *pCount = NVODM_ARRAY_SIZE(s_hdmi);
             return s_hdmi;
 
-        //20100802  gpio key mapping [START]
+        //20100802 taewan.kim@lge.com gpio key mapping [START]
 #if defined(CONFIG_KEYBOARD_GPIO) 
         case NvOdmGpioPinGroup_keypadMisc:
             *pCount = NVODM_ARRAY_SIZE(s_nvgpio_key_info);
             return s_nvgpio_key_info;
 #endif
-        //20100802  gpio key mapping [END]
+        //20100802 taewan.kim@lge.com gpio key mapping [END]
 
         default:
             *pCount = 0;

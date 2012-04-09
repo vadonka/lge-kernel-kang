@@ -28,7 +28,6 @@
 #include <linux/platform_device.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
-#include <linux/slab.h>
 #include <linux/earlysuspend.h>
 #include <linux/freezer.h>
 
@@ -312,7 +311,7 @@ static int tegra_touch_thread(void *pdata)
 	return 0;
 }
 
-static int __devinit aegra_touch_probe(struct platform_device *pdev)
+static int __init tegra_touch_probe(struct platform_device *pdev)
 {
 	struct tegra_touch_driver_data *touch = NULL;
 	struct input_dev *input_dev = NULL;
@@ -453,7 +452,7 @@ static int __devinit aegra_touch_probe(struct platform_device *pdev)
         touch->early_suspend.resume = tegra_touch_late_resume;
         register_early_suspend(&touch->early_suspend);
 #endif
-	printk(KERN_INFO NVODM_TOUCH_NAME 
+	printk(KERN_INFO NVODM_TOUCH_NAME
 		": Successfully registered the ODM touch driver %x\n", (NvU32)touch->hTouchDevice);
 	return 0;
 

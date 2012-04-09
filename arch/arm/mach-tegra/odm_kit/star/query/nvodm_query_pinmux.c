@@ -33,7 +33,7 @@
 #include "nvrm_drf.h"
 
 #define NVODM_PINMUX_ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
+#if defined (CONFIG_MODEM_MDM)
 static const NvU32 s_NvOdmPinMuxConfig_Uart_Hsi_Ulpi[] = {
     NvOdmUartPinMap_Config7,    // Instance 0: UART-A is mapped to SDIO1 pins when ULPI is used
     NvOdmUartPinMap_Config1,    // Instance 1: UART-B
@@ -49,15 +49,19 @@ static const NvU32 s_NvOdmPinMuxConfig_Uart_Ril_Emp[] = {
     0, // UART-D function disabled: pins used by BB (SPI1)
     0, // UART-E function disabled: pins used by WiFi (SDIO1)
 };
-
+#endif
 static const NvU32 s_NvOdmPinMuxConfig_Uart[] = {
     NvOdmUartPinMap_Config6,
     NvOdmUartPinMap_Config2, // Debug message
     NvOdmUartPinMap_Config1, // BT
-#if defined (CONFIG_MACH_STAR) && !defined(CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_MDM)
+#if defined (CONFIG_MACH_STAR)
 // mdm does not use ap side - gps
     0,
 #else
+    NvOdmUartPinMap_Config2, // GPS
+#endif
+#elif defined (CONFIG_MODEM_IFX)
     NvOdmUartPinMap_Config2, // GPS
 #endif
     0,
@@ -65,13 +69,13 @@ static const NvU32 s_NvOdmPinMuxConfig_Uart[] = {
 
 static const NvU32 s_NvOdmPinMuxConfig_Spi[] = {
     NvOdmSpiPinMap_Config1, // Modem
-//20100809-1, , Add SPI2 for AP-CP IPC [START]
+//20100809-1, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [START]
 #ifdef CONFIG_DUAL_SPI
 	NvOdmSpiPinMap_Config4, // Modem
 #else    
-		0,
-#endif
-//20100809, , Add SPI2 for AP-CP IPC [END]
+    0,
+#endif    
+//20100809, syblue.lee@lge.com, Add SPI2 for AP-CP IPC [END]
     0,
     0,
     0,
@@ -161,13 +165,13 @@ static const NvU32 s_NvOdmPinMuxConfig_VideoInput[] = {
 };
 
 static const NvU32 s_NvOdmPinMuxConfig_Display[] = {
-//20100725  add CPU Panel [START]
+//20100725 taewan.kim@lge.com add CPU Panel [START]
 #if defined(CONFIG_MACH_STAR)
     NvOdmDisplayPinMap_Config1,
 #else
     0, // RGB panel is not used
 #endif
-//20100725  add CPU Panel [END]
+//20100725 taewan.kim@lge.com add CPU Panel [END]
     0,
 };
 
@@ -208,13 +212,13 @@ static const NvU32 s_NvOdmPinMuxConfig_Ptm[] = {
 
 ///TODO: keep it here for now and might remove it.
 static const NvU32 s_NvOdmPinMuxConfig_Dsi[] = {
-//20100725  add CPU Panel [START]
+//20100725 taewan.kim@lge.com add CPU Panel [START]
 #if defined(CONFIG_MACH_STAR)
     0,
 #else
     NvOdmDapPinMap_Config1, // fake one, otherwise, ddk display will assert.
 #endif
-//20100725  add CPU Panel [END]
+//20100725 taewan.kim@lge.com add CPU Panel [END]
 };
 
 
@@ -224,11 +228,12 @@ NvOdmQueryPinMux(
     const NvU32 **pPinMuxConfigTable,
     NvU32 *pCount)
 {
-	//20101023  add tegra-10.9.3[start] 
+#if defined (CONFIG_MODEM_MDM)
+	//20101023 sk.hwang@lge.com add tegra-10.9.3[start] 
 	NvU32 CustomerOption = 0;
 	NvU32 Personality = 0;
 	NvU32 Ril = 0;
-	NvOdmServicesKeyListHandle hKeyList = NvOdmServicesKeyListOpen();
+	NvOdmServicesKeyListHandle hKeyList;
 	if (hKeyList)
     {   
         CustomerOption =
@@ -246,8 +251,8 @@ NvOdmQueryPinMux(
 
     if (!Ril)
         Ril = TEGRA_DEVKIT_BCT_CUSTOPT_0_RIL_DEFAULT;	
-	//20101023  add tegra-10.9.3[end] 
-
+	//20101023 sk.hwang@lge.com add tegra-10.9.3[end] 
+#endif
     switch (IoModule)
     {
     case NvOdmIoModule_Display:
@@ -311,6 +316,7 @@ NvOdmQueryPinMux(
         break;
 
     case NvOdmIoModule_Uart:
+#if defined (CONFIG_MODEM_MDM)
         if (Ril == TEGRA_DEVKIT_BCT_CUSTOPT_0_RIL_EMP_RAINBOW_ULPI)
         {
             *pPinMuxConfigTable = s_NvOdmPinMuxConfig_Uart_Hsi_Ulpi;
@@ -326,6 +332,10 @@ NvOdmQueryPinMux(
             *pPinMuxConfigTable = s_NvOdmPinMuxConfig_Uart;
             *pCount = NV_ARRAY_SIZE(s_NvOdmPinMuxConfig_Uart);
 		}
+#elif defined (CONFIG_MODEM_IFX)
+			*pPinMuxConfigTable = s_NvOdmPinMuxConfig_Uart;
+            *pCount = NV_ARRAY_SIZE(s_NvOdmPinMuxConfig_Uart);
+#endif
         break;
 
     case NvOdmIoModule_ExternalClock:
@@ -398,22 +408,22 @@ NvOdmQueryPinMux(
         *pCount = NV_ARRAY_SIZE(s_NvOdmPinMuxConfig_BacklightPwm);
         break;
 
-//20100725  add CPU Panel [START]
+//20100725 taewan.kim@lge.com add CPU Panel [START]
 #if !defined(CONFIG_MACH_STAR)
     case NvOdmIoModule_Dsi:
         *pPinMuxConfigTable = s_NvOdmPinMuxConfig_Dsi;
         *pCount = NV_ARRAY_SIZE(s_NvOdmPinMuxConfig_Dsi);
         break;
 #endif
-//20100725  add CPU Panel [END]
+//20100725 taewan.kim@lge.com add CPU Panel [END]
 
     case NvOdmIoModule_Hsmmc:
     case NvOdmIoModule_Csi:
-//20100725  add CPU Panel [START]
+//20100725 taewan.kim@lge.com add CPU Panel [START]
 #if defined(CONFIG_MACH_STAR)
     case NvOdmIoModule_Dsi:
 #endif
-//20100725  add CPU Panel [END]
+//20100725 taewan.kim@lge.com add CPU Panel [END]
     case NvOdmIoModule_Sflash:
     case NvOdmIoModule_Slink:
     case NvOdmIoModule_Gpio:

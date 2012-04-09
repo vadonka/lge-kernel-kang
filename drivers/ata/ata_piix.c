@@ -38,16 +38,16 @@
  *  Hardware documentation available at http://developer.intel.com/
  *
  * Documentation
- *	Publicly available from Intel web site. Errata documentation
- * is also publicly available. As an aide to anyone hacking on this
+ *	Publically available from Intel web site. Errata documentation
+ * is also publically available. As an aide to anyone hacking on this
  * driver the list of errata that are relevant is below, going back to
  * PIIX4. Older device documentation is now a bit tricky to find.
  *
- * The chipsets all follow very much the same design. The original Triton
- * series chipsets do _not_ support independent device timings, but this
+ * The chipsets all follow very much the same design. The orginal Triton
+ * series chipsets do _not_ support independant device timings, but this
  * is fixed in Triton II. With the odd mobile exception the chips then
  * change little except in gaining more modes until SATA arrives. This
- * driver supports only the chips with independent timing (that is those
+ * driver supports only the chips with independant timing (that is those
  * with SITRE and the 0x44 timing register). See pata_oldpiix and pata_mpiix
  * for the early chip drivers.
  *
@@ -90,7 +90,6 @@
 #include <linux/blkdev.h>
 #include <linux/delay.h>
 #include <linux/device.h>
-#include <linux/gfp.h>
 #include <scsi/scsi_host.h>
 #include <linux/libata.h>
 #include <linux/dmi.h>
@@ -113,8 +112,6 @@ enum {
 	PIIX_PATA_FLAGS		= ATA_FLAG_SLAVE_POSS,
 	PIIX_SATA_FLAGS		= ATA_FLAG_SATA | PIIX_FLAG_CHECKINTR,
 
-	PIIX_FLAG_PIO16		= (1 << 30), /*support 16bit PIO only*/
-
 	PIIX_80C_PRI		= (1 << 5) | (1 << 4),
 	PIIX_80C_SEC		= (1 << 7) | (1 << 6),
 
@@ -124,7 +121,7 @@ enum {
 	P2			= 2,  /* port 2 */
 	P3			= 3,  /* port 3 */
 	IDE			= -1, /* IDE */
-	NA			= -2, /* not available */
+	NA			= -2, /* not avaliable */
 	RV			= -3, /* reserved */
 
 	PIIX_AHCI_DEVICE	= 6,
@@ -149,7 +146,6 @@ enum piix_controller_ids {
 	ich8m_apple_sata,	/* locks up on second port enable */
 	tolapai_sata,
 	piix_pata_vmw,			/* PIIX4 for VMware, spurious DMA_ERR */
-	ich8_sata_snb,
 };
 
 struct piix_map_db {
@@ -177,10 +173,6 @@ static int piix_sidpr_scr_read(struct ata_link *link,
 			       unsigned int reg, u32 *val);
 static int piix_sidpr_scr_write(struct ata_link *link,
 				unsigned int reg, u32 val);
-static int piix_sidpr_set_lpm(struct ata_link *link, enum ata_lpm_policy policy,
-			      unsigned hints);
-static bool piix_irq_check(struct ata_port *ap);
-static int piix_port_start(struct ata_port *ap);
 #ifdef CONFIG_PM
 static int piix_pci_device_suspend(struct pci_dev *pdev, pm_message_t mesg);
 static int piix_pci_device_resume(struct pci_dev *pdev);
@@ -214,8 +206,6 @@ static const struct pci_device_id piix_pci_tbl[] = {
 	{ 0x8086, 0x248A, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
 	/* Intel ICH3 (E7500/1) UDMA 100 */
 	{ 0x8086, 0x248B, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
-	/* Intel ICH4-L */
-	{ 0x8086, 0x24C1, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
 	/* Intel ICH4 (i845GV, i845E, i852, i855) UDMA 100 */
 	{ 0x8086, 0x24CA, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
 	{ 0x8086, 0x24CB, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
@@ -234,7 +224,7 @@ static const struct pci_device_id piix_pci_tbl[] = {
 	{ 0x8086, 0x2850, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich_pata_100 },
 
 	/* SATA ports */
-
+	
 	/* 82801EB (ICH5) */
 	{ 0x8086, 0x24d1, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich5_sata },
 	/* 82801EB (ICH5) */
@@ -301,26 +291,6 @@ static const struct pci_device_id piix_pci_tbl[] = {
 	{ 0x8086, 0x3b2d, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
 	/* SATA Controller IDE (PCH) */
 	{ 0x8086, 0x3b2e, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata },
-	/* SATA Controller IDE (CPT) */
-	{ 0x8086, 0x1c00, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata_snb },
-	/* SATA Controller IDE (CPT) */
-	{ 0x8086, 0x1c01, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata_snb },
-	/* SATA Controller IDE (CPT) */
-	{ 0x8086, 0x1c08, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
-	/* SATA Controller IDE (CPT) */
-	{ 0x8086, 0x1c09, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
-	/* SATA Controller IDE (PBG) */
-	{ 0x8086, 0x1d00, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata_snb },
-	/* SATA Controller IDE (PBG) */
-	{ 0x8086, 0x1d08, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
-	/* SATA Controller IDE (Panther Point) */
-	{ 0x8086, 0x1e00, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata_snb },
-	/* SATA Controller IDE (Panther Point) */
-	{ 0x8086, 0x1e01, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_sata_snb },
-	/* SATA Controller IDE (Panther Point) */
-	{ 0x8086, 0x1e08, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
-	/* SATA Controller IDE (Panther Point) */
-	{ 0x8086, 0x1e09, PCI_ANY_ID, PCI_ANY_ID, 0, 0, ich8_2port_sata },
 	{ }	/* terminate list */
 };
 
@@ -339,14 +309,8 @@ static struct scsi_host_template piix_sht = {
 	ATA_BMDMA_SHT(DRV_NAME),
 };
 
-static struct ata_port_operations piix_sata_ops = {
-	.inherits		= &ata_bmdma32_port_ops,
-	.sff_irq_check		= piix_irq_check,
-	.port_start		= piix_port_start,
-};
-
 static struct ata_port_operations piix_pata_ops = {
-	.inherits		= &piix_sata_ops,
+	.inherits		= &ata_bmdma32_port_ops,
 	.cable_detect		= ata_cable_40wire,
 	.set_piomode		= piix_set_piomode,
 	.set_dmamode		= piix_set_dmamode,
@@ -364,14 +328,8 @@ static struct ata_port_operations ich_pata_ops = {
 	.set_dmamode		= ich_set_dmamode,
 };
 
-static struct device_attribute *piix_sidpr_shost_attrs[] = {
-	&dev_attr_link_power_management_policy,
-	NULL
-};
-
-static struct scsi_host_template piix_sidpr_sht = {
-	ATA_BMDMA_SHT(DRV_NAME),
-	.shost_attrs		= piix_sidpr_shost_attrs,
+static struct ata_port_operations piix_sata_ops = {
+	.inherits		= &ata_bmdma_port_ops,
 };
 
 static struct ata_port_operations piix_sidpr_sata_ops = {
@@ -379,7 +337,6 @@ static struct ata_port_operations piix_sidpr_sata_ops = {
 	.hardreset		= sata_std_hardreset,
 	.scr_read		= piix_sidpr_scr_read,
 	.scr_write		= piix_sidpr_scr_write,
-	.set_lpm		= piix_sidpr_set_lpm,
 };
 
 static const struct piix_map_db ich5_map_db = {
@@ -483,7 +440,6 @@ static const struct piix_map_db *piix_map_db_table[] = {
 	[ich8_2port_sata]	= &ich8_2port_map_db,
 	[ich8m_apple_sata]	= &ich8m_apple_map_db,
 	[tolapai_sata]		= &tolapai_map_db,
-	[ich8_sata_snb]		= &ich8_map_db,
 };
 
 static struct ata_port_info piix_port_info[] = {
@@ -612,19 +568,6 @@ static struct ata_port_info piix_port_info[] = {
 		.port_ops	= &piix_vmw_ops,
 	},
 
-	/*
-	 * some Sandybridge chipsets have broken 32 mode up to now,
-	 * see https://bugzilla.kernel.org/show_bug.cgi?id=40592
-	 */
-	[ich8_sata_snb] =
-	{
-		.flags		= PIIX_SATA_FLAGS | PIIX_FLAG_SIDPR | PIIX_FLAG_PIO16,
-		.pio_mask	= ATA_PIO4,
-		.mwdma_mask	= ATA_MWDMA2,
-		.udma_mask	= ATA_UDMA6,
-		.port_ops	= &piix_sata_ops,
-	},
-
 };
 
 static struct pci_bits piix_enable_bits[] = {
@@ -656,7 +599,7 @@ static const struct ich_laptop ich_laptop[] = {
 	{ 0x27DF, 0x1028, 0x02b0 },	/* ICH7 on unknown Dell */
 	{ 0x27DF, 0x1043, 0x1267 },	/* ICH7 on Asus W5F */
 	{ 0x27DF, 0x103C, 0x30A1 },	/* ICH7 on HP Compaq nc2400 */
-	{ 0x27DF, 0x103C, 0x361a },	/* ICH7 on unknown HP  */
+	{ 0x27DF, 0x103C, 0x361a },	/* ICH7 on unkown HP  */
 	{ 0x27DF, 0x1071, 0xD221 },	/* ICH7 on Hercules EC-900 */
 	{ 0x27DF, 0x152D, 0x0778 },	/* ICH7 on unknown Intel */
 	{ 0x24CA, 0x1025, 0x0061 },	/* ICH4 on ACER Aspire 2023WLMi */
@@ -667,14 +610,6 @@ static const struct ich_laptop ich_laptop[] = {
 	/* end marker */
 	{ 0, }
 };
-
-static int piix_port_start(struct ata_port *ap)
-{
-	if (!(ap->flags & PIIX_FLAG_PIO16))
-		ap->pflags |= ATA_PFLAG_PIO32 | ATA_PFLAG_PIO32CHANGE;
-
-	return ata_bmdma_port_start(ap);
-}
 
 /**
  *	ich_pata_cable_detect - Probe host controller cable detect info
@@ -1025,20 +960,6 @@ static int piix_sidpr_scr_write(struct ata_link *link,
 	piix_sidpr_sel(link, reg);
 	iowrite32(val, hpriv->sidpr + PIIX_SIDPR_DATA);
 	return 0;
-}
-
-static int piix_sidpr_set_lpm(struct ata_link *link, enum ata_lpm_policy policy,
-			      unsigned hints)
-{
-	return sata_link_scr_lpm(link, policy, false);
-}
-
-static bool piix_irq_check(struct ata_port *ap)
-{
-	if (unlikely(!ap->ioaddr.bmdma_addr))
-		return false;
-
-	return ap->ops->bmdma_status(ap) & ATA_DMA_INTR;
 }
 
 #ifdef CONFIG_PM
@@ -1592,7 +1513,6 @@ static int __devinit piix_init_one(struct pci_dev *pdev,
 	struct device *dev = &pdev->dev;
 	struct ata_port_info port_info[2];
 	const struct ata_port_info *ppi[] = { &port_info[0], &port_info[1] };
-	struct scsi_host_template *sht = &piix_sht;
 	unsigned long port_flags;
 	struct ata_host *host;
 	struct piix_host_priv *hpriv;
@@ -1650,7 +1570,7 @@ static int __devinit piix_init_one(struct pci_dev *pdev,
 		hpriv->map = piix_init_sata_map(pdev, port_info,
 					piix_map_db_table[ent->driver_data]);
 
-	rc = ata_pci_bmdma_prepare_host(pdev, ppi, &host);
+	rc = ata_pci_sff_prepare_host(pdev, ppi, &host);
 	if (rc)
 		return rc;
 	host->private_data = hpriv;
@@ -1661,8 +1581,6 @@ static int __devinit piix_init_one(struct pci_dev *pdev,
 		rc = piix_init_sidpr(host);
 		if (rc)
 			return rc;
-		if (host->ports[0]->ops == &piix_sidpr_sata_ops)
-			sht = &piix_sidpr_sht;
 	}
 
 	/* apply IOCFG bit18 quirk */
@@ -1689,7 +1607,7 @@ static int __devinit piix_init_one(struct pci_dev *pdev,
 	host->flags |= ATA_HOST_PARALLEL_SCAN;
 
 	pci_set_master(pdev);
-	return ata_pci_sff_activate_host(host, ata_bmdma_interrupt, sht);
+	return ata_pci_sff_activate_host(host, ata_sff_interrupt, &piix_sht);
 }
 
 static void piix_remove_one(struct pci_dev *pdev)

@@ -27,6 +27,8 @@
  * 	- Add module support
  */
 
+
+#include <linux/smp_lock.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/miscdevice.h>
@@ -172,12 +174,13 @@ static long efi_rtc_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 
 		case RTC_RD_TIME:
+			lock_kernel();
 			spin_lock_irqsave(&efi_rtc_lock, flags);
 
 			status = efi.get_time(&eft, &cap);
 
 			spin_unlock_irqrestore(&efi_rtc_lock,flags);
-
+			unlock_kernel();
 			if (status != EFI_SUCCESS) {
 				/* should never happen */
 				printk(KERN_ERR "efitime: can't read time\n");
@@ -199,11 +202,13 @@ static long efi_rtc_ioctl(struct file *file, unsigned int cmd,
 
 			convert_to_efi_time(&wtime, &eft);
 
+			lock_kernel();
 			spin_lock_irqsave(&efi_rtc_lock, flags);
 
 			status = efi.set_time(&eft);
 
 			spin_unlock_irqrestore(&efi_rtc_lock,flags);
+			unlock_kernel();
 
 			return status == EFI_SUCCESS ? 0 : -EINVAL;
 
@@ -219,6 +224,7 @@ static long efi_rtc_ioctl(struct file *file, unsigned int cmd,
 
 			convert_to_efi_time(&wtime, &eft);
 
+			lock_kernel();
 			spin_lock_irqsave(&efi_rtc_lock, flags);
 			/*
 			 * XXX Fixme:
@@ -229,16 +235,19 @@ static long efi_rtc_ioctl(struct file *file, unsigned int cmd,
 			status = efi.set_wakeup_time((efi_bool_t)enabled, &eft);
 
 			spin_unlock_irqrestore(&efi_rtc_lock,flags);
+			unlock_kernel();
 
 			return status == EFI_SUCCESS ? 0 : -EINVAL;
 
 		case RTC_WKALM_RD:
 
+			lock_kernel();
 			spin_lock_irqsave(&efi_rtc_lock, flags);
 
 			status = efi.get_wakeup_time((efi_bool_t *)&enabled, (efi_bool_t *)&pending, &eft);
 
 			spin_unlock_irqrestore(&efi_rtc_lock,flags);
+			unlock_kernel();
 
 			if (status != EFI_SUCCESS) return -EINVAL;
 
@@ -268,6 +277,7 @@ static int efi_rtc_open(struct inode *inode, struct file *file)
 	 * We do accept multiple open files at the same time as we
 	 * synchronize on the per call operation.
 	 */
+	cycle_kernel_lock();
 	return 0;
 }
 
@@ -285,7 +295,6 @@ static const struct file_operations efi_rtc_fops = {
 	.unlocked_ioctl	= efi_rtc_ioctl,
 	.open		= efi_rtc_open,
 	.release	= efi_rtc_close,
-	.llseek		= no_llseek,
 };
 
 static struct miscdevice efi_rtc_dev= {

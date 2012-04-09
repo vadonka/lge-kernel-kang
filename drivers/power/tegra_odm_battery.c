@@ -27,7 +27,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/err.h>
-#include <linux/slab.h>
 #include <linux/platform_device.h>
 #include <linux/debugfs.h>
 #include <linux/power_supply.h>
@@ -397,12 +396,14 @@ static int tegra_battery_probe(struct platform_device *pdev)
 	batt_dev->batt_id = 0;
 	batt_dev->charging_source = NvCharger_Type_AC;
 	batt_dev->charging_enabled = NvCharge_Control_Charging_Enable;
+#if defined (CONFIG_MODEM_MDM)
 
 	result = NvOdmBatteryDeviceOpen(&(batt_dev->hOdmBattDev), NULL);
 	if (!result) {
 		pr_err("NvOdmBatteryDeviceOpen FAILED\n");
 		goto err;
 	}
+#endif
 
 	for (i = 0; i < ARRAY_SIZE(tegra_supplies); i++) {
 		rc = power_supply_register(&pdev->dev, &tegra_supplies[i]);
@@ -454,17 +455,18 @@ static int tegra_battery_remove(struct platform_device *pdev)
 		device_remove_file(&pdev->dev, &tegra_battery_attr);
 
 		del_timer_sync(&(batt_dev->battery_poll_timer));
-// this is froyo 10.7.2 source but build ERROR [START]
+//cs77.ha@lge.com this is froyo 10.7.2 source but build ERROR [START]
 #if 0
                 if (batt_dev->hOdmBattDev) {
                         NvOdmBatteryDeviceClose(batt_dev->hOdmBattDev);
                         batt_dev->hOdmBattDev = NULL;
                 }
 #endif
-// this is froyo 10.7.2 source but build ERROR [END]
+//cs77.ha@lge.com this is froyo 10.7.2 source but build ERROR [END]
 		kfree(batt_dev);
 		batt_dev = NULL;
 	}
+
 	return 0;
 }
 

@@ -132,7 +132,7 @@ typedef enum
 } NvOdmAccelerometerThresholdSource;
 
 // Timeout for I2C transaction.
-// 0608 audio test
+//jinsoo@lge.com 0608 audio test
 enum { I2C_ACCELRATOR_TRANSACTION_TIMEOUT = 500 };
 //enum { I2C_ACCELRATOR_TRANSACTION_TIMEOUT = 1000 };
 // Maximum number of packetsize supported by the I2C controller.

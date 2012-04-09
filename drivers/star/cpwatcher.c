@@ -108,14 +108,14 @@ static int debug_enable_flag = 0;//Release
 #define EVENT_KEY KEY_SEARCH //debug
 #else
 #define EVENT_KEY KEY_F24 //194, Need to be changed
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 #define EVENT_HARD_RESET_KEY	195	//this key number is not used in input.h
 #endif
 #endif
 
 #define	HEADSET_PORT 6
 #define	HEADSET_PIN 3
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 #define ENABLE_CP_HARD_RESET
 #endif
 struct cpwatcher_dev {
@@ -129,7 +129,7 @@ struct cpwatcher_dev {
 	NvU32 status;
 	NvU8 onoff;
 	NvU32 delay;
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 #ifdef ENABLE_CP_HARD_RESET				
 	NvOdmGpioPinHandle hCP_status_HardReset;
 	NvOdmServicesGpioIntrHandle hGpioInterrupt_HardReset;
@@ -157,9 +157,9 @@ static int debug_control_set(void *data, u64 val)
 		
 		debug_enable_flag |= ENABLE_DEBUG_MESSAGE;
 	}
-#if defined (CONFIG_MACH_STAR_TMUS)
+#if defined (CONFIG_MODEM_MDM)
 	if (val /*& ENABLE_TEST_MODE*/) {
-#elif defined (CONFIG_MACH_STAR_REV_F)
+#elif defined (CONFIG_MODEM_IFX)
 	if (val & ENABLE_TEST_MODE) {
 #endif
 		debug_enable_flag |= ENABLE_TEST_MODE;
@@ -216,7 +216,7 @@ static void cpwatcher_get_status(NvU32 *pin)
 {
 	NvOdmGpioGetState(cpwatcher->hGpio, cpwatcher->hCP_status, pin);
 }
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 #ifdef ENABLE_CP_HARD_RESET
 static void cpwatcher_HardReset_get_status(NvU32 *pin)
 {
@@ -282,7 +282,7 @@ static void cpwatcher_work_func(struct work_struct *wq)
 			input_sync(dev->input);
 			DBG("[CPW] input_report_key(): %d\n", EVENT_KEY);
 		}
-#if defined (CONFIG_MACH_STAR_REV_F)
+#if defined (CONFIG_MODEM_IFX)
 #ifdef ENABLE_CP_HARD_RESET
 		cpwatcher_HardReset_get_status(&status);
 		printk("[CPW] %s(), Hard reset status: %d\n", __FUNCTION__, status);
@@ -354,7 +354,7 @@ static const struct attribute_group cpwatcher_group = {
 
 
 	
-#ifdef CONFIG_MACH_STAR_REV_F
+#ifdef CONFIG_MODEM_IFX
 static void cpwatcher_HardReset_irq_handler(void *dev_id)
 {
 	struct cpwatcher_dev *dev = cpwatcher;
@@ -366,10 +366,10 @@ static void cpwatcher_HardReset_irq_handler(void *dev_id)
 	}
 
 	NvOdmGpioInterruptDone(cpwatcher->hGpioInterrupt_HardReset);
-	}
+}
 
 static int cpwatcher_probe(struct platform_device *pdev)
-        {
+{
 	struct cpwatcher_dev *dev; 
 	struct device *dev_sys = &pdev->dev;
 	int i, j;
@@ -394,15 +394,15 @@ static int cpwatcher_probe(struct platform_device *pdev)
     for (i = 0, j = 0 ; i < pConnectivity->NumAddress; i++) {
 
         switch (pConnectivity->AddressList[i].Interface)
-	{
+        {
             case NvOdmIoModule_Gpio:
 			dev->port = pConnectivity->AddressList[i].Instance;
 			dev->pin = pConnectivity->AddressList[i].Address;
 			j++;
                 break;
             default:
-		break;              
-	}
+                break;
+        }
     }
 	dev->port_HardReset = u32HardResetGpio;
 	dev->pin_HardReset = u32HardResetPin;
@@ -491,7 +491,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 	{
 		printk("[CPW] %s: Fail to register softreset interrupt Error\n", __FUNCTION__);
 		goto fail_gpio_int_register;
-}
+	}
 
 #ifdef CPW_CHECK_STATUS_AT_BEGINNING
 	/* Check the status at the beginning */
@@ -503,7 +503,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 		input_sync(dev->input);
 	}
 #endif
-
+	
 	if (sysfs_create_group(&dev_sys->kobj, &cpwatcher_group)) {
 
 		printk("[CPW] Failed to create sys filesystem\n");
@@ -520,7 +520,7 @@ static int cpwatcher_probe(struct platform_device *pdev)
 		goto fail_input_allocate; 
 	}
 	wake_up_process(dev->task);
-#endif
+#endif 
 
     printk("[CPW] CP Watcher Initialization completed\n");
 
@@ -755,7 +755,7 @@ static int cpwatcher_remove(struct platform_device *pdev)
 }
 
 #endif	//ENABLE_CP_HARD_RESET
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+//LGSI_BSP_CHANGE Merge from Froyo [kirankumar.vm@lge.com][lgp990_gb]18042011 [End]
 
 static struct platform_driver cpwatcher_driver = {
 	.probe		= cpwatcher_probe,

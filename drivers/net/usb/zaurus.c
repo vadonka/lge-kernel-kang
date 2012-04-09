@@ -102,7 +102,7 @@ static int always_connected (struct usbnet *dev)
 
 static const struct driver_info	zaurus_sl5x00_info = {
 	.description =	"Sharp Zaurus SL-5x00",
-	.flags =	FLAG_POINTTOPOINT | FLAG_FRAMING_Z,
+	.flags =	FLAG_FRAMING_Z,
 	.check_connect = always_connected,
 	.bind =		zaurus_bind,
 	.unbind =	usbnet_cdc_unbind,
@@ -112,7 +112,7 @@ static const struct driver_info	zaurus_sl5x00_info = {
 
 static const struct driver_info	zaurus_pxa_info = {
 	.description =	"Sharp Zaurus, PXA-2xx based",
-	.flags =	FLAG_POINTTOPOINT | FLAG_FRAMING_Z,
+	.flags =	FLAG_FRAMING_Z,
 	.check_connect = always_connected,
 	.bind =		zaurus_bind,
 	.unbind =	usbnet_cdc_unbind,
@@ -122,7 +122,7 @@ static const struct driver_info	zaurus_pxa_info = {
 
 static const struct driver_info	olympus_mxl_info = {
 	.description =	"Olympus R1000",
-	.flags =	FLAG_POINTTOPOINT | FLAG_FRAMING_Z,
+	.flags =	FLAG_FRAMING_Z,
 	.check_connect = always_connected,
 	.bind =		zaurus_bind,
 	.unbind =	usbnet_cdc_unbind,
@@ -174,8 +174,8 @@ static int blan_mdlm_bind(struct usbnet *dev, struct usb_interface *intf)
 				goto bad_desc;
 			}
 			/* expect bcdVersion 1.0, ignore */
-			if (memcmp(&desc->bGUID, blan_guid, 16) &&
-			    memcmp(&desc->bGUID, safe_guid, 16)) {
+			if (memcmp(&desc->bGUID, blan_guid, 16)
+				    && memcmp(&desc->bGUID, safe_guid, 16) ) {
 				/* hey, this one might _really_ be MDLM! */
 				dev_dbg(&intf->dev, "MDLM guid\n");
 				goto bad_desc;
@@ -258,7 +258,7 @@ bad_desc:
 
 static const struct driver_info	bogus_mdlm_info = {
 	.description =	"pseudo-MDLM (BLAN) device",
-	.flags =	FLAG_POINTTOPOINT | FLAG_FRAMING_Z,
+	.flags =	FLAG_FRAMING_Z,
 	.check_connect = always_connected,
 	.tx_fixup =	zaurus_tx_fixup,
 	.bind =		blan_mdlm_bind,
@@ -331,7 +331,17 @@ static const struct usb_device_id	products [] = {
 	ZAURUS_MASTER_INTERFACE,
 	.driver_info = ZAURUS_PXA_INFO,
 },
+
+
+/* At least some of the newest PXA units have very different lies about
+ * their standards support:  they claim to be cell phones offering
+ * direct access to their radios!  (No, they don't conform to CDC MDLM.)
+ */
 {
+	USB_INTERFACE_INFO(USB_CLASS_COMM, USB_CDC_SUBCLASS_MDLM,
+			USB_CDC_PROTO_NONE),
+	.driver_info = (unsigned long) &bogus_mdlm_info,
+}, {
 	/* Motorola MOTOMAGX phones */
 	USB_DEVICE_AND_INTERFACE_INFO(0x22b8, 0x6425, USB_CLASS_COMM,
 			USB_CDC_SUBCLASS_MDLM, USB_CDC_PROTO_NONE),
@@ -348,13 +358,6 @@ static const struct usb_device_id	products [] = {
 	.idProduct              = 0x0F02,	/* R-1000 */
 	ZAURUS_MASTER_INTERFACE,
 	.driver_info = OLYMPUS_MXL_INFO,
-},
-
-/* Logitech Harmony 900 - uses the pseudo-MDLM (BLAN) driver */
-{
-	USB_DEVICE_AND_INTERFACE_INFO(0x046d, 0xc11f, USB_CLASS_COMM,
-			USB_CDC_SUBCLASS_MDLM, USB_CDC_PROTO_NONE),
-	.driver_info = (unsigned long) &bogus_mdlm_info,
 },
 	{ },		// END
 };

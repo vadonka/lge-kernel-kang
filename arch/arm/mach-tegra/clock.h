@@ -20,7 +20,7 @@
 #ifndef __MACH_TEGRA_CLOCK_H
 #define __MACH_TEGRA_CLOCK_H
 
-#include <linux/clkdev.h>
+#include <asm/clkdev.h>
 
 #define DIV_BUS			(1 << 0)
 #define DIV_U71			(1 << 1)
@@ -37,6 +37,7 @@
 #define PERIPH_PMC_RESET	(1 << 12)
 #define PLL_ALT_MISC_REG	(1 << 13)
 #define ENABLE_ON_INIT		(1 << 28)
+#define PERIPH_ON_APB		(1 << 29)
 
 struct clk;
 

@@ -20,7 +20,7 @@
 #include "summary.h"
 #include "debug.h"
 
-#define DEFAULT_EMPTY_SCAN_SIZE 256
+#define DEFAULT_EMPTY_SCAN_SIZE 1024
 
 #define noisy_printk(noise, args...) do { \
 	if (*(noise)) { \
@@ -94,7 +94,7 @@ int jffs2_scan_medium(struct jffs2_sb_info *c)
 	uint32_t buf_size = 0;
 	struct jffs2_summary *s = NULL; /* summary info collected by the scan process */
 #ifndef __ECOS
-	size_t pointlen, try_size;
+	size_t pointlen;
 
 	if (c->mtd->point) {
 		ret = c->mtd->point(c->mtd, 0, c->mtd->size, &pointlen,
@@ -113,21 +113,18 @@ int jffs2_scan_medium(struct jffs2_sb_info *c)
 		/* For NAND it's quicker to read a whole eraseblock at a time,
 		   apparently */
 		if (jffs2_cleanmarker_oob(c))
-			try_size = c->sector_size;
+			buf_size = c->sector_size;
 		else
-			try_size = PAGE_SIZE;
+			buf_size = PAGE_SIZE;
 
-		D1(printk(KERN_DEBUG "Trying to allocate readbuf of %zu "
-			"bytes\n", try_size));
+		/* Respect kmalloc limitations */
+		if (buf_size > 128*1024)
+			buf_size = 128*1024;
 
-		flashbuf = mtd_kmalloc_up_to(c->mtd, &try_size);
+		D1(printk(KERN_DEBUG "Allocating readbuf of %d bytes\n", buf_size));
+		flashbuf = kmalloc(buf_size, GFP_KERNEL);
 		if (!flashbuf)
 			return -ENOMEM;
-
-		D1(printk(KERN_DEBUG "Allocated readbuf of %zu bytes\n",
-			try_size));
-
-		buf_size = (uint32_t)try_size;
 	}
 
 	if (jffs2_sum_active()) {
@@ -263,9 +260,7 @@ int jffs2_scan_medium(struct jffs2_sb_info *c)
 			ret = -EIO;
 			goto out;
 		}
-		spin_lock(&c->erase_completion_lock);
-		jffs2_garbage_collect_trigger(c);
-		spin_unlock(&c->erase_completion_lock);
+		jffs2_erase_pending_trigger(c);
 	}
 	ret = 0;
  out:
@@ -438,7 +433,7 @@ static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblo
 				  unsigned char *buf, uint32_t buf_size, struct jffs2_summary *s) {
 	struct jffs2_unknown_node *node;
 	struct jffs2_unknown_node crcnode;
-	uint32_t ofs, prevofs, max_ofs;
+	uint32_t ofs, prevofs;
 	uint32_t hdr_crc, buf_ofs, buf_len;
 	int err;
 	int noise = 0;
@@ -553,12 +548,12 @@ static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblo
 
 	/* We temporarily use 'ofs' as a pointer into the buffer/jeb */
 	ofs = 0;
-	max_ofs = EMPTY_SCAN_SIZE(c->sector_size);
-	/* Scan only EMPTY_SCAN_SIZE of 0xFF before declaring it's empty */
-	while(ofs < max_ofs && *(uint32_t *)(&buf[ofs]) == 0xFFFFFFFF)
+
+	/* Scan only 4KiB of 0xFF before declaring it's empty */
+	while(ofs < EMPTY_SCAN_SIZE(c->sector_size) && *(uint32_t *)(&buf[ofs]) == 0xFFFFFFFF)
 		ofs += 4;
 
-	if (ofs == max_ofs) {
+	if (ofs == EMPTY_SCAN_SIZE(c->sector_size)) {
 #ifdef CONFIG_JFFS2_FS_WRITEBUFFER
 		if (jffs2_cleanmarker_oob(c)) {
 			/* scan oob, take care of cleanmarker */

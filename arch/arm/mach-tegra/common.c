@@ -25,7 +25,6 @@
 #include <asm/hardware/cache-l2x0.h>
 #include <asm/cacheflush.h>
 #include <asm/outercache.h>
-#include <asm/setup.h>
 
 #include <mach/iomap.h>
 #include <mach/dma.h>
@@ -33,11 +32,11 @@
 
 #include "board.h"
 
-//20110131, , Stop i2c comm during reset [START]
+//20110131, byoungwoo.yoon@lge.com, Stop i2c comm during reset [START]
 #include "odm_kit/star/adaptations/pmu/max8907/max8907_supply_info_table.h"
 #include "nvrm_pmu.h"
 #include "nvodm_services.h"
-//20110131, , Stop i2c comm during reset [END]
+//20110131, byoungwoo.yoon@lge.com, Stop i2c comm during reset [END]
 
 #define APB_MISC_HIDREV		0x804
 #define FUSE_VISIBILITY_REG_OFFSET		0x48
@@ -45,9 +44,12 @@
 #define FUSE_SPARE_BIT_18_REG_OFFSET		0x248
 #define FUSE_SPARE_BIT_19_REG_OFFSET		0x24c
 
-//20110131, , Stop i2c comm during reset
+
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
+
+//20110131, byoungwoo.yoon@lge.com, Stop i2c comm during reset
 extern void NvRmPrivDvsStop(void);
-extern void write_cmd_reserved_buffer(unsigned char*, size_t);
 
 bool tegra_chip_compare(u32 chip, u32 major_rev, u32 minor_rev)
 {
@@ -92,8 +94,6 @@ int dma_needs_bounce(struct device *dev, dma_addr_t addr, size_t size)
 #endif
 
 #ifdef CONFIG_MACH_STAR
-void star_emergency_restart(const char *domain, int timeout)
-{
 
 #define TEGRA_TMR1_BASE			0x60005000
 #define TEGRA_CLK_RESET_BASE		0x60006000
@@ -111,6 +111,8 @@ void star_emergency_restart(const char *domain, int timeout)
 #define TIMER_PTV 0x00
 #define TIMER_EN	(1 << 31)
 #define TIMER_PERIODIC	(1 << 30)
+#define TIMER_PCR       0x4
+#define TIMER_PCR_INTR (1 << 30)
 
 #define WDT_EN		(1 << 5)
 #define WDT_SEL_TMR1	(0 << 4)
@@ -132,11 +134,28 @@ void star_emergency_restart(const char *domain, int timeout)
 #define tmr_readl(reg) \
 	__raw_readl((u32)tmr_reg_base + (reg))
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+int star_watchdog_enabled = 0;
+void star_watchdog_disable();
+void star_emergency_restart(const char *domain, int timeout)
+{
 
 	u32 ptv,src;
 	u32 val;
 	NvU8 rst_en_bit = WDT_SYS_RST;
+    unsigned char tmpbuf[32]= { NULL, };
 
+    if (star_watchdog_enabled)
+    {
+       printk("watchdog is already enabled. so disable first\n");
+	   star_watchdog_disable();
+    }
+
+	star_watchdog_enabled = 1;
+/*   
+	if (is_star_suspend_debug())
+	    star_set_verbose_loglevel();
+*/
     if (domain)
 		switch (domain[0])
 		{
@@ -180,41 +199,72 @@ void star_emergency_restart(const char *domain, int timeout)
 
 	val = WDT_EN | WDT_SEL_TMR1 | rst_en_bit;
 	rst_writel(val, WDT_SOURCE);
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+/*
+  * treat as panic 
+  *     : w = warm boot for bootloader
+  *     : a = panic for hidden reboot
+  */
+   tmpbuf[0] = 'w';   tmpbuf[1] = 'a'; 
+    write_cmd_reserved_buffer(tmpbuf, 3);
 
 }
 
 EXPORT_SYMBOL_GPL(star_emergency_restart);
-#endif
 
-extern int pwky_shutdown;
+
+void star_watchdog_kick()
+{
+    printk("star_watchdog_kick\n");
+    tmr_writel(TIMER_PCR_INTR,TIMER_PCR);
+}
+
+EXPORT_SYMBOL_GPL(star_watchdog_kick);
+
+void star_watchdog_disable()
+{
+  unsigned char tmpbuf[32];
+  printk("star_watchdog_disable \n");
+
+  rst_writel(0,WDT_SOURCE);
+  tmr_writel(0,TIMER_PTV);
+  star_watchdog_enabled = 0;
+/*  
+  if (is_star_suspend_debug())
+      star_restore_loglevel();
+*/
+
+ /* tag reset */
+  memset (tmpbuf, NULL, 3);
+  write_cmd_reserved_buffer(tmpbuf, 3);
+
+}
+
+EXPORT_SYMBOL_GPL(star_watchdog_disable);
+
+#endif
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
 static void tegra_machine_restart(char mode, const char *cmd)
 {
+   
 #if (CONFIG_MACH_STAR)
-	unsigned char tmpbuf[4] = { 0, };
-
-	//20110131, , Stop i2c comm during reset
+	//20110131, byoungwoo.yoon@lge.com, Stop i2c comm during reset
 	NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
 
 	star_emergency_restart("sys",20);
-	printk("tegra_machine_restart\n");
-
-#if 0
-	if (pwky_shutdown)
-            {
-            if ( (cmd)&&(*cmd == 'm'))
-            {
-                printk ("cmd = %s \n",cmd);
-            }
-            else
-            {
-             printk("tegra_machine_restart: skip during shutdown mode!\n");
-	     pwky_shutdown = 0;
-	     return;
-            }
-	}
-#endif
+	
 	NvRmPrivDvsStop();
 
+	if (h_pmu)
+	{ 
+		NvOdmServicesPmuSetVoltage( h_pmu, Max8907PmuSupply_EXT_DCDC_8_CPU, 1050, NULL );
+            printk("Set VDD_CPU as 1050mV\n");
+	}
+	else
+	{
+		printk("setting  VDD_CPU failed\n");
+	}
+	
 	if (h_pmu)
 	{ 
 		NvOdmServicesPmuSetVoltage( h_pmu, Max8907PmuSupply_Stop_i2c_Flag, 1UL, NULL );
@@ -223,10 +273,10 @@ static void tegra_machine_restart(char mode, const char *cmd)
 	{
 		printk("sensor pmu handle fail!\n");
 	}
-	//20110131, , Stop i2c comm during reset [START]
+	//20110131, byoungwoo.yoon@lge.com, Stop i2c comm during reset [START]
    
 	if ( cmd == NULL ) 
-	disable_nonboot_cpus();
+		disable_nonboot_cpus();
 	else if ( *cmd != 'p'  )
 		disable_nonboot_cpus();
 
@@ -235,52 +285,7 @@ static void tegra_machine_restart(char mode, const char *cmd)
 #endif
 		
 	flush_cache_all();
-	outer_disable();
-
-#if defined (CONFIG_MACH_STAR)
-	if (cmd) {
-		strncpy(tmpbuf, cmd, 1);
-	} else {
-		tmpbuf[0] = 'w';
-	}
-
-	switch (tmpbuf[0]) {
-	case 'w':
-		break;
-#if defined (CONFIG_STAR_HIDDEN_RESET)
-	case 'h':
-		break;
-#endif
-	case 'p':
-		break;
-	default:
-		tmpbuf[0] ='w';
-		break;
-	}
-	write_cmd_reserved_buffer(tmpbuf,1);
-
-	printk("%s: tmpbuf = %s\n",__func__, tmpbuf);
-
-	{
-		struct membank *bank = &meminfo.bank[0];
-		size_t base = bank->start + bank->size;
-		void *default_reserved_buffer;
-
-		/* Does it have different memeory layout ? */
-		if (base != STAR_DEFAULT_RAM_CONSOLE_BASE) {
-			/*
-			 * copy the warmboot information to the original
-			 * reserved_buffer area before shutdown
-			 */
-			base = STAR_DEFAULT_RAM_CONSOLE_BASE + STAR_RAM_CONSOLE_SIZE;
-			default_reserved_buffer = phys_to_virt(base);
-			pr_info("%s: copy warmboot info. to the original reserved buffer 0x%p\n",
-				__func__, default_reserved_buffer);
-			memcpy(default_reserved_buffer, tmpbuf, 1);
-		}
-	}
-#endif
-
+	outer_shutdown();
 	arm_machine_restart(mode, cmd);
 }
 
@@ -291,8 +296,7 @@ void __init tegra_init_cache(void)
 
 	writel(0x331, p + L2X0_TAG_LATENCY_CTRL);
 	writel(0x441, p + L2X0_DATA_LATENCY_CTRL);
-	writel(7, p + L2X0_PREFETCH_CTRL);
-	writel(2, p + L2X0_POWER_CTRL);
+	writel(7, p + L2X0_PREFETCH_OFFSET);
 
 	l2x0_init(p, 0x7C080001, 0x8200c3fe);
 #endif
@@ -318,10 +322,7 @@ void __init tegra_common_init(void)
 	tegra_init_clock();
 	tegra_init_cache();
 	tegra_init_fuse_cache();
+	tegra_dma_init();
 	tegra_mc_init();
-}
-
-void __init tegra_init_early(void)
-{
 	arm_pm_restart = tegra_machine_restart;
 }

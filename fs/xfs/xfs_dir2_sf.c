@@ -24,10 +24,12 @@
 #include "xfs_sb.h"
 #include "xfs_ag.h"
 #include "xfs_dir2.h"
+#include "xfs_dmapi.h"
 #include "xfs_mount.h"
 #include "xfs_da_btree.h"
 #include "xfs_bmap_btree.h"
 #include "xfs_dir2_sf.h"
+#include "xfs_attr_sf.h"
 #include "xfs_dinode.h"
 #include "xfs_inode.h"
 #include "xfs_inode_item.h"
@@ -35,7 +37,7 @@
 #include "xfs_dir2_data.h"
 #include "xfs_dir2_leaf.h"
 #include "xfs_dir2_block.h"
-#include "xfs_trace.h"
+#include "xfs_dir2_trace.h"
 
 /*
  * Prototypes for internal functions.
@@ -167,8 +169,7 @@ xfs_dir2_block_to_sf(
 	xfs_dir2_sf_t		*sfp;		/* shortform structure */
 	xfs_ino_t               temp;
 
-	trace_xfs_dir2_block_to_sf(args);
-
+	xfs_dir2_trace_args_sb("block_to_sf", args, size, bp);
 	dp = args->dp;
 	mp = dp->i_mount;
 
@@ -280,8 +281,7 @@ xfs_dir2_sf_addname(
 	xfs_dir2_sf_t		*sfp;		/* shortform structure */
 	xfs_dir2_sf_entry_t	*sfep = NULL;	/* shortform entry */
 
-	trace_xfs_dir2_sf_addname(args);
-
+	xfs_dir2_trace_args("sf_addname", args);
 	ASSERT(xfs_dir2_sf_lookup(args) == ENOENT);
 	dp = args->dp;
 	ASSERT(dp->i_df.if_flags & XFS_IFINLINE);
@@ -654,8 +654,7 @@ xfs_dir2_sf_create(
 	xfs_dir2_sf_t	*sfp;		/* shortform structure */
 	int		size;		/* directory size */
 
-	trace_xfs_dir2_sf_create(args);
-
+	xfs_dir2_trace_args_i("sf_create", args, pino);
 	dp = args->dp;
 
 	ASSERT(dp != NULL);
@@ -780,7 +779,7 @@ xfs_dir2_sf_getdents(
 		}
 
 		ino = xfs_dir2_sf_get_inumber(sfp, xfs_dir2_sf_inumberp(sfep));
-		if (filldir(dirent, (char *)sfep->name, sfep->namelen,
+		if (filldir(dirent, sfep->name, sfep->namelen,
 			    off & 0x7fffffff, ino, DT_UNKNOWN)) {
 			*offset = off & 0x7fffffff;
 			return 0;
@@ -809,8 +808,7 @@ xfs_dir2_sf_lookup(
 	enum xfs_dacmp		cmp;		/* comparison result */
 	xfs_dir2_sf_entry_t	*ci_sfep;	/* case-insens. entry */
 
-	trace_xfs_dir2_sf_lookup(args);
-
+	xfs_dir2_trace_args("sf_lookup", args);
 	xfs_dir2_sf_check(args);
 	dp = args->dp;
 
@@ -893,8 +891,7 @@ xfs_dir2_sf_removename(
 	xfs_dir2_sf_entry_t	*sfep;		/* shortform directory entry */
 	xfs_dir2_sf_t		*sfp;		/* shortform structure */
 
-	trace_xfs_dir2_sf_removename(args);
-
+	xfs_dir2_trace_args("sf_removename", args);
 	dp = args->dp;
 
 	ASSERT(dp->i_df.if_flags & XFS_IFINLINE);
@@ -985,8 +982,7 @@ xfs_dir2_sf_replace(
 	xfs_dir2_sf_entry_t	*sfep;		/* shortform directory entry */
 	xfs_dir2_sf_t		*sfp;		/* shortform structure */
 
-	trace_xfs_dir2_sf_replace(args);
-
+	xfs_dir2_trace_args("sf_replace", args);
 	dp = args->dp;
 
 	ASSERT(dp->i_df.if_flags & XFS_IFINLINE);
@@ -1129,8 +1125,7 @@ xfs_dir2_sf_toino4(
 	xfs_dir2_sf_entry_t	*sfep;		/* new sf entry */
 	xfs_dir2_sf_t		*sfp;		/* new sf directory */
 
-	trace_xfs_dir2_sf_toino4(args);
-
+	xfs_dir2_trace_args("sf_toino4", args);
 	dp = args->dp;
 
 	/*
@@ -1207,8 +1202,7 @@ xfs_dir2_sf_toino8(
 	xfs_dir2_sf_entry_t	*sfep;		/* new sf entry */
 	xfs_dir2_sf_t		*sfp;		/* new sf directory */
 
-	trace_xfs_dir2_sf_toino8(args);
-
+	xfs_dir2_trace_args("sf_toino8", args);
 	dp = args->dp;
 
 	/*

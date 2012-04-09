@@ -179,7 +179,7 @@ NOTE: A value of 0 equals 256 bytes of data.
 - Time Base = Timestamp of first sample in frame
 The "Time Base" is used to rearange packets and to detect packet loss.
 The 16 bits are sent in network order (MSB first) and count 1/8000 th of a
-second. This causes a wrap around each 8,192 seconds. There is no requirement
+second. This causes a wrap arround each 8,192 seconds. There is no requirement
 for the initial "Time Base", but 0 should be used for the first packet.
 In case of HDLC data, this timestamp counts the packet or byte number.
 
@@ -205,7 +205,7 @@ On Demand:
 
 If the ondemand parameter is given, the remote IP is set to 0 on timeout.
 This will stop keepalive traffic to remote. If the remote is online again,
-traffic will continue to the remote address. This is useful for road warriors.
+traffic will continue to the remote address. This is usefull for road warriors.
 This feature only works with ID set, otherwhise it is highly unsecure.
 
 
@@ -233,7 +233,6 @@ socket process and create a new one.
 #include <linux/inet.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
-#include <linux/slab.h>
 #include <net/sock.h>
 #include "core.h"
 #include "l1oip.h"
@@ -478,7 +477,7 @@ l1oip_socket_parse(struct l1oip *hc, struct sockaddr_in *sin, u8 *buf, int len)
 		printk(KERN_DEBUG "%s: received frame, parsing... (%d)\n",
 			__func__, len);
 
-	/* check length */
+	/* check lenght */
 	if (len < 1+1+2) {
 		printk(KERN_WARNING "%s: packet error - length %d below "
 			"4 bytes\n", __func__, len);
@@ -590,7 +589,7 @@ multiframe:
 			return;
 		}
 	} else
-		mlen = len-2; /* single frame, subtract timebase */
+		mlen = len-2; /* single frame, substract timebase */
 
 	if (len < 2) {
 		printk(KERN_WARNING "%s: packet error - packet too short, time "
@@ -662,7 +661,7 @@ l1oip_socket_thread(void *data)
 	size_t recvbuf_size = 1500;
 	int recvlen;
 	struct socket *socket = NULL;
-	DECLARE_COMPLETION_ONSTACK(wait);
+	DECLARE_COMPLETION(wait);
 
 	/* allocate buffer memory */
 	recvbuf = kmalloc(recvbuf_size, GFP_KERNEL);
@@ -972,7 +971,7 @@ channel_dctrl(struct dchannel *dch, struct mISDN_ctrl_req *cq)
 		if (debug & DEBUG_L1OIP_SOCKET)
 			printk(KERN_DEBUG "%s: got new ip address from user "
 				"space.\n", __func__);
-		l1oip_socket_open(hc);
+			l1oip_socket_open(hc);
 		break;
 	case MISDN_CTRL_UNSETPEER:
 		if (debug & DEBUG_L1OIP_SOCKET)
@@ -1269,8 +1268,6 @@ release_card(struct l1oip *hc)
 	if (timer_pending(&hc->timeout_tl))
 		del_timer(&hc->timeout_tl);
 
-	cancel_work_sync(&hc->workq);
-
 	if (hc->socket_thread)
 		l1oip_socket_close(hc);
 
@@ -1512,7 +1509,7 @@ l1oip_init(void)
 			printk(KERN_DEBUG "%s: interface %d is %s with %s.\n",
 			    __func__, l1oip_cnt, pri ? "PRI" : "BRI",
 			    bundle ? "bundled IP packet for all B-channels" :
-			    "separate IP packets for every B-channel");
+			    "seperate IP packets for every B-channel");
 
 		hc = kzalloc(sizeof(struct l1oip), GFP_ATOMIC);
 		if (!hc) {

@@ -10,8 +10,9 @@
 #define _ASM_ARCH_PCMCIA
 
 /* include the world */
-#include <linux/clk.h>
 #include <linux/cpufreq.h>
+#include <pcmcia/cs_types.h>
+#include <pcmcia/cs.h>
 #include <pcmcia/ss.h>
 #include <pcmcia/cistpl.h>
 
@@ -29,13 +30,14 @@ struct soc_pcmcia_socket {
 	/*
 	 * Info from low level handler
 	 */
+	struct device		*dev;
 	unsigned int		nr;
-	struct clk		*clk;
+	unsigned int		irq;
 
 	/*
 	 * Core PCMCIA state
 	 */
-	const struct pcmcia_low_level *ops;
+	struct pcmcia_low_level *ops;
 
 	unsigned int		status;
 	socket_state_t		cs_state;
@@ -58,7 +60,6 @@ struct soc_pcmcia_socket {
 
 struct skt_dev_info {
 	int nskt;
-	struct clk *clk;
 	struct soc_pcmcia_socket skt[0];
 };
 
@@ -134,8 +135,10 @@ extern void soc_pcmcia_enable_irqs(struct soc_pcmcia_socket *skt, struct pcmcia_
 extern void soc_common_pcmcia_get_timing(struct soc_pcmcia_socket *, struct soc_pcmcia_timing *);
 
 
-void soc_pcmcia_remove_one(struct soc_pcmcia_socket *skt);
-int soc_pcmcia_add_one(struct soc_pcmcia_socket *skt);
+extern struct list_head soc_pcmcia_sockets;
+
+extern int soc_common_drv_pcmcia_probe(struct device *dev, struct pcmcia_low_level *ops, struct skt_dev_info *sinfo);
+extern int soc_common_drv_pcmcia_remove(struct device *dev);
 
 
 #ifdef CONFIG_PCMCIA_DEBUG

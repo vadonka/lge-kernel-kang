@@ -51,11 +51,15 @@ ENTRY(cpu_mohawk_proc_init)
  * cpu_mohawk_proc_fin()
  */
 ENTRY(cpu_mohawk_proc_fin)
+	stmfd	sp!, {lr}
+	mov	ip, #PSR_F_BIT | PSR_I_BIT | SVC_MODE
+	msr	cpsr_c, ip
+	bl	mohawk_flush_kern_cache_all
 	mrc	p15, 0, r0, c1, c0, 0		@ ctrl register
 	bic	r0, r0, #0x1800			@ ...iz...........
 	bic	r0, r0, #0x0006			@ .............ca.
 	mcr	p15, 0, r0, c1, c0, 0		@ disable caches
-	mov	pc, lr
+	ldmfd	sp!, {pc}
 
 /*
  * cpu_mohawk_reset(loc)
@@ -340,7 +344,7 @@ ENTRY(cpu_mohawk_set_pte_ext)
 	mcr	p15, 0, r0, c7, c10, 4		@ drain WB
 	mov	pc, lr
 
-	__CPUINIT
+	__INIT
 
 	.type	__mohawk_setup, #function
 __mohawk_setup:
@@ -390,9 +394,6 @@ mohawk_processor_functions:
 	.word	cpu_mohawk_dcache_clean_area
 	.word	cpu_mohawk_switch_mm
 	.word	cpu_mohawk_set_pte_ext
-	.word	0
-	.word	0
-	.word	0
 	.size	mohawk_processor_functions, . - mohawk_processor_functions
 
 	.section ".rodata"

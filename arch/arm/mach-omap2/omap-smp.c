@@ -17,28 +17,44 @@
  */
 #include <linux/init.h>
 #include <linux/device.h>
+#include <linux/jiffies.h>
 #include <linux/smp.h>
 #include <linux/io.h>
 
-#include <asm/cacheflush.h>
-#include <asm/hardware/gic.h>
+#include <asm/localtimer.h>
 #include <asm/smp_scu.h>
 #include <mach/hardware.h>
-#include <mach/omap4-common.h>
+
+/* Registers used for communicating startup information */
+#define OMAP4_AUXCOREBOOT_REG0		(OMAP44XX_VA_WKUPGEN_BASE + 0x800)
+#define OMAP4_AUXCOREBOOT_REG1		(OMAP44XX_VA_WKUPGEN_BASE + 0x804)
 
 /* SCU base address */
-static void __iomem *scu_base;
+static void __iomem *scu_base = OMAP44XX_VA_SCU_BASE;
+
+/*
+ * Use SCU config register to count number of cores
+ */
+static inline unsigned int get_core_count(void)
+{
+	if (scu_base)
+		return scu_get_core_count(scu_base);
+	return 1;
+}
 
 static DEFINE_SPINLOCK(boot_lock);
 
 void __cpuinit platform_secondary_init(unsigned int cpu)
 {
+	trace_hardirqs_off();
+
 	/*
 	 * If any interrupts are already enabled for the primary
 	 * core (e.g. timer irq), then they will not have been enabled
 	 * for us: do so
 	 */
-	gic_secondary_init(0);
+
+	gic_cpu_init(0, OMAP2_IO_ADDRESS(OMAP44XX_GIC_CPU_BASE));
 
 	/*
 	 * Synchronise with the boot thread.
@@ -49,6 +65,8 @@ void __cpuinit platform_secondary_init(unsigned int cpu)
 
 int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 {
+	unsigned long timeout;
+
 	/*
 	 * Set synchronisation state between this boot processor
 	 * and the secondary one
@@ -56,15 +74,17 @@ int __cpuinit boot_secondary(unsigned int cpu, struct task_struct *idle)
 	spin_lock(&boot_lock);
 
 	/*
-	 * Update the AuxCoreBoot0 with boot state for secondary core.
+	 * Update the AuxCoreBoot1 with boot state for secondary core.
 	 * omap_secondary_startup() routine will hold the secondary core till
 	 * the AuxCoreBoot1 register is updated with cpu state
 	 * A barrier is added to ensure that write buffer is drained
 	 */
-	omap_modify_auxcoreboot0(0x200, 0xfffffdff);
-	flush_cache_all();
+	__raw_writel(cpu, OMAP4_AUXCOREBOOT_REG1);
 	smp_wmb();
-	gic_raise_softirq(cpumask_of(cpu), 1);
+
+	timeout = jiffies + (1 * HZ);
+	while (time_before(jiffies, timeout))
+		;
 
 	/*
 	 * Now the secondary core is starting up let it run its
@@ -79,18 +99,18 @@ static void __init wakeup_secondary(void)
 {
 	/*
 	 * Write the address of secondary startup routine into the
-	 * AuxCoreBoot1 where ROM code will jump and start executing
+	 * AuxCoreBoot0 where ROM code will jump and start executing
 	 * on secondary core once out of WFE
 	 * A barrier is added to ensure that write buffer is drained
 	 */
-	omap_auxcoreboot_addr(virt_to_phys(omap_secondary_startup));
+	__raw_writel(virt_to_phys(omap_secondary_startup),	   \
+					OMAP4_AUXCOREBOOT_REG0);
 	smp_wmb();
 
 	/*
 	 * Send a 'sev' to wake the secondary core from WFE.
-	 * Drain the outstanding writes to memory
 	 */
-	dsb_sev();
+	set_event();
 	mb();
 }
 
@@ -100,15 +120,25 @@ static void __init wakeup_secondary(void)
  */
 void __init smp_init_cpus(void)
 {
-	unsigned int i, ncores;
+	unsigned int i, ncores = get_core_count();
 
-	/* Never released */
-	scu_base = ioremap(OMAP44XX_SCU_BASE, SZ_256);
-	BUG_ON(!scu_base);
+	for (i = 0; i < ncores; i++)
+		set_cpu_possible(i, true);
+}
 
-	ncores = scu_get_core_count(scu_base);
+void __init smp_prepare_cpus(unsigned int max_cpus)
+{
+	unsigned int ncores = get_core_count();
+	unsigned int cpu = smp_processor_id();
+	int i;
 
 	/* sanity check */
+	if (ncores == 0) {
+		printk(KERN_ERR
+		       "OMAP4: strange core count of 0? Default to 1\n");
+		ncores = 1;
+	}
+
 	if (ncores > NR_CPUS) {
 		printk(KERN_WARNING
 		       "OMAP4: no. of cores (%d) greater than configured "
@@ -116,16 +146,13 @@ void __init smp_init_cpus(void)
 		       ncores, NR_CPUS);
 		ncores = NR_CPUS;
 	}
+	smp_store_cpu_info(cpu);
 
-	for (i = 0; i < ncores; i++)
-		set_cpu_possible(i, true);
-
-	set_smp_cross_call(gic_raise_softirq);
-}
-
-void __init platform_smp_prepare_cpus(unsigned int max_cpus)
-{
-	int i;
+	/*
+	 * are we trying to boot more cores than exist?
+	 */
+	if (max_cpus > ncores)
+		max_cpus = ncores;
 
 	/*
 	 * Initialise the present map, which describes the set of CPUs
@@ -134,10 +161,18 @@ void __init platform_smp_prepare_cpus(unsigned int max_cpus)
 	for (i = 0; i < max_cpus; i++)
 		set_cpu_present(i, true);
 
-	/*
-	 * Initialise the SCU and wake up the secondary core using
-	 * wakeup_secondary().
-	 */
-	scu_enable(scu_base);
-	wakeup_secondary();
+	if (max_cpus > 1) {
+		/*
+		 * Enable the local timer or broadcast device for the
+		 * boot CPU, but only if we have more than one CPU.
+		 */
+		percpu_timer_setup();
+
+		/*
+		 * Initialise the SCU and wake up the secondary core using
+		 * wakeup_secondary().
+		 */
+		scu_enable(scu_base);
+		wakeup_secondary();
+	}
 }

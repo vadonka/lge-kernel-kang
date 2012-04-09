@@ -22,7 +22,6 @@
 
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
-#include <linux/slab.h>
 
 #include "atl1e.h"
 
@@ -51,13 +50,13 @@ static int atl1e_get_settings(struct net_device *netdev,
 	ecmd->transceiver = XCVR_INTERNAL;
 
 	if (adapter->link_speed != SPEED_0) {
-		ethtool_cmd_speed_set(ecmd, adapter->link_speed);
+		ecmd->speed = adapter->link_speed;
 		if (adapter->link_duplex == FULL_DUPLEX)
 			ecmd->duplex = DUPLEX_FULL;
 		else
 			ecmd->duplex = DUPLEX_HALF;
 	} else {
-		ethtool_cmd_speed_set(ecmd, -1);
+		ecmd->speed = -1;
 		ecmd->duplex = -1;
 	}
 
@@ -95,18 +94,18 @@ static int atl1e_set_settings(struct net_device *netdev,
 		ecmd->advertising = hw->autoneg_advertised |
 				    ADVERTISED_TP | ADVERTISED_Autoneg;
 
-		adv4 = hw->mii_autoneg_adv_reg & ~ADVERTISE_ALL;
+		adv4 = hw->mii_autoneg_adv_reg & ~MII_AR_SPEED_MASK;
 		adv9 = hw->mii_1000t_ctrl_reg & ~MII_AT001_CR_1000T_SPEED_MASK;
 		if (hw->autoneg_advertised & ADVERTISE_10_HALF)
-			adv4 |= ADVERTISE_10HALF;
+			adv4 |= MII_AR_10T_HD_CAPS;
 		if (hw->autoneg_advertised & ADVERTISE_10_FULL)
-			adv4 |= ADVERTISE_10FULL;
+			adv4 |= MII_AR_10T_FD_CAPS;
 		if (hw->autoneg_advertised & ADVERTISE_100_HALF)
-			adv4 |= ADVERTISE_100HALF;
+			adv4 |= MII_AR_100TX_HD_CAPS;
 		if (hw->autoneg_advertised & ADVERTISE_100_FULL)
-			adv4 |= ADVERTISE_100FULL;
+			adv4 |= MII_AR_100TX_FD_CAPS;
 		if (hw->autoneg_advertised & ADVERTISE_1000_FULL)
-			adv9 |= ADVERTISE_1000FULL;
+			adv9 |= MII_AT001_CR_1000T_FD_CAPS;
 
 		if (adv4 != hw->mii_autoneg_adv_reg ||
 				adv9 != hw->mii_1000t_ctrl_reg) {
@@ -132,6 +131,11 @@ static int atl1e_set_settings(struct net_device *netdev,
 	return 0;
 }
 
+static u32 atl1e_get_tx_csum(struct net_device *netdev)
+{
+	return (netdev->features & NETIF_F_HW_CSUM) != 0;
+}
+
 static u32 atl1e_get_msglevel(struct net_device *netdev)
 {
 #ifdef DBG
@@ -139,6 +143,10 @@ static u32 atl1e_get_msglevel(struct net_device *netdev)
 #else
 	return 0;
 #endif
+}
+
+static void atl1e_set_msglevel(struct net_device *netdev, u32 data)
+{
 }
 
 static int atl1e_get_regs_len(struct net_device *netdev)
@@ -338,6 +346,8 @@ static void atl1e_get_wol(struct net_device *netdev,
 		wol->wolopts |= WAKE_MAGIC;
 	if (adapter->wol & AT_WUFC_LNKC)
 		wol->wolopts |= WAKE_PHY;
+
+	return;
 }
 
 static int atl1e_set_wol(struct net_device *netdev, struct ethtool_wolinfo *wol)
@@ -377,11 +387,18 @@ static const struct ethtool_ops atl1e_ethtool_ops = {
 	.get_wol                = atl1e_get_wol,
 	.set_wol                = atl1e_set_wol,
 	.get_msglevel           = atl1e_get_msglevel,
+	.set_msglevel           = atl1e_set_msglevel,
 	.nway_reset             = atl1e_nway_reset,
 	.get_link               = ethtool_op_get_link,
 	.get_eeprom_len         = atl1e_get_eeprom_len,
 	.get_eeprom             = atl1e_get_eeprom,
 	.set_eeprom             = atl1e_set_eeprom,
+	.get_tx_csum            = atl1e_get_tx_csum,
+	.get_sg                 = ethtool_op_get_sg,
+	.set_sg                 = ethtool_op_set_sg,
+#ifdef NETIF_F_TSO
+	.get_tso                = ethtool_op_get_tso,
+#endif
 };
 
 void atl1e_set_ethtool_ops(struct net_device *netdev)

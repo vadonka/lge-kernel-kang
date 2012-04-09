@@ -21,6 +21,8 @@
  * Please address comments and feedback to Linas Vepstas <linas@austin.ibm.com>
  */
 
+#undef DEBUG
+
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/list.h>
@@ -65,7 +67,7 @@
  *  with EEH.
  *
  *  Ideally, a PCI device driver, when suspecting that an isolation
- *  event has occurred (e.g. by reading 0xff's), will then ask EEH
+ *  event has occured (e.g. by reading 0xff's), will then ask EEH
  *  whether this is the case, and then take appropriate steps to
  *  reset the PCI slot, the PCI device, and then resume operations.
  *  However, until that day,  the checking is done here, with the
@@ -93,13 +95,12 @@ static int ibm_slot_error_detail;
 static int ibm_get_config_addr_info;
 static int ibm_get_config_addr_info2;
 static int ibm_configure_bridge;
-static int ibm_configure_pe;
 
 int eeh_subsystem_enabled;
 EXPORT_SYMBOL(eeh_subsystem_enabled);
 
 /* Lock to avoid races due to multiple reports of an error */
-static DEFINE_RAW_SPINLOCK(confirm_error_lock);
+static DEFINE_SPINLOCK(confirm_error_lock);
 
 /* Buffer for reporting slot-error-detail rtas calls. Its here
  * in BSS, and not dynamically alloced, so that it ends up in
@@ -262,8 +263,6 @@ void eeh_slot_error_detail(struct pci_dn *pdn, int severity)
 	pci_regs_buf[0] = 0;
 
 	rtas_pci_enable(pdn, EEH_THAW_MMIO);
-	rtas_configure_bridge(pdn);
-	eeh_restore_bars(pdn);
 	loglen = gather_pci_data(pdn, pci_regs_buf, EEH_PCI_REGS_LOG_LEN);
 
 	rtas_slot_error_detail(pdn, severity, pci_regs_buf, loglen);
@@ -437,7 +436,7 @@ static void __eeh_clear_slot(struct device_node *parent, int mode_flag)
 void eeh_clear_slot (struct device_node *dn, int mode_flag)
 {
 	unsigned long flags;
-	raw_spin_lock_irqsave(&confirm_error_lock, flags);
+	spin_lock_irqsave(&confirm_error_lock, flags);
 	
 	dn = find_device_pe (dn);
 	
@@ -448,40 +447,7 @@ void eeh_clear_slot (struct device_node *dn, int mode_flag)
 	PCI_DN(dn)->eeh_mode &= ~mode_flag;
 	PCI_DN(dn)->eeh_check_count = 0;
 	__eeh_clear_slot(dn, mode_flag);
-	raw_spin_unlock_irqrestore(&confirm_error_lock, flags);
-}
-
-void __eeh_set_pe_freset(struct device_node *parent, unsigned int *freset)
-{
-	struct device_node *dn;
-
-	for_each_child_of_node(parent, dn) {
-		if (PCI_DN(dn)) {
-
-			struct pci_dev *dev = PCI_DN(dn)->pcidev;
-
-			if (dev && dev->driver)
-				*freset |= dev->needs_freset;
-
-			__eeh_set_pe_freset(dn, freset);
-		}
-	}
-}
-
-void eeh_set_pe_freset(struct device_node *dn, unsigned int *freset)
-{
-	struct pci_dev *dev;
-	dn = find_device_pe(dn);
-
-	/* Back up one, since config addrs might be shared */
-	if (!pcibios_find_pci_bus(dn) && PCI_DN(dn->parent))
-		dn = dn->parent;
-
-	dev = PCI_DN(dn)->pcidev;
-	if (dev)
-		*freset |= dev->needs_freset;
-
-	__eeh_set_pe_freset(dn, freset);
+	spin_unlock_irqrestore(&confirm_error_lock, flags);
 }
 
 /**
@@ -525,7 +491,7 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 	    pdn->eeh_mode & EEH_MODE_NOCHECK) {
 		ignored_check++;
 		pr_debug("EEH: Ignored check (%x) for %s %s\n",
-			 pdn->eeh_mode, eeh_pci_name(dev), dn->full_name);
+			 pdn->eeh_mode, pci_name (dev), dn->full_name);
 		return 0;
 	}
 
@@ -540,7 +506,7 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 	 * in one slot might report errors simultaneously, and we
 	 * only want one error recovery routine running.
 	 */
-	raw_spin_lock_irqsave(&confirm_error_lock, flags);
+	spin_lock_irqsave(&confirm_error_lock, flags);
 	rc = 1;
 	if (pdn->eeh_mode & EEH_MODE_ISOLATED) {
 		pdn->eeh_check_count ++;
@@ -549,7 +515,7 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 			printk (KERN_ERR "EEH: %d reads ignored for recovering device at "
 				"location=%s driver=%s pci addr=%s\n",
 				pdn->eeh_check_count, location,
-				dev->driver->name, eeh_pci_name(dev));
+				dev->driver->name, pci_name(dev));
 			printk (KERN_ERR "EEH: Might be infinite loop in %s driver\n",
 				dev->driver->name);
 			dump_stack();
@@ -609,7 +575,7 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 	 * with other functions on this device, and functions under
 	 * bridges. */
 	eeh_mark_slot (dn, EEH_MODE_ISOLATED);
-	raw_spin_unlock_irqrestore(&confirm_error_lock, flags);
+	spin_unlock_irqrestore(&confirm_error_lock, flags);
 
 	eeh_send_failure_event (dn, dev);
 
@@ -620,7 +586,7 @@ int eeh_dn_check_failure(struct device_node *dn, struct pci_dev *dev)
 	return 1;
 
 dn_unlock:
-	raw_spin_unlock_irqrestore(&confirm_error_lock, flags);
+	spin_unlock_irqrestore(&confirm_error_lock, flags);
 	return rc;
 }
 
@@ -728,24 +694,15 @@ rtas_pci_slot_reset(struct pci_dn *pdn, int state)
 	if (pdn->eeh_pe_config_addr)
 		config_addr = pdn->eeh_pe_config_addr;
 
-	rc = rtas_call(ibm_set_slot_reset, 4, 1, NULL,
+	rc = rtas_call(ibm_set_slot_reset,4,1, NULL,
 	               config_addr,
 	               BUID_HI(pdn->phb->buid),
 	               BUID_LO(pdn->phb->buid),
 	               state);
-
-	/* Fundamental-reset not supported on this PE, try hot-reset */
-	if (rc == -8 && state == 3) {
-		rc = rtas_call(ibm_set_slot_reset, 4, 1, NULL,
-			       config_addr,
-			       BUID_HI(pdn->phb->buid),
-			       BUID_LO(pdn->phb->buid), 1);
-		if (rc)
-			printk(KERN_WARNING
-				"EEH: Unable to reset the failed slot,"
-				" #RST=%d dn=%s\n",
-				rc, pdn->node->full_name);
-	}
+	if (rc)
+		printk (KERN_WARNING "EEH: Unable to reset the failed slot,"
+		        " (%d) #RST=%d dn=%s\n",
+		        rc, state, pdn->node->full_name);
 }
 
 /**
@@ -781,21 +738,18 @@ int pcibios_set_pcie_reset_state(struct pci_dev *dev, enum pcie_reset_state stat
 /**
  * rtas_set_slot_reset -- assert the pci #RST line for 1/4 second
  * @pdn: pci device node to be reset.
+ *
+ *  Return 0 if success, else a non-zero value.
  */
 
 static void __rtas_set_slot_reset(struct pci_dn *pdn)
 {
-	unsigned int freset = 0;
+	struct pci_dev *dev = pdn->pcidev;
 
-	/* Determine type of EEH reset required for
-	 * Partitionable Endpoint, a hot-reset (1)
-	 * or a fundamental reset (3).
-	 * A fundamental reset required by any device under
-	 * Partitionable Endpoint trumps hot-reset.
-  	 */
-	eeh_set_pe_freset(pdn->node, &freset);
-
-	if (freset)
+	/* Determine type of EEH reset required by device,
+	 * default hot reset or fundamental reset
+	 */
+	if (dev->needs_freset)
 		rtas_pci_slot_reset(pdn, 3);
 	else
 		rtas_pci_slot_reset(pdn, 1);
@@ -924,7 +878,7 @@ void eeh_restore_bars(struct pci_dn *pdn)
  *
  * Save the values of the device bars. Unlike the restore
  * routine, this routine is *not* recursive. This is because
- * PCI devices are added individually; but, for the restore,
+ * PCI devices are added individuallly; but, for the restore,
  * an entire slot is reset at a time.
  */
 static void eeh_save_bars(struct pci_dn *pdn)
@@ -943,20 +897,13 @@ rtas_configure_bridge(struct pci_dn *pdn)
 {
 	int config_addr;
 	int rc;
-	int token;
 
 	/* Use PE configuration address, if present */
 	config_addr = pdn->eeh_config_addr;
 	if (pdn->eeh_pe_config_addr)
 		config_addr = pdn->eeh_pe_config_addr;
 
-	/* Use new configure-pe function, if supported */
-	if (ibm_configure_pe != RTAS_UNKNOWN_SERVICE)
-		token = ibm_configure_pe;
-	else
-		token = ibm_configure_bridge;
-
-	rc = rtas_call(token, 3, 1, NULL,
+	rc = rtas_call(ibm_configure_bridge,3,1, NULL,
 	               config_addr,
 	               BUID_HI(pdn->phb->buid),
 	               BUID_LO(pdn->phb->buid));
@@ -1117,7 +1064,7 @@ void __init eeh_init(void)
 	struct device_node *phb, *np;
 	struct eeh_early_enable_info info;
 
-	raw_spin_lock_init(&confirm_error_lock);
+	spin_lock_init(&confirm_error_lock);
 	spin_lock_init(&slot_errbuf_lock);
 
 	np = of_find_node_by_path("/rtas");
@@ -1132,7 +1079,6 @@ void __init eeh_init(void)
 	ibm_get_config_addr_info = rtas_token("ibm,get-config-addr-info");
 	ibm_get_config_addr_info2 = rtas_token("ibm,get-config-addr-info2");
 	ibm_configure_bridge = rtas_token ("ibm,configure-bridge");
-	ibm_configure_pe = rtas_token("ibm,configure-pe");
 
 	if (ibm_set_eeh_option == RTAS_UNKNOWN_SERVICE)
 		return;
@@ -1338,7 +1284,7 @@ static const struct file_operations proc_eeh_operations = {
 static int __init eeh_init_proc(void)
 {
 	if (machine_is(pseries))
-		proc_create("powerpc/eeh", 0, NULL, &proc_eeh_operations);
+		proc_create("ppc64/eeh", 0, NULL, &proc_eeh_operations);
 	return 0;
 }
 __initcall(eeh_init_proc);

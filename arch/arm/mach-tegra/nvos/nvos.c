@@ -53,7 +53,6 @@
 #include <linux/vmalloc.h>
 #include <linux/pagemap.h>
 #include <linux/dma-mapping.h>
-#include <linux/slab.h>
 #include <asm/atomic.h>
 #include <asm/io.h>
 #include <asm/page.h>
@@ -64,7 +63,6 @@
 #include <linux/freezer.h>
 #include <linux/rbtree.h>
 #include <linux/rwsem.h>
-#include <linux/kmemleak.h>
 
 #define ATAG_NVIDIA_TEGRA 0x41000801
 struct tag_nvidia_tegra {

@@ -27,18 +27,12 @@
 #include <linux/platform_device.h>
 #include <linux/suspend.h>
 #include <linux/percpu.h>
-#include <linux/kthread.h>
-#include <linux/delay.h>
-#include <linux/io.h>
 //+++ INKSPOT: 22/june/2011 - to check NVRM response time
 #include <linux/time.h> 
 //--- INKSPOT: 22/june/2011
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
-
-#include <mach/io.h>
-
 #include "nvcommon.h"
 #include "nvassert.h"
 #include "nvos.h"
@@ -72,14 +66,13 @@ static long nvrm_unlocked_ioctl(struct file *file,
     unsigned int cmd, unsigned long arg);
 static int nvrm_mmap(struct file *file, struct vm_area_struct *vma);
 extern void reset_cpu(unsigned int cpu, unsigned int reset);
-extern void NvRmPrivLockSharedPll(void);
-extern void NvRmPrivUnlockSharedPll(void);
 extern void NvRmPrivDvsStop(void);
 extern void NvRmPrivDvsRun(void);
 
 //Variables for AVP suspend operation
 extern NvRmDeviceHandle s_hRmGlobal;
-
+extern NvRmPrivLockSharedPll();
+extern NvRmPrivUnlockSharedPll();
 static NvRtHandle s_RtHandle = NULL;
 
 #define DEVICE_NAME "nvrm"
@@ -578,7 +571,7 @@ nvrm_notifier_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute nvrm_notifier_attribute =
-       __ATTR(notifier, 0666, nvrm_notifier_show, nvrm_notifier_store);
+       __ATTR(notifier, 0664, nvrm_notifier_show, nvrm_notifier_store);
 
 //
 // PM notifier
@@ -587,7 +580,7 @@ static struct kobj_attribute nvrm_notifier_attribute =
 static void notify_daemon(const char* notice)
 {
     //+++ INKSPOT; 23/june/2011, Change from NV #842311
-    long timeout = HZ * 150; 
+    long timeout = HZ * 150; /*30;*/ //form 30 to 150
     struct timeval t;
     struct tm result;
     //--- INKSPOT
@@ -636,9 +629,9 @@ int tegra_pm_notifier(struct notifier_block *nb,
     // Notify the event to nvrm_daemon.
     switch (event) {
     case PM_SUSPEND_PREPARE:
-	NvRmPrivLockSharedPll();
-	NvRmPrivDvsStop();
-	NvRmPrivUnlockSharedPll();
+         NvRmPrivLockSharedPll();
+         NvRmPrivDvsStop();
+         NvRmPrivUnlockSharedPll();
 #ifndef CONFIG_HAS_EARLYSUSPEND
         notify_daemon(STRING_PM_DISPLAY_OFF);
 #endif
@@ -735,7 +728,7 @@ nvrm_core_lock_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute nvrm_core_lock_attribute =
-	__ATTR(core_lock, 0666, nvrm_core_lock_show, nvrm_core_lock_store);
+	__ATTR(core_lock, 0664, nvrm_core_lock_show, nvrm_core_lock_store);
 
 #endif
 

@@ -8,6 +8,7 @@
 #include <linux/ioport.h>
 #include <linux/serial_core.h>
 #include <linux/platform_device.h>
+#include <linux/slab.h>
 
 #include <mach/hardware.h>
 #include <asm/mach-types.h>
@@ -35,7 +36,7 @@ neponset_irq_handler(unsigned int irq, struct irq_desc *desc)
 		/*
 		 * Acknowledge the parent IRQ.
 		 */
-		desc->irq_data.chip->irq_ack(&desc->irq_data);
+		desc->chip->ack(irq);
 
 		/*
 		 * Read the interrupt reason register.  Let's have all
@@ -53,7 +54,7 @@ neponset_irq_handler(unsigned int irq, struct irq_desc *desc)
 		 * recheck the register for any pending IRQs.
 		 */
 		if (irr & (IRR_ETHERNET | IRR_USAR)) {
-			desc->irq_data.chip->irq_mask(&desc->irq_data);
+			desc->chip->mask(irq);
 
 			/*
 			 * Ack the interrupt now to prevent re-entering
@@ -61,7 +62,7 @@ neponset_irq_handler(unsigned int irq, struct irq_desc *desc)
 			 * since we'll check the IRR register prior to
 			 * leaving.
 			 */
-			desc->irq_data.chip->irq_ack(&desc->irq_data);
+			desc->chip->ack(irq);
 
 			if (irr & IRR_ETHERNET) {
 				generic_handle_irq(IRQ_NEPONSET_SMC9196);
@@ -71,7 +72,7 @@ neponset_irq_handler(unsigned int irq, struct irq_desc *desc)
 				generic_handle_irq(IRQ_NEPONSET_USAR);
 			}
 
-			desc->irq_data.chip->irq_unmask(&desc->irq_data);
+			desc->chip->unmask(irq);
 		}
 
 		if (irr & IRR_SA1111) {
@@ -145,8 +146,8 @@ static int __devinit neponset_probe(struct platform_device *dev)
 	/*
 	 * Install handler for GPIO25.
 	 */
-	irq_set_irq_type(IRQ_GPIO25, IRQ_TYPE_EDGE_RISING);
-	irq_set_chained_handler(IRQ_GPIO25, neponset_irq_handler);
+	set_irq_type(IRQ_GPIO25, IRQ_TYPE_EDGE_RISING);
+	set_irq_chained_handler(IRQ_GPIO25, neponset_irq_handler);
 
 	/*
 	 * We would set IRQ_GPIO25 to be a wake-up IRQ, but
@@ -161,9 +162,9 @@ static int __devinit neponset_probe(struct platform_device *dev)
 	 * Setup other Neponset IRQs.  SA1111 will be done by the
 	 * generic SA1111 code.
 	 */
-	irq_set_handler(IRQ_NEPONSET_SMC9196, handle_simple_irq);
+	set_irq_handler(IRQ_NEPONSET_SMC9196, handle_simple_irq);
 	set_irq_flags(IRQ_NEPONSET_SMC9196, IRQF_VALID | IRQF_PROBE);
-	irq_set_handler(IRQ_NEPONSET_USAR, handle_simple_irq);
+	set_irq_handler(IRQ_NEPONSET_USAR, handle_simple_irq);
 	set_irq_flags(IRQ_NEPONSET_USAR, IRQF_VALID | IRQF_PROBE);
 
 	/*
@@ -240,10 +241,6 @@ static struct resource sa1111_resources[] = {
 	},
 };
 
-static struct sa1111_platform_data sa1111_info = {
-	.irq_base	= IRQ_BOARD_END,
-};
-
 static u64 sa1111_dmamask = 0xffffffffUL;
 
 static struct platform_device sa1111_device = {
@@ -252,7 +249,6 @@ static struct platform_device sa1111_device = {
 	.dev		= {
 		.dma_mask = &sa1111_dmamask,
 		.coherent_dma_mask = 0xffffffff,
-		.platform_data = &sa1111_info,
 	},
 	.num_resources	= ARRAY_SIZE(sa1111_resources),
 	.resource	= sa1111_resources,
