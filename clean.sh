@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export cc=arm-linux-gnueabi-
+source compiler.def
 
 make clean
 make ARCH=arm CROSS_COMPILE=$cc clean

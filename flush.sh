@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export cc=arm-linux-gnueabi-
+source compiler.def
 
 if [ -e .config ]; then
     cp .config config.orig

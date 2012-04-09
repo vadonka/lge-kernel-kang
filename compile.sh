@@ -18,7 +18,7 @@ export kinstsrc=/home/android/android/kernel-installer/source
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 export mthm=1
 # Compiler
-export cc=arm-linux-gnueabi-
+source compiler.def
 ######################################################
 
 # Check executables
