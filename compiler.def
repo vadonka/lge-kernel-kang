@@ -1,1 +1,1 @@
-export cc=/home/android/android/android-toolchain-eabi_4.y/4.6.4/bin/arm-eabi-
+export cc=/home/android/android/android-toolchain-eabi_4.y/4.5.4/bin/arm-eabi-
