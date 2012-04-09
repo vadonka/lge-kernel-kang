@@ -1,8 +1,6 @@
 #!/bin/sh
 
 export cc=arm-linux-gnueabi-
-#export USE_CCACHE=1
-#export CCACHE_DIR=~/android/ccache
 
 if [ -e .config ]; then
 	rm -f .config

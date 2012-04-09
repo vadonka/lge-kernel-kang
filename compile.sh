@@ -78,8 +78,6 @@ fi
 }
 
 export starttime=`date +%s`
-#export USE_CCACHE=1
-#export CCACHE_DIR=~/android/ccache
 make clean -j $(($mthd*$mthm))
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
