@@ -47,19 +47,21 @@ export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
 export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
 if [ "$nooc" == "0" ]; then
-	export ocver="STOCK"
-else
 	export ocver="OC"
+else
+	export ocver="STOCK"
 fi
 
 if [ "$dsbatt" == "0" ]; then
 	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
+		clear
 		echo "Kernel version string: $nver"
 		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	else
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
+		clear
 		echo "Kernel version string: $nver"
 		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
@@ -67,11 +69,13 @@ if [ "$dsbatt" == "0" ]; then
 else
 	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS"'`
+		clear
 		echo "Kernel version string: $nver"
 		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
 	else
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_OTF"'`
+		clear
 		echo "Kernel version string: $nver"
 		sleep 1
 		sed -i "s/$cver/$nver/g" $kh/.config
@@ -80,7 +84,6 @@ fi
 
 export starttime=`date +%s`
 make clean -j $(($mthd*$mthm))
-clear
 echo "Cross Compiler: $cc"
 sleep 2
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
@@ -88,7 +91,7 @@ make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 export endtime=`date +%s`
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
-export kver=`echo $cver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
+export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 echo "Kernel version string: $kver"
 
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
