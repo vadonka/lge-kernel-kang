@@ -80,6 +80,9 @@ fi
 
 export starttime=`date +%s`
 make clean -j $(($mthd*$mthm))
+clear
+echo "Cross Compiler: $cc"
+sleep 2
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 export endtime=`date +%s`
