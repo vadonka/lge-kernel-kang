@@ -369,7 +369,12 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // Combine AVP/System clock absolute limit with scaling V/F ladder upper
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
+
+#ifdef CONFIG_OTF_AVP
+    AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
+#else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
+#endif
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
     {
         if (pHwLimits[i].HwDeviceId == NV_DEVID_AVP)
