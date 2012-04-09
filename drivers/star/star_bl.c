@@ -1,3 +1,5 @@
+
+
 /*
  * drivers/star/star_bl.c
  *
@@ -310,6 +312,7 @@ static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
     {0x00,0xFF},  /* Channel Enable : ALL */
     {0xFF,0xFE}   /* end or command */
 };
+
 
 static struct aat2870_lux_tbl_t  aat2870_lux_tbl[] = {
 
@@ -1032,7 +1035,7 @@ star_show_panel_info(struct device *dev, struct device_attribute *attr, char *bu
 }
 
 static ssize_t
-star_store_panel_info(struct device *dev, struct device_attribute *attr, char *buf, size_t count )
+star_store_panel_info(struct device *dev, struct device_attribute *attr, const char *buf, size_t count )
 {
 	return 0;
 }

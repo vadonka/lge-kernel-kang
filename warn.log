@@ -1,0 +1,3 @@
+scripts/kconfig/lxdialog/textbox.c: In function ‘print_line’:
+scripts/kconfig/lxdialog/textbox.c:323:9: warning: variable ‘x’ set but not used [-Wunused-but-set-variable]
+scripts/kconfig/lxdialog/textbox.c:323:6: warning: variable ‘y’ set but not used [-Wunused-but-set-variable]

@@ -275,7 +275,6 @@ static bool star_accel_i2c_read_data( star_accel_device *accel, unsigned char re
     return true;
 }
 
-
 static void star_accel_set_sample_rate( star_accel_device *accel, unsigned int samplerate )
 {
 	unsigned int sampledata[7][2] =
@@ -1322,20 +1321,16 @@ static int star_accel_remove( struct platform_device *pdev )
 	return 0;
 }
 
-extern int star_proxi_get_status(void);
-
 int star_accel_suspend(struct platform_device *dev, pm_message_t state)
 {
-    if (!star_proxi_get_status())
-        star_accel_disable_irq();
+	//star_accel_set_power_rail(g_accel->vdd_id, NV_FALSE);
 
 	return 0;
 }
 
 int star_accel_resume(struct platform_device *dev)
 {
-    if (!star_proxi_get_status())
-        star_accel_enable_irq();
+	//star_accel_set_power_rail(g_accel->vdd_id, NV_TRUE);
 
 	return 0;
 }

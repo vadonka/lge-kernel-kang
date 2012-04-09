@@ -581,7 +581,7 @@ static int active_wakelock_stats_show(struct seq_file *m, void *unused)
 				seq_printf(m, "wake lock %s, expired\n", lock->name);
 		} else {
 			seq_printf(m, "active wake lock %s\n", lock->name);
-			if (!debug_mask & DEBUG_EXPIRE)
+			if (!(debug_mask & DEBUG_EXPIRE))
 				print_expired = false;
 		}
 	}
