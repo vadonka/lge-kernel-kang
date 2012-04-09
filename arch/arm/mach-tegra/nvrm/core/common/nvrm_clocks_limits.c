@@ -225,13 +225,13 @@ NvRmCpuShmoo fake_CpuShmoo;
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
 NvU32 FakeShmooVoltages[] = {
-    775,
-    800,
-    825,
-    850,
-    875,
-    975,
-    1150,
+    790,
+    830,
+    880,
+    900,
+    930,
+    1020,
+    1155,
     CONFIG_MAX_CPU_OC_VOLT,
 };
 

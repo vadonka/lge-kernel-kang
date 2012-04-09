@@ -33,7 +33,7 @@ config MAX_CPU_OC_FREQ
 
 config MAX_CPU_OC_VOLT
 	int "Maximum CPU Overclock Voltage"
-	default 1250
+	default 1255
 
 config BOOST_PERIPHERALS
 	bool "Tegra2 Overclocking Peripheral Enable"

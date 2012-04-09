@@ -2271,7 +2271,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			NVRM_CPU1_OFF_PENDING_MS = 900;
 #endif
 #ifdef CONFIG_OTF_AVP
-			AVPFREQ = 250000;
+			AVPFREQ = 270000;
 #endif
 #ifdef CONFIG_OTF_GPU
 			GPUFREQ = 350000;
