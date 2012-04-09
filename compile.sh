@@ -6,6 +6,7 @@
 ######################################################
 # KERNEL home directory
 export kh=`pwd`
+echo "Kernel home: $kh"
 # Compiled CWM zip files home directory
 export ch=/home/android/android/compiled
 # CM7 original lge kernel boot.img location
@@ -85,13 +86,16 @@ export endtime=`date +%s`
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
 export kver=`echo $cver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
+echo "Kernel version string: $kver"
 
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
+echo "Kernel CWM file name: $cdir"
+
 mkdir -p $ch/$cdir
 cp -r $kinstsrc/* -d $ch/$cdir
 
 for m in `find $kh -name '*.ko'`; do
-    cp $m $ch/$cdir/system/lib/modules
+    cp $m $ch/$cdir/system/lib/modules/
 done
 
 cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
