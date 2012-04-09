@@ -1,0 +1,48 @@
+#!/bin/bash
+
+dohelp()
+{
+echo "Example script"
+echo ""
+    # Exit because you don't want the script to do anything after displaying help
+exit
+}
+
+while [ -n "$*" ]; do
+flag=$1
+value=$2
+	case "$flag" in
+	"--srcbranch")
+	srcbranch=$value
+	shift
+	;;
+	"--destbranch")
+	destbranch=$value
+	shift
+	;;
+	"--file")
+	file=$value
+	shift
+	;;
+	"--output")
+	output=$value
+	shift
+	;;
+	"--pretend")
+	pretend=true
+	;;
+	"--help")
+	dohelp
+	;;
+	"--")
+	break
+	;;
+	*)
+	echo -e "unknown option $flag\n"
+	dohelp
+	;;
+	esac
+	shift
+done
+
+git diff $srcbranch:$file $destbranch:$file >> $output

@@ -347,8 +347,8 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-                300000,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
+CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
+  CONFIG_EMC_CORE_VOLT,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
             0x00000012,   /* RC */
@@ -401,7 +401,6 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     }
 };
 #else	// old version
-
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -676,8 +675,8 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-                300000,   /* SDRAM frquency */
-                  1200,   /* EMC core voltage */
+CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
+  CONFIG_EMC_CORE_VOLT,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
 					  0x00000012,	/* RC */
@@ -932,13 +931,13 @@ const NvOdmQuerySpiIdleSignalState *
 NvOdmQuerySpiGetIdleSignalState(
 	NvOdmIoModule OdmIoModule,
 	NvU32 ControllerId)
-{
+{ 
 	if (OdmIoModule == NvOdmIoModule_Spi)
 	{ 
-		if (ControllerId == 0)
+		if (ControllerId == 0) 
 			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
 #ifdef CONFIG_MACH_STAR_TMUS
-		else if (ControllerId == 1)
+		else if (ControllerId == 1) 
 			return &s_NvOdmQuerySpiIdleSignalStateLevel[0];
 #endif
 	} 
@@ -983,7 +982,7 @@ NvOdmQueryDapPortGetProperty(
           {2, 16, 22000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap3
         // I2S2 (DAC2) <-> DAP4 <-> BLUETOOTH
         {NvOdmDapPort_I2s2, NvOdmDapPort_BlueTooth,
-          {2, 16, 16000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap4
+          {2, 16, 22000, NvOdmQueryI2sDataCommFormat_I2S } },   // Dap4
     };
 
     if (DapPortId && DapPortId<NV_ARRAY_SIZE(s_Property))
@@ -1431,6 +1430,7 @@ const NvOdmGpioWakeupSource *NvOdmQueryGetWakeupSources(NvU32 *pCount)
  */
 NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 {
+    
     switch (MemType)
     {
         // NOTE:
@@ -1449,7 +1449,7 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
         // maximum size of SDRAM will also change.
         case NvOdmMemoryType_Sdram:
             return 0x20000000;
-
+       
         case NvOdmMemoryType_Nor:
         case NvOdmMemoryType_Nand:
         case NvOdmMemoryType_I2CEeprom:
@@ -1463,9 +1463,14 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 NvU32 NvOdmQueryCarveoutSize(void)
 {
     //20100802  increase carveout memory
+#if 0
+    return 0x08000000; // 128 MB <- 64MB
+#else
     extern unsigned int nvmap_carveout_size;
-    //return 0x08000000; // 128 MB <- 64MB
+    /* carveout size is controled by the nvmem boot param. nvmem=128M is default for LG Star */
+    pr_info("%s: nvmap_carveout_size=%d\n", __func__, nvmap_carveout_size);
     return nvmap_carveout_size;
+#endif
 }
 
 NvU32 NvOdmQuerySecureRegionSize(void)

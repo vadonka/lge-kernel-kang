@@ -638,6 +638,71 @@ static ssize_t show_bios_limit(struct cpufreq_policy *policy, char *buf)
 	return sprintf(buf, "%u\n", policy->cpuinfo.max_freq);
 }
 
+#ifdef CONFIG_FAKE_SHMOO
+static ssize_t show_cpu_temp(struct cpufreq_policy *policy, char *buf)
+{
+	int pTemp = 0;
+
+	if( fakeShmoo_Dfs != NULL )
+	{
+		NvRmDtt* pDtt = &fakeShmoo_Dfs->ThermalThrottler;
+		NvOdmTmonTemperatureGet(pDtt->hOdmTcore, &pTemp);
+	}
+	return sprintf(buf, "%i\n",  pTemp);
+}
+
+static ssize_t show_frequency_voltage_table(struct cpufreq_policy *policy, char *buf)
+{
+	int i;
+	char *table = buf;
+
+	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
+	{
+		table += sprintf(table, "%d %d %d\n", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i], fake_CpuShmoo.ShmooVoltages[i], fake_CpuShmoo.ShmooVoltages[i] - FakeShmoo_UV_mV_Ptr[i] );
+	}
+	return table - buf;
+}
+
+static ssize_t show_scaling_available_frequencies(struct cpufreq_policy *policy, char *buf)
+{
+	int i;
+	char *table = buf;
+
+	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
+	{
+		table += sprintf(table, "%d ", fake_CpuShmoo.pScaledCpuLimits->MaxKHzList[i]);
+	}
+	return table - buf;
+}
+
+static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
+{
+	int i;
+	char *table = buf;
+
+	for( i=fake_CpuShmoo.ShmooVmaxIndex; i>-1; i-- )
+	{
+		table += sprintf(table, "%d ", FakeShmoo_UV_mV_Ptr[i] );
+	}
+	table += sprintf(table, "\n" );
+	return table - buf;
+}
+
+#ifndef DISABLE_FAKE_SHMOO_UV
+static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	int ret = sscanf( buf, "%i %i %i %i %i %i %i %i", &FakeShmoo_UV_mV_Ptr[7], &FakeShmoo_UV_mV_Ptr[6],
+								&FakeShmoo_UV_mV_Ptr[5], &FakeShmoo_UV_mV_Ptr[4],
+								&FakeShmoo_UV_mV_Ptr[3], &FakeShmoo_UV_mV_Ptr[2],
+								&FakeShmoo_UV_mV_Ptr[1], &FakeShmoo_UV_mV_Ptr[0] );
+	if (ret != 1)
+		return -EINVAL;
+
+	return count;
+}
+#endif // DISABLE_FAKE_SHMOO_UV
+#endif // CONFIG_FAKE_SHMOO
+
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
 cpufreq_freq_attr_ro(cpuinfo_max_freq);
@@ -652,6 +717,16 @@ cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
+#ifdef CONFIG_FAKE_SHMOO
+cpufreq_freq_attr_ro(cpu_temp);
+cpufreq_freq_attr_ro(frequency_voltage_table);
+cpufreq_freq_attr_ro(scaling_available_frequencies);
+#ifdef DISABLE_FAKE_SHMOO_UV
+cpufreq_freq_attr_ro(UV_mV_table);
+#else
+cpufreq_freq_attr_rw(UV_mV_table);
+#endif
+#endif // CONFIG_FAKE_SHMOO
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -665,6 +740,12 @@ static struct attribute *default_attrs[] = {
 	&scaling_driver.attr,
 	&scaling_available_governors.attr,
 	&scaling_setspeed.attr,
+#ifdef CONFIG_FAKE_SHMOO
+	&cpu_temp.attr,
+	&frequency_voltage_table.attr,
+	&scaling_available_frequencies.attr,
+	&UV_mV_table.attr,
+#endif // CONFIG_FAKE_SHMOO
 	NULL
 };
 

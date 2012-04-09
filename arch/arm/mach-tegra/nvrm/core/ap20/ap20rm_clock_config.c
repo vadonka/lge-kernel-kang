@@ -1296,6 +1296,15 @@ Ap20SystemClockSourceFind(
                 VDEFREQ,
                 MaxKHz, &M1KHz);
 #else
+#ifdef CONFIG_FAKE_SHMOO
+        C1KHz = M1KHz = DomainKHz;
+        c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                700000,
+                MaxKHz, &C1KHz);
+        m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
+                700000,
+                MaxKHz, &M1KHz);
+#else
         C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
@@ -1303,6 +1312,7 @@ Ap20SystemClockSourceFind(
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
                 NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
                 MaxKHz, &M1KHz);
+#endif // FAKE_SHMOO
 #endif // OTF_VDE
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);

@@ -943,6 +943,14 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
+#ifdef CONFIG_FAKE_SHMOO
+    /*
+     * Set CPU Clock scaling range manually to
+     * avoid booting up out of specifications
+     * and to minimize the "sleep of death" bug
+     */
+    pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1015000;
+#endif
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -1958,7 +1966,7 @@ static void DttIntrCallback(void* args)
         (void)NvOdmTmonParameterConfig(pDtt->hOdmTcore,
             NvOdmTmonConfigParam_IntrLimitHigh, &HighLimit);
         DttRangeReport(TemperatureC, pDtt);
-
+        
 //20101121 , HW power off in thermal limit [START]
 #if defined(CONFIG_MACH_STAR)
         NvRmPrivStarDttPolicyUpdate(pDfs->hRm, TemperatureC, pDtt);
@@ -1976,6 +1984,10 @@ NvError NvRmPrivDfsInit(NvRmDeviceHandle hRmDeviceHandle)
     NvError error;
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
+
+#ifdef CONFIG_FAKE_SHMOO
+    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
+#endif
 
     NV_ASSERT(hRmDeviceHandle);
     DfsHintsPrintInit();
@@ -2359,6 +2371,21 @@ DvsChangeCpuVoltage(
     NvRmDvs* pDvs,
     NvRmMilliVolts TargetMv)
 {
+#ifdef CONFIG_FAKE_SHMOO
+    // Voltage hack
+    int i = 0;
+    if( FakeShmoo_UV_mV_Ptr != NULL )
+    {
+        for(i=0; i <fake_CpuShmoo.ShmooVmaxIndex+1; i++)
+        {
+            if(fake_CpuShmoo.ShmooVoltages[i] == TargetMv)
+            {
+                TargetMv -= FakeShmoo_UV_mV_Ptr[i];
+                break;
+            }
+        }
+    }
+#endif // CONFIG_FAKE_SHMOO
     NV_ASSERT(TargetMv >= pDvs->MinCpuMv);
     NV_ASSERT(TargetMv <= pDvs->NominalCpuMv);
 
@@ -2366,6 +2393,9 @@ DvsChangeCpuVoltage(
     {
         NvRmPmuSetVoltage(hRm, pDvs->CpuRailAddress, TargetMv, NULL);
         pDvs->CurrentCpuMv = TargetMv;
+#ifdef CONFIG_FAKE_SHMOO
+        //printk( "*** fakeShmoo **** -> CurrentCpuMv : %i\n", TargetMv );
+#endif
     }
 }
 

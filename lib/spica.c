@@ -26,7 +26,7 @@ unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
 unsigned int AVPFREQ = 240000;
 /* Min & Max Limit */
 unsigned int AVPLOW = 200000;
-unsigned int AVPHIGH = 250000;
+unsigned int AVPHIGH = 280000;
 /*******************************************/
 #endif
 
