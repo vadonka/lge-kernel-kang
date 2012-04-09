@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 #low overclock version
 ./initialize.sh vadonka_loc_defconfig
