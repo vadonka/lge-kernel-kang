@@ -32,6 +32,20 @@
 
 #include <trace/events/power.h>
 
+//#define DISABLE_FAKE_SHMOO_UV
+#ifdef CONFIG_FAKE_SHMOO
+#include "../nvrm/core/common/nvrm_clocks_limits_private.h"
+#include "../nvrm/core/common/nvrm_power_dfs.h"
+#include <nvrm_diag.h>
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/tegra_lg_p990_kernel_oc_uv
+ * Inspired by mblaster @ https://github.com/mblaster/linux_2.6.32_folio100
+ */
+int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+extern NvRmCpuShmoo fake_CpuShmoo;  // Stored faked CpuShmoo values
+extern NvRmDfs *fakeShmoo_Dfs;
+#endif // CONFIG_FAKE_SHMOO
+
 //Spica OTF Start
 #ifdef CONFIG_OTF_MAXSCOFF
 #include <linux/spica.h>
@@ -2311,6 +2325,11 @@ static struct early_suspend _powersave_early_suspend = {
 static int __init cpufreq_core_init(void)
 {
 	int cpu;
+
+#ifdef CONFIG_FAKE_SHMOO
+	// Allocate some memory for the voltage tab
+	FakeShmoo_UV_mV_Ptr = kzalloc(sizeof(int)*(fake_CpuShmoo.ShmooVmaxIndex+1), GFP_KERNEL);
+#endif // CONFIG_FAKE_SHMOO
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_policy_cpu, cpu) = -1;

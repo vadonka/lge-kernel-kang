@@ -52,6 +52,19 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
+#ifdef CONFIG_FAKE_SHMOO
+#include <linux/kernel.h>
+
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+ */
+
+extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
+extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+
+#endif // CONFIG_FAKE_SHMOO
+
 //Spica OTF Start
 #ifdef CONFIG_SPICA_OTF
 #include <linux/spica.h>
