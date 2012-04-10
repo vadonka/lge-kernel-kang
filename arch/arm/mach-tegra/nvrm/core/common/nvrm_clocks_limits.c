@@ -333,11 +333,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 {
     NvU32 i;
     NvRmFreqKHz CpuMaxKHz, AvpMaxKHz, VdeMaxKHz, TDMaxKHz, DispMaxKHz;
-#if defined(CONFIG_FAKE_SHMOO) || defined(CONFIG_BOOST_PERIPHERALS)
     NvRmSKUedLimits* pSKUedLimits;
-#else
-    const NvRmSKUedLimits* pSKUedLimits;
-#endif
     const NvRmScaledClkLimits* pHwLimits;
     const NvRmSocShmoo* pShmoo;
 
@@ -345,19 +341,37 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     NvRmPrivChipFlavorInit(hRmDevice);
     pShmoo = s_ChipFlavor.pSocShmoo;
     pHwLimits = &pShmoo->ScaledLimitsList[0];
+#ifndef CONFIG_FAKE_SHMOO
     pSKUedLimits = pShmoo->pSKUedLimits;
-#ifdef CONFIG_FAKE_SHMOO
+#else
+/*
+    NvRmFreqKHz CpuMaxKHz;
+    NvRmFreqKHz AvpMaxKHz;
+    NvRmFreqKHz VdeMaxKHz;
+    NvRmFreqKHz McMaxKHz;
+    NvRmFreqKHz Emc2xMaxKHz;
+    NvRmFreqKHz TDMaxKHz;
+    NvRmFreqKHz DisplayAPixelMaxKHz;
+    NvRmFreqKHz DisplayBPixelMaxKHz;
+    NvRmMilliVolts NominalCoreMv;   // for common core rail
+    NvRmMilliVolts NominalCpuMv;    // for dedicated CPU rail
+*/
+    pSKUedLimits = pShmoo->pSKUedLimits;
     // override default with configuration values
     // CPU clock duh!
     pSKUedLimits->CpuMaxKHz = CONFIG_MAX_CPU_OC_FREQ;
-#endif
 
+#ifndef CONFIG_SPICA_OTF
 #ifdef CONFIG_BOOST_PERIPHERALS
     // AVP clock
     pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
-    // 3D GPU clock
-    pSKUedLimits->TDMaxKHz = CONFIG_MAX_GPU_OC_FREQ;
-#endif
+    // 3D clock
+    pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
+#endif // CONFIG_BOOST_PERIPHERALS
+#endif // CONFIG_SPICA_OTF
+
+#endif // CONFIG_FAKE_SHMOO
+
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
 
@@ -422,12 +436,14 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         }
     }
 
+/*
 #ifdef CONFIG_BOOST_PERIPHERALS
     s_ClockRangeLimits[NvRmModuleID_Avp].MaxKHz = CONFIG_MAX_AVP_OC_FREQ;
     s_ClockRangeLimits[NvRmModuleID_2D].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = CONFIG_MAX_GPU_OC_FREQ;
     s_ClockRangeLimits[NvRmModuleID_Epp].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
 #endif
+*/
 
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
