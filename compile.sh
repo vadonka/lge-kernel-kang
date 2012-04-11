@@ -100,7 +100,6 @@ export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'
 echo "Kernel version string: $kver"
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
 echo "Kernel CWM file name: $cdir.zip"
-exit 0
 sleep 2
 make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd > /dev/null 2>&1
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd $makeflags 2> $WARNLOG
