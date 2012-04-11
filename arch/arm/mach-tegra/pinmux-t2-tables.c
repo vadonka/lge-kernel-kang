@@ -31,8 +31,6 @@
 #include <mach/pinmux.h>
 #include <mach/suspend.h>
 #include "gpio-names.h"
-static inline unsigned long pg_readl(unsigned long offset);
-static inline void pg_writel(unsigned long value, unsigned long offset);
 
 #define _mux(pg_name, f)				\
 	{						\
@@ -1060,6 +1058,7 @@ static u32 sleep_pinmux_reg[TRISTATE_REG_NUM + PIN_MUX_CTL_REG_NUM + PULLUPDOWN_
 };
 #endif
 
+#ifdef CONFIG_DEBUG_FS
 unsigned long get_reg_data( int pg, int reg )
 {
 	unsigned long ret = 0;
@@ -1169,6 +1168,7 @@ void set_reg_data( int pg, long data, int reg )
 	}
 
 }
+#endif
 
 //20100724  for gpio setting while sleep [LGE_END]
 

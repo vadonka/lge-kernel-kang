@@ -212,18 +212,14 @@ typedef struct NvRmSpiRec *NvRmSpiHandle;
  *     pointer is NULL, the write data will be all zeros.
  * @param BytesRequested The size of pReadBuffer and pWriteBuffer buffers in bytes.
  * @param PacketSizeInBits The packet size in bits of each Spi transaction.
-
-<Only for AP20(NVIDIA BSP)>
-5. Restart rm_spi handle if rm_spi error happens
-	- android/kernel/arch/arm/mach-tegra/include/rm_spi.h
-	- android/kernel/arch/arm/mach-tegra/nvrm/io/ap15/rm_spi_slink.c
-	- android/kernel/drivers/spi/tegra_spi.c
-		: Modify rm_spi API function to return error of Master SPI transaction
-		: This recovers repeated spi timeout error
  *
  */
  
+#if defined (CONFIG_MACH_STAR_TMUS)
+ void NvRmSpiTransaction( 
+#elif defined (CONFIG_MACH_STAR_REV_F)
  NvError NvRmSpiTransaction( 
+#endif
     NvRmSpiHandle hRmSpi,
     NvU32 SpiPinMap,
     NvU32 ChipSelectId,

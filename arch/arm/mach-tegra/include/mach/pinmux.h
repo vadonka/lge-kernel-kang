@@ -148,7 +148,9 @@ typedef enum {
 	REG_DATA,
 } tegra_reg_t;
 
+#ifdef CONFIG_DEBUG_FS
 extern int gpio_dbgfs_mode;   // 0=normal, 1=sleep
+#endif
 
 #define NORMAL_MODE 		0
 #define SLEEP_MODE 			1
@@ -167,6 +169,8 @@ extern int gpio_dbgfs_mode;   // 0=normal, 1=sleep
 
 unsigned long get_reg_data( int pg, int reg );
 void set_reg_data( int pg, long data, int reg );
+static inline unsigned long pg_readl(unsigned long offset);
+static inline void pg_writel(unsigned long value, unsigned long offset);
 //20100724  for gpio setting while sleep [LGE_END]
 
 int tegra_pinmux_set_tristate(tegra_pingroup_t pg, tegra_tristate_t tristate);

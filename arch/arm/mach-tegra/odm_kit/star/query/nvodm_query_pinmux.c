@@ -228,7 +228,7 @@ NvOdmQueryPinMux(
 	NvU32 CustomerOption = 0;
 	NvU32 Personality = 0;
 	NvU32 Ril = 0;
-	NvOdmServicesKeyListHandle hKeyList = NvOdmServicesKeyListOpen();
+	NvOdmServicesKeyListHandle hKeyList;
 	if (hKeyList)
     {   
         CustomerOption =
