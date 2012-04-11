@@ -232,8 +232,10 @@ NvU32 FakeShmooVoltages[] = {
     930,
     1020,
     1155,
-    CONFIG_MAX_CPU_OC_VOLT,
+    1255,
 };
+
+#define MAX_CPU_OC_FREQ 1408000
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
     101, // FakepScaledCpuLimits.HwDeviceId
@@ -245,10 +247,10 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
         324000,
         503000,
         655000,
-        800000,
+        816000,
         1015000,
         1216000,
-        CONFIG_MAX_CPU_OC_FREQ,
+        1408000,
     }
 };
 #endif // CONFIG_FAKE_SHMOO
@@ -359,7 +361,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     pSKUedLimits = pShmoo->pSKUedLimits;
     // override default with configuration values
     // CPU clock duh!
-    pSKUedLimits->CpuMaxKHz = CONFIG_MAX_CPU_OC_FREQ;
+    pSKUedLimits->CpuMaxKHz = MAX_CPU_OC_FREQ;
 
 #ifndef CONFIG_SPICA_OTF
 #ifdef CONFIG_BOOST_PERIPHERALS
