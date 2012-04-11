@@ -39,7 +39,7 @@
 #define LATENCY_FACTOR_SHIFT 8
 
 static unsigned int latency_factor __read_mostly = 80;	// factor ~ 0.3
-static unsigned int pwrgood_latency = 2000;
+static unsigned int pwrgood_latency = 1600;
 static unsigned int system_is_suspending = 0;
 module_param(latency_factor, uint, 0644);
 
@@ -68,13 +68,19 @@ void __init tegra_init_idle(struct tegra_suspend_platform_data *plat)
 static int tegra_idle_enter_lp3(struct cpuidle_device *dev,
 	struct cpuidle_state *state)
 {
-	void __iomem *flow_ctrl = IO_ADDRESS(TEGRA_FLOW_CTRL_BASE);
+	//20100907  race condition fix [START]
+	//void __iomem *flow_ctrl = IO_ADDRESS(TEGRA_FLOW_CTRL_BASE);
+	void __iomem *flow_ctrl;
 	ktime_t enter, exit;
 	s64 us;
-	u32 reg = FLOW_CTRL_WAITEVENT | FLOW_CTRL_JTAG_RESUME;
+	//u32 reg = FLOW_CTRL_WAITEVENT | FLOW_CTRL_JTAG_RESUME;
+	u32 reg;
 
-	flow_ctrl = flow_ctrl + FLOW_CTRL_HALT_CPUx_EVENTS(dev->cpu);
+	//flow_ctrl = flow_ctrl + FLOW_CTRL_HALT_CPUx_EVENTS(dev->cpu);
 	local_irq_disable();
+	flow_ctrl = IO_ADDRESS(TEGRA_FLOW_CTRL_BASE) + FLOW_CTRL_HALT_CPUx_EVENTS(dev->cpu);
+	reg = FLOW_CTRL_WAITEVENT | FLOW_CTRL_JTAG_RESUME;
+	//20100907  race condition fix [END]
 
 	smp_rmb();
 
