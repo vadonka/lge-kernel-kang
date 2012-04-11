@@ -214,7 +214,10 @@ static noinline void restore_cpu_complex(bool wait_plls)
 	 * by CPU boot-up code - wait for PLL stabilization if PLLX
 	 * was enabled, or if explicitly requested by caller */
 
-	BUG_ON(readl(clk_rst + CLK_RESET_PLLX_BASE) != tegra_sctx.pllx_base);
+	reg = readl(clk_rst + CLK_RESET_PLLX_BASE);
+	/* mask out bit 27 - not to check PLL lock bit */
+	BUG_ON((reg & (~(1 << 27))) !=
+      (tegra_sctx.pllx_base & (~(1 << 27))));
 
 	if ((tegra_sctx.pllx_base & (1<<30)) || wait_plls) {
 		while (readl(tmrus)-tegra_sctx.pllx_timeout >= 0x80000000UL)
@@ -498,6 +501,12 @@ static void tegra_suspend_dram(bool lp0_ok)
 		mode &= ~TEGRA_POWER_EFFECT_LP0;
 	} else {
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP0);
+
+        //20110213, , sched_clock mismatch issue after deepsleep [START]
+        #if defined(CONFIG_MACH_STAR)
+        tegra_lp0_sched_clock_clear();
+        #endif
+        //20110213, , sched_clock mismatch issue after deepsleep [END]
 
 		mode |= TEGRA_POWER_CPU_PWRREQ_OE;
 		mode |= TEGRA_POWER_PWRREQ_OE;

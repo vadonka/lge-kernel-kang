@@ -25,6 +25,7 @@
 #include <linux/clocksource.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/cnt32_to_63.h>
 
 #include <asm/mach/time.h>
 #include <asm/mach/time.h>
@@ -324,3 +325,9 @@ void tegra_timer_resume(void)
 	tegra_sched_clock_resume();
 }
 
+//20110213, , sched_clock mismatch issue after deepsleep [START]
+void tegra_lp0_sched_clock_clear()
+{
+    cnt32_to_63_clear(0);
+}
+//20110213, , sched_clock mismatch issue after deepsleep [END]
