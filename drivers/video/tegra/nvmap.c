@@ -21,7 +21,7 @@
  */
 
 #define NV_DEBUG 0
-#define NVMAP_DEBUG_FS 1
+#define NVMAP_DEBUG_FS 0
 #define NVMAP_DEBUG_COMPACTION 0
 
 
@@ -1122,6 +1122,32 @@ static struct tegra_iovmm_area *_nvmap_get_vm(struct nvmap_handle *h)
 	spin_unlock(&nvmap_mru_vma_lock);
 	return vm;
 #endif
+}
+
+int nvmap_get_unpinned_iovmm_memory(int *total_unpinned_mem,
+	int *largest_unpinned_mem)
+{
+	unsigned int i;
+	struct list_head *mru;
+	struct list_head *temp;
+	struct nvmap_handle *h;
+	*total_unpinned_mem = 0;
+	*largest_unpinned_mem = 0;
+
+	spin_lock(&nvmap_mru_vma_lock);
+	for (i = 0; i<ARRAY_SIZE(nvmap_mru_vma_lists); i++) {
+		mru = &nvmap_mru_vma_lists[i];
+		list_for_each(temp, mru) {
+			h = list_entry(temp, struct nvmap_handle, pgalloc.mru_list);
+			(*total_unpinned_mem) += h->size;
+			if ( (*largest_unpinned_mem) < h->size )
+				*largest_unpinned_mem = h->size;
+		}
+	}
+	(*total_unpinned_mem) = (*total_unpinned_mem) >> 10;
+	(*largest_unpinned_mem) = (*largest_unpinned_mem) >> 10;
+	spin_unlock(&nvmap_mru_vma_lock);
+	return 0;
 }
 
 static int _nvmap_do_cache_maint(struct nvmap_handle *h,
