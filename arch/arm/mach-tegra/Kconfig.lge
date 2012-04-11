@@ -43,19 +43,14 @@ config MAX_GPU_OC_FREQ
 	depends on FAKE_SHMOO || BOOST_PERIPHERALS
 
 config MAX_DDR_OC_FREQ
-	int "DDR Overclock Frequency"
+	int "Maximum DDR Overclock Frequency"
 	default 350000
 	depends on FAKE_SHMOO || BOOST_PERIPHERALS
 
 config DDR2_SDRAM_FREQ
-	int
+	int "DDR Overclock Frequency"
 	default 350000 if BOOST_PERIPHERALS
 	default 300000
-
-config EMC_CORE_VOLT
-	int "EMC Core Voltage"
-	default 1150 if BOOST_PERIPHERALS
-	default 1200
 
 menuconfig SPICA_OTF
 	bool "On The Fly ToolKit (C) Spica"
