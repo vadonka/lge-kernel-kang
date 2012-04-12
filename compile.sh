@@ -1,11 +1,13 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.2.2
-# Date: 2012.04.11
+# ANYKERNEL compiler script by vadonka v1.2.4
+# Date: 2012.04.12
 #
 # You need to define this below:
 ######################################################
 # KERNEL home directory
 export kh=`pwd`
+# KERNEL defconfig
+export defconfig=vadonka_defconfig
 # Compiled CWM zip files home directory
 export ch=/home/android/android/compiled
 # CM7 original lge kernel boot.img location
@@ -38,9 +40,13 @@ else
 	exit 1
 fi
 
+# Check .config
+if [ ! -f .config ]; then
+    make ARCH=arm CROSS_COMPILE=$cc mrproper
+    make ARCH=arm CROSS_COMPILE=$cc $defconfig
+fi
+
 ## Check compiler options
-# declare makeflags variable
-makeflags=""
 # set DS battery driver flag to zero by default
 dsbatt="0"
 # set the OC flag to zero by default
@@ -50,11 +56,15 @@ while [ -n "$*" ]; do
 flag=$1
 	case "$flag" in
 	"--ds")
-	makeflags=$makeflags" CONFIG_USE_DS_BATTERY_DRIVER=y"
+	config_ds_orig=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
+	config_ds_enable=`echo "CONFIG_USE_DS_BATTERY_DRIVER=y"`
+	sed -i "s/$config_ds_orig/$config_ds_enable/g" $kh/.config
 	dsbatt="1"
 	;;
 	"--oc")
-	makeflags=$makeflags" CONFIG_FAKE_SHMOO=y"
+	config_oc_orig=`grep "CONFIG_FAKE_SHMOO" $kh/.config`
+	config_oc_enable=`echo "CONFIG_FAKE_SHMOO=y"`
+	sed -i "s/$config_oc_orig/$config_oc_enable/g" $kh/.config
 	overclock="1"
 	;;
 	esac
@@ -91,18 +101,17 @@ fi
 
 export starttime=`date +%s`
 make clean -j $mthd > /dev/null 2>&1
-clear
+#clear
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
-echo "Extra Makeflags:$makeflags"
-echo "Build command: "`echo "make ARCH=arm CROSS_COMPILE=$cc -j $mthd $makeflags 2> $WARNLOG"`
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 echo "Kernel version string: $kver"
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
 echo "Kernel CWM file name: $cdir.zip"
 sleep 2
-make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd > /dev/null 2>&1
-make ARCH=arm CROSS_COMPILE=$cc -j $mthd $makeflags 2> $WARNLOG
+
+#make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd > /dev/null 2>&1
+#make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 export endtime=`date +%s`
 
 if [ -e $kh/arch/arm/boot/zImage ]; then
@@ -125,3 +134,9 @@ if [ "$(($endtime-$starttime))" -lt "180" ]; then
 else
     echo "Building time: $(($endtime/60-$starttime/60)) minutes"
 fi
+
+# Disable the extra options by the default
+config_ds_new=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
+sed -i "s/$config_ds_new/# CONFIG_USE_DS_BATTERY_DRIVER is not set/g" $kh/.config
+config_oc_new=`grep "CONFIG_FAKE_SHMOO" $kh/.config`
+sed -i "s/$config_oc_new/# CONFIG_FAKE_SHMOO is not set/g" $kh/.config
