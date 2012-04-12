@@ -138,6 +138,18 @@ static char *ramdisk_execute_command;
  * For ex. kdump situaiton where previous kernel has crashed, BIOS has been
  * skipped and devices will be in unknown state.
  */
+
+unsigned int cpu_overclock;
+EXPORT_SYMBOL(cpu_overclock);
+
+static int __init set_cpu_overclock(char *str)
+{
+	cpu_overclock = 1;
+	return 1;
+}
+
+__setup("cpu_overclock", set_cpu_overclock);
+
 unsigned int reset_devices;
 EXPORT_SYMBOL(reset_devices);
 
