@@ -550,7 +550,7 @@ config APANIC_PLABEL
 	default "kpanic"
 	---help---
 	 If your platform uses a different flash partition label for storing
- 	 crashdumps, enter it here.
+	 crashdumps, enter it here.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
