@@ -76,7 +76,7 @@ NvOsBreakPoint(const char* file, NvU32 line, const char* condition);
  * NV_ASSERT_PROVIDE_CONDITION_STRING to either 0 or 1, either in your own
  * source code, in your own makefile, or by uncommenting the lines below.
  */
-
+#undef NV_DEBUG
 #if !defined(NV_ASSERT)
 #if NV_DEBUG
 
