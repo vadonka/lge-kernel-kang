@@ -2568,15 +2568,17 @@ void NvRmPrivDvsInit(void)
     }
     else if (pDfs->hRm->ChipId.Id == 0x20)
     {
-        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv,
-            NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
+#ifdef CONFIG_CPU_REL_REQ
+        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv, NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
+#endif
         NV_ASSERT(pDvs->MinCoreMv <= pDvs->NominalCoreMv);
         pDvs->LowCornerCoreMv = NV_MAX(NVRM_AP20_LOW_CORE_MV, pDvs->MinCoreMv);
         pDvs->LowCornerCoreMv =
             NV_MIN(pDvs->LowCornerCoreMv, pDvs->NominalCoreMv);
 
-        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv,
-            NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
+#ifdef CONFIG_CPU_REL_REQ
+        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv, NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
+#endif
         NV_ASSERT(pDvs->MinCpuMv <= pDvs->NominalCpuMv);
         pDvs->LowCornerCpuMv = NV_MAX(NVRM_AP20_LOW_CPU_MV, pDvs->MinCpuMv);
         pDvs->LowCornerCpuMv =
