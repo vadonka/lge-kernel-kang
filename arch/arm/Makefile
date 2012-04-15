@@ -113,10 +113,9 @@ endif
 endif
 
 # Need -Uarm for gcc < 3.x
-#KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_THUMB2) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -msoft-float -Uarm
-#KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -include asm/unified.h -msoft-float
 KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_THUMB2) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -mhard-float -Uarm
-KBUILD_CFLAGS  += $(cc-option,-mfpu=vfpv3-d16)
+KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -include asm/unified.h -mhard-float
+KBUILD_CFLAGS	+= $(cc-option,-mfpu=vfpv3-d16)
 ifeq ($(call cc-option-yn,-mfloat-abi=hard),y)
 KBUILD_CFLAGS  += -mfloat-abi=hard
 else
