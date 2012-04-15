@@ -1,6 +1,7 @@
 #!/bin/bash
 
 source compiler.def
+export cc=/home/android/android/android-toolchain-eabi_4.y/$gccversion/bin/arm-eabi-
 
 if [ -e .config ]; then
 	rm -f .config
