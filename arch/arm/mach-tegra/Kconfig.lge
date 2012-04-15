@@ -27,6 +27,11 @@ config FAKE_SHMOO
 	depends on MACH_STAR
 	default y
 
+config CPU_REL_REQ
+	bool "Tegra2 Core and CPU Voltage Rel. Reqs."
+	depends on MACH_STAR
+	default y
+
 config BOOST_PERIPHERALS
 	bool "Tegra2 Overclocking Peripheral Enable"
 	depends on MACH_STAR
