@@ -819,7 +819,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 		}
 		else /* v < 3832 */
 		{
-				calculate_capacity = 1;
+			calculate_capacity = 1;
 		}
 
 		if ( calculate_capacity < 0 ) calculate_capacity = 1;
@@ -828,7 +828,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 
 		LDB("[CBC] : With AC Charger : CAL_CBC(%d)", calculate_capacity);
 	}
-			else
+	else
 	if ((batt_dev->ACLineStatus == NV_TRUE) && ((batt_dev->charger_state_machine == CHARGER_STATE_RECHARGE) || (batt_dev->charger_state_machine == CHARGER_STATE_CHARGE)))
 	{
 		if (batt_dev->batt_vol >= 4200) /* v >= 0 */
@@ -874,7 +874,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 	{
 		if (batt_dev->batt_vol >= 4114) /* v >= 0 */
 		{
-				calculate_capacity = 100;
+			calculate_capacity = 100;
 		}
 		else if (batt_dev->batt_vol >= 3962) /* 3962 <= v < 4114 : 81 - 100 */
 		{
@@ -902,7 +902,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 		}
 		else /* v < 3392 */
 		{
-				calculate_capacity = 1;
+			calculate_capacity = 1;
 		}
 
 		if ( calculate_capacity < 0 ) calculate_capacity = 1;
@@ -2461,8 +2461,8 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Voltage Status
-		vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-		vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
+	vol_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+	vol_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	// Temperatue Status
 	if ((STAR_BAT_MAX(star_batt_dev->batt_temp, batt_dev->batt_temp)-STAR_BAT_MIN(star_batt_dev->batt_temp, batt_dev->batt_temp)) < 100) // 10 degree
@@ -2477,8 +2477,8 @@ static void star_battery_data_poll_period_change(void)
 	}
 
 	// Gauge Status
-			gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
-			gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
+	gauge_period_data = NVBATTERY_POLLING_INTERVAL*HZ;
+	gauge_period_wake = SLEEP_BAT_CHECK_PERIOD;
 
 	batt_dev->battery_poll_interval = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_data, vol_period_data), STAR_BAT_MIN(temp_period_data, gauge_period_data));
 	batt_dev->sleep_bat_check_period = STAR_BAT_MIN(STAR_BAT_MIN(critical_period_wake, vol_period_wake), STAR_BAT_MIN(temp_period_wake, gauge_period_wake));
@@ -3274,14 +3274,14 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 
 	NvOdmGpioInterruptUnregister(charging_ic->hGpio, charging_ic->hStatusPin, charging_ic->hCHGDone_int);
 	charging_ic_deactive_for_rechrge();
-	
+
 	cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
 	cancel_delayed_work_sync(&batt_dev->battery_id_poll_work);
-	    flush_workqueue(batt_dev->battery_workqueue);
-	    destroy_workqueue(batt_dev->battery_workqueue);
+	flush_workqueue(batt_dev->battery_workqueue);
+	destroy_workqueue(batt_dev->battery_workqueue);
 
-	    del_timer_sync(&(batt_dev->charger_state_read_timer));
-	   del_timer_sync(&(batt_dev->battery_gauge_timer));
+	del_timer_sync(&(batt_dev->charger_state_read_timer));
+	del_timer_sync(&(batt_dev->battery_gauge_timer));
 
 	NvOdmGpioSetState( charging_ic->hGpio, charging_ic->hStatusPin, 0x0);
 	NvOdmGpioConfig( charging_ic->hGpio, charging_ic->hStatusPin, NvOdmGpioPinMode_Output);

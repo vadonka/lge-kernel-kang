@@ -28,9 +28,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- */
-
-/**
+ *
  * @file
  * <b>NVIDIA APX ODM Kit:
  *         Implementation of the ODM Query API</b>
@@ -70,9 +68,7 @@ s_NvOdmQueryProjectNameSetting[] = {'O','D','M',' ','K','i','t',0};
 static const NvOdmDownloadTransport
 s_NvOdmQueryDownloadTransportSetting = NvOdmDownloadTransport_None;
 
-
-
-#if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
+#if defined(CONFIG_MACH_STAR) /* Updated by nVidia, 2010.12.7 */
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -400,7 +396,7 @@ CONFIG_DDR2_SDRAM_FREQ,   /* SDRAM frquency */
         }
     }
 };
-#else	// old version
+#else /* old version */
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -1430,7 +1426,6 @@ const NvOdmGpioWakeupSource *NvOdmQueryGetWakeupSources(NvU32 *pCount)
  */
 NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 {
-    
     switch (MemType)
     {
         // NOTE:
@@ -1449,7 +1444,7 @@ NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
         // maximum size of SDRAM will also change.
         case NvOdmMemoryType_Sdram:
             return 0x20000000;
-       
+
         case NvOdmMemoryType_Nor:
         case NvOdmMemoryType_Nand:
         case NvOdmMemoryType_I2CEeprom:
@@ -1477,4 +1472,3 @@ NvU32 NvOdmQuerySecureRegionSize(void)
 {
     return 0x00800000;// 8 MB
 }
-
