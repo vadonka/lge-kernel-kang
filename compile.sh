@@ -101,7 +101,7 @@ fi
 
 export starttime=`date +%s`
 make clean -j $mthd > /dev/null 2>&1
-#clear
+clear
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
