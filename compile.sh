@@ -41,6 +41,7 @@ else
 fi
 
 # Check .config
+export cc=/home/android/android/android-toolchain-eabi_4.y/$gccversion/bin/arm-eabi-
 if [ ! -f .config ]; then
     make ARCH=arm CROSS_COMPILE=$cc mrproper
     make ARCH=arm CROSS_COMPILE=$cc $defconfig
@@ -54,7 +55,18 @@ overclock="0"
 ## Procedure begin
 while [ -n "$*" ]; do
 flag=$1
+value=$2
 	case "$flag" in
+	"--gcc")
+	if [ "$value" == "4.5.4" -o "$value" == "4.6.4" -o "$value" == "4.7.1" ]; then
+		gccversion=$value
+	else
+		echo "ERROR! Invalid GCC version!"
+		echo "Valid versions are: 4.5.4 or 4.6.4 or 4.7.1"
+		exit 0
+	fi
+	shift
+	;;
 	"--ds")
 	config_ds_orig=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 	config_ds_enable=`echo "CONFIG_USE_DS_BATTERY_DRIVER=y"`
@@ -100,6 +112,7 @@ else
 fi
 
 export starttime=`date +%s`
+export cc=/home/android/android/android-toolchain-eabi_4.y/$gccversion/bin/arm-eabi-
 make clean -j $mthd > /dev/null 2>&1
 clear
 echo "Kernel home: $kh"
