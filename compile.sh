@@ -6,8 +6,6 @@
 ######################################################
 # KERNEL home directory
 export kh=`pwd`
-# KERNEL defconfig
-export defconfig=vadonka_defconfig
 # Compiled CWM zip files home directory
 export ch=/home/android/android/compiled
 # CM7 original lge kernel boot.img location
@@ -18,8 +16,8 @@ export WARNLOG=`pwd`/warn.log
 export kinstsrc=/home/android/android/kernel-installer/source
 # Maximum thread number
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
-# Compiler
-source compiler.def
+# Variable file
+source variables
 # CCache Dir if used
 export ccache_dir=/home/android/ccache
 ######################################################

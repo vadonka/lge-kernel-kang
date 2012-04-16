@@ -1,20 +1,20 @@
-import os 
+import os
 import re
 import time
 
-def comment_remover(text): 
-    def replacer(match): 
-        s = match.group(0) 
-        if s.startswith('/'): 
-            return "" 
-        else: 
-            return s 
+def comment_remover(text):
+    def replacer(match):
+        s = match.group(0)
+        if s.startswith('/'):
+            return ""
+        else:
+            return s
 
-    pattern = re.compile( 
-        r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"', 
-        re.DOTALL | re.MULTILINE 
-    ) 
-    return re.sub(pattern, replacer, text) 
+    pattern = re.compile(
+        r'//.*?$|/\*.*?\*/|\'(?:\\.|[^\\\'])*\'|"(?:\\.|[^\\"])*"',
+        re.DOTALL | re.MULTILINE
+    )
+    return re.sub(pattern, replacer, text)
 
 def file_check(name):
 	if name.endswith('.c') or name.endswith('.java') or name.endswith('.cpp'):
@@ -34,7 +34,7 @@ def file_check(name):
 		print name, " file is \t\t", total_line, " lines"
 	return
 
-def file_list(dir): 
+def file_list(dir):
 
 	for name in os.listdir(dir):
 		checkname = name
