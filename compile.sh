@@ -1,6 +1,6 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.2.4
-# Date: 2012.04.12
+# ANYKERNEL compiler script by vadonka v1.2.5
+# Date: 2012.04.16
 #
 # You need to define this below:
 ######################################################
@@ -20,6 +20,8 @@ export kinstsrc=/home/android/android/kernel-installer/source
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 # Compiler
 source compiler.def
+# CCache Dir if used
+export ccache_dir=/home/android/ccache
 ######################################################
 
 # Check executables
@@ -79,6 +81,15 @@ value=$2
 	sed -i "s/$config_oc_orig/$config_oc_enable/g" $kh/.config
 	overclock="1"
 	;;
+	"--ccache")
+	if [ -f /usr/bin/ccache ]; then
+		export USE_CCACHE=1
+		export CCACHE_DIR=$ccache_dir
+	else
+		echo "Warning! ccache binary not found, ccache is disabled"
+		export USE_CCACHE=0
+	fi
+	;;
 	esac
 	shift
 done
@@ -117,6 +128,9 @@ make clean -j $mthd > /dev/null 2>&1
 clear
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
+if [ "$USE_CCACHE" == "1" ]; then
+	echo "CCache is active!"
+fi
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 echo "Kernel version string: $kver"
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
