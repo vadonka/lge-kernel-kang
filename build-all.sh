@@ -3,13 +3,13 @@
 ./initialize.sh vadonka_defconfig
 
 #no overclock with stock battery driver
-./compile.sh
+./compile.sh --gcc 4.7.1
 
 #no overclock with DS battery driver
-./compile.sh --ds
+./compile.sh --ds --gcc 4.7.1
 
 #overclock with stock battery driver
-./compile.sh --oc
+./compile.sh --oc --gcc 4.7.1
 
 #overclock with DS battery driver
-./compile.sh --oc --ds
+./compile.sh --oc --ds --gcc 4.7.1
