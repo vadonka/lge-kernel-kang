@@ -75,13 +75,11 @@ int cpuon_procfile_write(struct file *file, const char *buffer, unsigned long co
 	int temp_cpuon;
 	temp_cpuon = 0;
 
-	if (sscanf(buffer,"%d",&temp_cpuon) < 1) {
+	if ( sscanf(buffer,"%d",&temp_cpuon) < 1 )
 		return procfs_buffer_size_cpuon;
-	}
 
-	if (temp_cpuon < ONMINLOW || temp_cpuon > ONMINHIGH) {
+	if ( temp_cpuon < ONMINLOW || temp_cpuon > ONMINHIGH )
 		return procfs_buffer_size_cpuon;
-	}
 
 	procfs_buffer_size_cpuon = count;
 
@@ -159,13 +157,11 @@ int ddr_procfile_write(struct file *file, const char *buffer, unsigned long coun
 	int temp_ddr2;
 	temp_ddr2 = 0;
 
-	if (sscanf(buffer,"%d",&temp_ddr2) < 1) {
+	if ( sscanf(buffer,"%d",&temp_ddr2) < 1 )
 		return procfs_buffer_size_ddr2;
-	}
 
-	if (temp_ddr2 < DDR2MINLOW || temp_ddr2 > DDR2MINHIGH) {
+	if ( temp_ddr2 < DDR2MINLOW || temp_ddr2 > DDR2MINHIGH )
 		return procfs_buffer_size_ddr2;
-	}
 
 	procfs_buffer_size_ddr2 = count;
 
@@ -243,13 +239,11 @@ int lpddr2_procfile_write(struct file *file, const char *buffer, unsigned long c
 	int temp_lpddr2;
 	temp_lpddr2 = 0;
 
-	if (sscanf(buffer,"%d",&temp_lpddr2) < 1) {
+	if ( sscanf(buffer,"%d",&temp_lpddr2) < 1 )
 		return procfs_buffer_size_lpddr2;
-	}
 
-	if (temp_lpddr2 < LPDDR2MINLOW || temp_lpddr2 > LPDDR2MINHIGH) {
+	if ( temp_lpddr2 < LPDDR2MINLOW || temp_lpddr2 > LPDDR2MINHIGH )
 		return procfs_buffer_size_lpddr2;
-	}
 
 	procfs_buffer_size_lpddr2 = count;
 

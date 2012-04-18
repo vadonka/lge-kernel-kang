@@ -79,13 +79,11 @@ int cpuoff_procfile_write(struct file *file, const char *buffer, unsigned long c
 	int temp_cpuoff;
 	temp_cpuoff = 0;
 
-	if (sscanf(buffer,"%d",&temp_cpuoff) < 1) {
+	if ( sscanf(buffer,"%d",&temp_cpuoff) < 1 )
 		return procfs_buffer_size_cpuoff;
-	}
 
-	if (temp_cpuoff < OFFMAXLOW || temp_cpuoff > OFFMAXHIGH) {
+	if ( temp_cpuoff < OFFMAXLOW || temp_cpuoff > OFFMAXHIGH )
 		return procfs_buffer_size_cpuoff;
-	}
 
 	procfs_buffer_size_cpuoff = count;
 

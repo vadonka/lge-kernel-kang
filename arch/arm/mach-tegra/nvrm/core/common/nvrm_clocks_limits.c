@@ -75,13 +75,11 @@ int gpu_procfile_write(struct file *file, const char *buffer, unsigned long coun
 	int temp_gpu;
 	temp_gpu = 0;
 
-	if (sscanf(buffer,"%d",&temp_gpu) < 1) {
+	if ( sscanf(buffer,"%d",&temp_gpu) < 1 )
 		return procfs_buffer_size_gpu;
-	}
 
-	if (temp_gpu < GPULOW || temp_gpu > GPUHIGH) {
+	if ( temp_gpu < GPULOW || temp_gpu > GPUHIGH )
 		return procfs_buffer_size_gpu;
-	}
 
 	procfs_buffer_size_gpu = count;
 
@@ -159,15 +157,14 @@ int avp_procfile_write(struct file *file, const char *buffer, unsigned long coun
 	int temp_avp;
 	temp_avp = 0;
 
-	if (sscanf(buffer,"%d",&temp_avp) < 1) {
+	if ( sscanf(buffer,"%d",&temp_avp) < 1 )
 		return procfs_buffer_size_avp;
-	}
 
-	if (temp_avp < AVPLOW || temp_avp > AVPHIGH) {
+	if ( temp_avp < AVPLOW || temp_avp > AVPHIGH )
 		return procfs_buffer_size_avp;
-	}
 
 	procfs_buffer_size_avp = count;
+
 	if (procfs_buffer_size_avp > AVP_PROCFS_SIZE) {
 		procfs_buffer_size_avp = AVP_PROCFS_SIZE;
 	}

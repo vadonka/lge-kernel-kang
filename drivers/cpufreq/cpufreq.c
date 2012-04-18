@@ -79,13 +79,11 @@ int maxsm_procfile_write(struct file *file, const char *buffer, unsigned long co
 	int temp_sm;
 	temp_sm = 0;
 
-	if (sscanf(buffer,"%d",&temp_sm) < 1) {
+	if ( sscanf(buffer,"%d",&temp_sm) < 1 )
 		return procfs_buffer_size_sm;
-	}
 
-	if (temp_sm < SMFREQLOW || temp_sm > SMFREQHIGH) {
+	if ( temp_sm < SMFREQLOW || temp_sm > SMFREQHIGH )
 		return procfs_buffer_size_sm;
-	}
 
 	procfs_buffer_size_sm = count;
 
@@ -2203,7 +2201,6 @@ unsigned int oldminclock;
 unsigned int oldmincpu1on;
 unsigned int oldgpufreq;
 unsigned int oldvdefreq;
-unsigned int oldpadms;
 unsigned int oldcoremv;
 unsigned int oldlowcpu;
 unsigned int oldddr2;
@@ -2227,7 +2224,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
-			oldpadms = NVRM_CPU1_OFF_PENDING_MS;
 #endif
 
 #ifdef CONFIG_OTF_GPU
@@ -2259,7 +2255,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			NVRM_CPU1_OFF_PENDING_MS = 500;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2287,7 +2282,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			NVRM_CPU1_OFF_PENDING_MS = 400;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2315,7 +2309,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2343,7 +2336,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2394,7 +2386,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			NVRM_CPU1_OFF_PENDING_MS = 500;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2422,7 +2413,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			NVRM_CPU1_OFF_PENDING_MS = 400;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2450,7 +2440,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			NVRM_CPU1_OFF_PENDING_MS = 200;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2478,7 +2467,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 750000;
-			NVRM_CPU1_OFF_PENDING_MS = 900;
 #endif
 
 #ifdef CONFIG_OTF_AVP
@@ -2506,7 +2494,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 
 #ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
-			NVRM_CPU1_OFF_PENDING_MS = oldpadms;
 #endif
 
 #ifdef CONFIG_OTF_AVP

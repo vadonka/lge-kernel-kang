@@ -17,7 +17,6 @@ unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
 unsigned int OFFMAXLOW = 216000;
 unsigned int OFFMAXHIGH = 1015000;
 /*******************************************/
-unsigned int NVRM_CPU1_OFF_PENDING_MS = 600;
 #endif
 
 #ifdef CONFIG_OTF_AVP
