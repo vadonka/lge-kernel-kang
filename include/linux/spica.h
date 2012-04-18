@@ -16,7 +16,6 @@ extern void resume_prepare_freq(void);
 #ifdef CONFIG_OTF_CPU1
 extern unsigned int NVRM_CPU1_ON_MIN_KHZ;
 extern unsigned int NVRM_CPU1_OFF_MAX_KHZ;
-extern unsigned int NVRM_CPU1_OFF_PENDING_MS;
 #endif
 
 #ifdef CONFIG_OTF_AVP

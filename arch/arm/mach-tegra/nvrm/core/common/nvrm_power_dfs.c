@@ -113,13 +113,11 @@ int pw_procfile_write(struct file *file, const char *buffer, unsigned long count
 	int temp_pw;
 	temp_pw = 0;
 
-	if (sscanf(buffer,"%d",&temp_pw) < 0) {
+	if ( sscanf(buffer,"%d",&temp_pw) < 0 )
 		return procfs_buffer_size_pw;
-	}
 
-	if (temp_pw < 0 || temp_pw > 6) {
+	if ( temp_pw < 0 || temp_pw > 6 )
 		return procfs_buffer_size_pw;
-	}
 
 	procfs_buffer_size_pw = count;
 
@@ -140,13 +138,11 @@ int nitro_procfile_write(struct file *file, const char *buffer, unsigned long co
 	int temp_nitro;
 	temp_nitro = 0;
 
-	if (sscanf(buffer,"%d",&temp_nitro) < 0) {
+	if ( sscanf(buffer,"%d",&temp_nitro) < 0 )
 		return procfs_buffer_size_nitro;
-	}
 
-	if (temp_nitro < 0 || temp_nitro > 1) {
+	if ( temp_nitro < 0 || temp_nitro > 1 )
 		return procfs_buffer_size_nitro;
-	}
 
 	procfs_buffer_size_nitro = count;
 

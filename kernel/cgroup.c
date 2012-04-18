@@ -412,7 +412,7 @@ static void put_css_set(struct css_set *cg)
 	if (!atomic_dec_and_test(&cg->refcount)) {
 		write_unlock(&css_set_lock);
 		return;
-}
+	}
 
 	hlist_del(&cg->hlist);
 	css_set_count--;
@@ -2263,8 +2263,8 @@ static int attach_task_by_pid(struct cgroup *cgrp, u64 pid, bool threadgroup)
 			 */
 			ret = cgroup_allow_attach(cgrp, tsk);
 			if (ret) {
-			rcu_read_unlock();
-			cgroup_unlock();
+				rcu_read_unlock();
+				cgroup_unlock();
 				return ret;
 			}
 		}
@@ -4741,7 +4741,7 @@ void __css_put(struct cgroup_subsys_state *css, int count)
 	rcu_read_lock();
 	val = atomic_sub_return(count, &css->refcnt);
 	if (val == 1) {
-			check_for_release(cgrp);
+		check_for_release(cgrp);
 		cgroup_wakeup_rmdir_waiter(cgrp);
 	}
 	rcu_read_unlock();

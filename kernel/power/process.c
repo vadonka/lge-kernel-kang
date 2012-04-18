@@ -114,16 +114,16 @@ static int try_to_freeze_tasks(bool sig_only)
 		 * but it cleans up leftover PF_FREEZE requests.
 		 */
 		if(wakeup) {
-		printk("\n");
+			printk("\n");
 			printk(KERN_ERR "Freezing of %s aborted\n",
 					sig_only ? "user space " : "tasks ");
 		}
 		else {
 			printk("\n");
 			printk(KERN_ERR "Freezing of tasks failed after %d.%02d seconds "
-		       "(%d tasks refusing to freeze, wq_busy=%d):\n",
-		       elapsed_csecs / 100, elapsed_csecs % 100,
-		       todo - wq_busy, wq_busy);
+			       "(%d tasks refusing to freeze, wq_busy=%d):\n",
+			       elapsed_csecs / 100, elapsed_csecs % 100,
+			       todo - wq_busy, wq_busy);
 		}
 		thaw_workqueues();
 

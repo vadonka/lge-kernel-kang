@@ -76,13 +76,11 @@ int vde_procfile_write(struct file *file, const char *buffer, unsigned long coun
 	int temp_vde;
 	temp_vde = 0;
 
-	if (sscanf(buffer,"%d",&temp_vde) < 1 ) {
+	if ( sscanf(buffer,"%d",&temp_vde) < 1 )
 		return procfs_buffer_size_vde;
-	}
 
-	if (temp_vde < VDELOW || temp_vde > VDEHIGH) {
+	if ( temp_vde < VDELOW || temp_vde > VDEHIGH )
 		return procfs_buffer_size_vde;
-	}
 
 	procfs_buffer_size_vde = count;
 
