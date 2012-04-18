@@ -20,14 +20,20 @@ extern unsigned int NVRM_CPU1_OFF_MAX_KHZ;
 
 #ifdef CONFIG_OTF_AVP
 extern unsigned int AVPFREQ;
+extern unsigned int AVPLOW;
+extern unsigned int AVPHIGH;
 #endif
 
 #ifdef CONFIG_OTF_VDE
 extern unsigned int VDEFREQ;
+extern unsigned int VDELOW;
+extern unsigned int VDEHIGH;
 #endif
 
 #ifdef CONFIG_OTF_GPU
 extern unsigned int GPUFREQ;
+extern unsigned int GPULOW;
+extern unsigned int GPUHIGH;
 #endif
 
 #ifdef CONFIG_OTF_PSNIT
@@ -37,6 +43,8 @@ extern unsigned int NITROONOFF;
 
 #ifdef CONFIG_OTF_MAXSCOFF
 extern unsigned int SCREENOFFFREQ;
+extern unsigned int SMFREQLOW;
+extern unsigned int SMFREQHIGH;
 #endif
 
 #ifdef CONFIG_OTF_DDR2MIN
