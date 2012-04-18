@@ -52,8 +52,6 @@ static struct proc_dir_entry *spica_dir;
 #ifdef CONFIG_OTF_VDE
 #define VDE_PROCFS_NAME "vdefreq"
 #define VDE_PROCFS_SIZE 8
-extern unsigned int VDELOW;
-extern unsigned int VDEHIGH;
 static struct proc_dir_entry *VDE_Proc_File;
 static char procfs_buffer_vde[VDE_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_vde = 0;

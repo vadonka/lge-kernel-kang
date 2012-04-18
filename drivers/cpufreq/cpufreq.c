@@ -58,8 +58,6 @@ extern NvRmDfs *fakeShmoo_Dfs;
 static struct proc_dir_entry *MAXSM_Proc_File;
 static char procfs_buffer_sm[MAXSM_PROCFS_SIZE];
 static unsigned long procfs_buffer_size_sm = 0;
-extern unsigned int SMFREQLOW;
-extern unsigned int SMFREQHIGH;
 
 int maxsm_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
 	int ret;
