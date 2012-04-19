@@ -2,6 +2,11 @@
 
 source variables
 
+if [ ! -f .config ]; then
+	make ARCH=arm CROSS_COMPILE=$cc mrproper
+	make ARCH=arm CROSS_COMPILE=$cc $defconfig
+fi
+
 while [ -n "$*" ]; do
 flag=$1
 	case "$flag" in
