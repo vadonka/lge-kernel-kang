@@ -699,7 +699,7 @@ static inline void set_page_section(struct page *page, unsigned long section)
 	page->flags |= (section & SECTIONS_MASK) << SECTIONS_PGSHIFT;
 }
 
-static inline unsigned long page_to_section(struct page *page)
+static inline unsigned long page_to_section(const struct page *page)
 {
 	return (page->flags >> SECTIONS_PGSHIFT) & SECTIONS_MASK;
 }
@@ -751,7 +751,7 @@ static __always_inline void *lowmem_page_address(struct page *page)
 #endif
 
 #if defined(HASHED_PAGE_VIRTUAL)
-void *page_address(struct page *page);
+void *page_address(const struct page *page);
 void set_page_address(struct page *page, void *virtual);
 void page_address_init(void);
 #endif
@@ -1280,12 +1280,14 @@ extern void free_area_init_node(int nid, unsigned long * zones_size,
  * CONFIG_ARCH_POPULATES_NODE_MAP
  */
 extern void free_area_init_nodes(unsigned long *max_zone_pfn);
+#ifndef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 extern void add_active_range(unsigned int nid, unsigned long start_pfn,
 					unsigned long end_pfn);
 extern void remove_active_range(unsigned int nid, unsigned long start_pfn,
 					unsigned long end_pfn);
 extern void remove_all_active_ranges(void);
 void sort_node_map(void);
+#endif
 unsigned long __absent_pages_in_range(int nid, unsigned long start_pfn,
 						unsigned long end_pfn);
 extern unsigned long absent_pages_in_range(unsigned long start_pfn,
@@ -1331,7 +1333,8 @@ extern void si_meminfo(struct sysinfo * val);
 extern void si_meminfo_node(struct sysinfo *val, int nid);
 extern int after_bootmem;
 
-extern void warn_alloc_failed(gfp_t gfp_mask, int order, const char *fmt, ...);
+extern __printf(3, 4)
+void warn_alloc_failed(gfp_t gfp_mask, int order, const char *fmt, ...);
 
 extern void setup_per_cpu_pageset(void);
 
@@ -1432,8 +1435,10 @@ int write_one_page(struct page *page, int wait);
 void task_dirty_inc(struct task_struct *tsk);
 
 /* readahead.c */
-#define VM_MAX_READAHEAD	1024	/* kbytes */
-#define VM_MIN_READAHEAD	32	/* kbytes (includes current page) */
+#define VM_MAX_READAHEAD	768	/* kbytes */
+#define VM_MIN_READAHEAD	16	/* kbytes (includes current page) */
+
+extern unsigned long max_readahead_pages;
 
 int force_page_cache_readahead(struct address_space *mapping, struct file *filp,
 			pgoff_t offset, unsigned long nr_to_read);
