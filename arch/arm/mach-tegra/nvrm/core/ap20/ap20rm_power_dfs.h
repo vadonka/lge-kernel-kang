@@ -247,7 +247,6 @@ extern "C"
  * characterization data
  */
 #ifndef CONFIG_OTF_CPU1
-#include <linux/spica.h>
 #define NVRM_CPU1_ON_MIN_KHZ (0)
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
 #endif /* OTF_CPU1 */
