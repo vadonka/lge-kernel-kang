@@ -252,7 +252,7 @@ extern "C"
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
 #endif /* OTF_CPU1 */
 
-#define NVRM_CPU1_ON_PENDING_MS (1500)
+#define NVRM_CPU1_ON_PENDING_MS (2000)
 #define NVRM_CPU1_OFF_PENDING_MS (1000)
 
 /*

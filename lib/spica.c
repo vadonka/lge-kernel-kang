@@ -5,7 +5,7 @@
 /*******************************************/
 /* CPU1 On Min Khz */
 /* Default value */
-unsigned int NVRM_CPU1_ON_MIN_KHZ = 810000;
+unsigned int NVRM_CPU1_ON_MIN_KHZ = 816000;
 /* Min & Max Limit */
 unsigned int ONMINLOW = 216000;
 unsigned int ONMINHIGH = 1015000;
