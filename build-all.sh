@@ -1,13 +1,13 @@
 #!/bin/bash
 
 #no overclock with stock battery driver
-./compile.sh --gcc 4.7.1 --ccache
+./compile.sh
 
 #no overclock with DS battery driver
-./compile.sh --ds --gcc 4.7.1 --ccache
+./compile.sh --ds
 
 #overclock with stock battery driver
-./compile.sh --oc --gcc 4.7.1 --ccache
+./compile.sh --oc
 
 #overclock with DS battery driver
-./compile.sh --oc --ds --gcc 4.7.1 --ccache
+./compile.sh --oc --ds
