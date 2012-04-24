@@ -1,5 +1,6 @@
 # GCC version: 4.5.4, 4.6.4, 4.7.1
 export gccversion=4.5.4
+export cc=arm-linux-gnueabi-
 
 # Defconfig
 export defconfig=vadonka_defconfig

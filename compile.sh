@@ -41,7 +41,6 @@ else
 fi
 
 # Check .config
-export cc=/home/android/android/android-toolchain-eabi_4.y/$gccversion/bin/arm-eabi-
 if [ ! -f .config ]; then
     make ARCH=arm CROSS_COMPILE=$cc mrproper
     make ARCH=arm CROSS_COMPILE=$cc $defconfig
@@ -121,7 +120,6 @@ else
 fi
 
 export starttime=`date +%s`
-export cc=/home/android/android/android-toolchain-eabi_4.y/$gccversion/bin/arm-eabi-
 make clean -j $mthd > /dev/null 2>&1
 clear
 echo "Kernel home: $kh"
