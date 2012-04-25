@@ -34,6 +34,32 @@
 
 #ifdef CONFIG_OTF_BATTPROT
 #include <linux/spica.h>
+unsigned int oldavp_batt;
+unsigned int oldgpu_batt;
+unsigned int oldvde_batt;
+unsigned int oldsmfreq_batt;
+
+void otf_prot_activate()
+{
+    oldavp_batt = AVPFREQ;
+    oldgpu_batt = GPUFREQ;
+    oldvde_batt = VDEFREQ;
+    oldsmfreq_batt = SCREENOFFFREQ;
+    printk(KERN_ALERT "WARNING: Battery Critical Overheat! Activating protection!\n");
+    AVPFREQ = AVPLOW;
+    GPUFREQ = GPULOW;
+    VDEFREQ = VDELOW;
+    SCREENOFFFREQ = SMFREQLOW;
+}
+
+void otf_prot_deactivate()
+{
+    printk(KERN_INFO "Battery Cold. DeActivating protection.\n");
+    AVPFREQ = oldavp_batt;
+    GPUFREQ = oldgpu_batt;
+    VDEFREQ = oldvde_batt;
+    SCREENOFFFREQ = oldsmfreq_batt;
+}
 #endif
 
 #include "nvcommon.h"
@@ -2072,7 +2098,7 @@ static void charger_control_with_battery_temp(void)
 		{
 			case POWER_SUPPLY_HEALTH_GOOD:
 			{
-				if (batt_dev->batt_temp >= 500)
+				if (batt_dev->batt_temp >= 550)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2082,10 +2108,8 @@ static void charger_control_with_battery_temp(void)
 						batt_dev->charger_setting_chcomp = charging_ic->status;
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
-						// Overheat OTF protection
 #ifdef CONFIG_OTF_BATTPROT
-						PWONOFF = 3;
-						SCREENOFFFREQ = 324000;
+otf_prot_activate();
 #endif
 					}
 				}
@@ -2106,8 +2130,7 @@ static void charger_control_with_battery_temp(void)
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
 #ifdef CONFIG_OTF_BATTPROT
-							PWONOFF = 3;
-							SCREENOFFFREQ = 503000;
+otf_prot_activate();
 #endif
 						}
 					}
@@ -2127,15 +2150,14 @@ static void charger_control_with_battery_temp(void)
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_GOOD;
 #ifdef CONFIG_OTF_BATTPROT
-					PWONOFF = 0;
-					SCREENOFFFREQ = 503000;
+otf_prot_deactivate();
 #endif
 			}
 			break;
 
 			case POWER_SUPPLY_HEALTH_OVERHEAT:
 			{
-				if (batt_dev->batt_temp >= 500)
+				if (batt_dev->batt_temp >= 550)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2146,8 +2168,7 @@ static void charger_control_with_battery_temp(void)
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 #ifdef CONFIG_OTF_BATTPROT
-						PWONOFF = 3;
-						SCREENOFFFREQ = 324000;
+otf_prot_activate();
 #endif
 					}
 				}
@@ -2167,8 +2188,7 @@ static void charger_control_with_battery_temp(void)
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
 #ifdef CONFIG_OTF_BATTPROT
-							PWONOFF = 2;
-							SCREENOFFFREQ = 412000;
+otf_prot_deactivate();
 #endif
 						}
 					}
@@ -2176,15 +2196,14 @@ static void charger_control_with_battery_temp(void)
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
 #ifdef CONFIG_OTF_BATTPROT
-					PWONOFF = 0;
-					SCREENOFFFREQ = 503000;
+otf_prot_activate();
 #endif
 			}
 			break;
 
 			case POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT:
 			{
-				if (batt_dev->batt_temp <= 490)
+				if (batt_dev->batt_temp <= 520)
 				{
 					if ( charging_ic->status != CHG_IC_DEACTIVE_MODE )
 					{
@@ -2200,8 +2219,7 @@ static void charger_control_with_battery_temp(void)
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
 #ifdef CONFIG_OTF_BATTPROT
-							PWONOFF = 2;
-							SCREENOFFFREQ = 412000;
+otf_prot_deactivate();
 #endif
 						}
 					}
@@ -2209,8 +2227,7 @@ static void charger_control_with_battery_temp(void)
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
 #ifdef CONFIG_OTF_BATTPROT
-					PWONOFF = 0;
-					SCREENOFFFREQ = 503000;
+otf_prot_activate();
 #endif
 			}
 			break;
@@ -2232,6 +2249,9 @@ static void charger_control_with_battery_temp(void)
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_deactivate();
+#endif
 						}
 					}
 				}
