@@ -18,7 +18,7 @@
 #include "yaffs_getblockinfo.h"
 
 int yaffs_rd_chunk_tags_nand(struct yaffs_dev *dev, int nand_chunk,
-			     u8 * buffer, struct yaffs_ext_tags *tags)
+			     u8 *buffer, struct yaffs_ext_tags *tags)
 {
 	int result;
 	struct yaffs_ext_tags local_tags;
@@ -51,8 +51,8 @@ int yaffs_rd_chunk_tags_nand(struct yaffs_dev *dev, int nand_chunk,
 }
 
 int yaffs_wr_chunk_tags_nand(struct yaffs_dev *dev,
-			     int nand_chunk,
-			     const u8 * buffer, struct yaffs_ext_tags *tags)
+				int nand_chunk,
+				const u8 *buffer, struct yaffs_ext_tags *tags)
 {
 
 	dev->n_page_writes++;
@@ -94,7 +94,7 @@ int yaffs_mark_bad(struct yaffs_dev *dev, int block_no)
 int yaffs_query_init_block_state(struct yaffs_dev *dev,
 				 int block_no,
 				 enum yaffs_block_state *state,
-				 u32 * seq_number)
+				 u32 *seq_number)
 {
 	block_no -= dev->block_offset;
 

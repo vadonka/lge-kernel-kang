@@ -29,7 +29,7 @@
 
 #include "yportenv.h"
 
-static int nval_find(const char *xb, int xb_size, const YCHAR * name,
+static int nval_find(const char *xb, int xb_size, const YCHAR *name,
 		     int *exist_size)
 {
 	int pos = 0;
@@ -70,7 +70,7 @@ static int nval_used(const char *xb, int xb_size)
 	return pos;
 }
 
-int nval_del(char *xb, int xb_size, const YCHAR * name)
+int nval_del(char *xb, int xb_size, const YCHAR *name)
 {
 	int pos = nval_find(xb, xb_size, name, NULL);
 	int size;
@@ -168,8 +168,10 @@ int nval_list(const char *xb, int xb_size, char *buf, int bsize)
 	int filled = 0;
 
 	memcpy(&size, xb + pos, sizeof(int));
-	while (size > sizeof(int) && size <= xb_size && (pos + size) < xb_size
-	       && !filled) {
+	while (size > sizeof(int) &&
+		size <= xb_size &&
+		(pos + size) < xb_size &&
+		!filled) {
 		pos += sizeof(int);
 		size -= sizeof(int);
 		name_len = strnlen((YCHAR *) (xb + pos), size);

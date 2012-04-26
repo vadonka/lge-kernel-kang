@@ -38,8 +38,8 @@
 #define EXTRA_OBJECT_TYPE_SHIFT (28)
 #define EXTRA_OBJECT_TYPE_MASK  ((0x0F) << EXTRA_OBJECT_TYPE_SHIFT)
 
-static void yaffs_dump_packed_tags2_tags_only(const struct
-					      yaffs_packed_tags2_tags_only *ptt)
+static void yaffs_dump_packed_tags2_tags_only(
+				const struct yaffs_packed_tags2_tags_only *ptt)
 {
 	yaffs_trace(YAFFS_TRACE_MTD,
 		"packed tags obj %d chunk %d byte %d seq %d",
@@ -100,9 +100,8 @@ void yaffs_pack_tags2(struct yaffs_packed_tags2 *pt,
 
 	if (tags_ecc)
 		yaffs_ecc_calc_other((unsigned char *)&pt->t,
-				     sizeof(struct
-					    yaffs_packed_tags2_tags_only),
-				     &pt->ecc);
+				    sizeof(struct yaffs_packed_tags2_tags_only),
+				    &pt->ecc);
 }
 
 void yaffs_unpack_tags2_tags_only(struct yaffs_ext_tags *t,
@@ -164,14 +163,12 @@ void yaffs_unpack_tags2(struct yaffs_ext_tags *t, struct yaffs_packed_tags2 *pt,
 		struct yaffs_ecc_other ecc;
 		int result;
 		yaffs_ecc_calc_other((unsigned char *)&pt->t,
-				     sizeof(struct
-					    yaffs_packed_tags2_tags_only),
-				     &ecc);
+				sizeof(struct yaffs_packed_tags2_tags_only),
+				&ecc);
 		result =
 		    yaffs_ecc_correct_other((unsigned char *)&pt->t,
-					    sizeof(struct
-						   yaffs_packed_tags2_tags_only),
-					    &pt->ecc, &ecc);
+				sizeof(struct yaffs_packed_tags2_tags_only),
+				&pt->ecc, &ecc);
 		switch (result) {
 		case 0:
 			ecc_result = YAFFS_ECC_RESULT_NO_ERROR;

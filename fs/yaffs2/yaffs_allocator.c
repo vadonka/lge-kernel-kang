@@ -188,7 +188,7 @@ static int yaffs_create_tnodes(struct yaffs_dev *dev, int n_tnodes)
 		allocator->alloc_tnode_list = tnl;
 	}
 
-	yaffs_trace(YAFFS_TRACE_ALLOCATE,"Tnodes added");
+	yaffs_trace(YAFFS_TRACE_ALLOCATE, "Tnodes added");
 
 	return YAFFS_OK;
 }
