@@ -70,7 +70,7 @@ static void twd_set_mode(enum clock_event_mode mode,
 
 	twd_locked(
 		ctrl |= (twd_prescaler << TWD_TIMER_CONTROL_PRESCALER_LSB);
-	__raw_writel(ctrl, twd_base + TWD_TIMER_CONTROL);
+		__raw_writel(ctrl, twd_base + TWD_TIMER_CONTROL);
 	);
 }
 
@@ -84,10 +84,10 @@ static int twd_set_next_event(unsigned long evt,
 		ctrl &= ~(TWD_TIMER_CONTROL_PRESCALER_FIELD);
 		ctrl |= (twd_prescaler << TWD_TIMER_CONTROL_PRESCALER_LSB);
 
-	ctrl |= TWD_TIMER_CONTROL_ENABLE;
+		ctrl |= TWD_TIMER_CONTROL_ENABLE;
 
-	__raw_writel(evt, twd_base + TWD_TIMER_COUNTER);
-	__raw_writel(ctrl, twd_base + TWD_TIMER_CONTROL);
+		__raw_writel(evt, twd_base + TWD_TIMER_COUNTER);
+		__raw_writel(ctrl, twd_base + TWD_TIMER_CONTROL);
 	);
 
 	return 0;
