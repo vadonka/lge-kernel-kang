@@ -22,10 +22,10 @@ static void yaffs_handle_rd_data_error(struct yaffs_dev *dev, int nand_chunk);
 
 /********** Tags ECC calculations  *********/
 
-void yaffs_calc_ecc(const u8 * data, struct yaffs_spare *spare)
+void yaffs_calc_ecc(const u8 *data, struct yaffs_spare *spare)
 {
-	yaffs_ecc_cacl(data, spare->ecc1);
-	yaffs_ecc_cacl(&data[256], spare->ecc2);
+	yaffs_ecc_calc(data, spare->ecc1);
+	yaffs_ecc_calc(&data[256], spare->ecc2);
 }
 
 void yaffs_calc_tags_ecc(struct yaffs_tags *tags)
@@ -128,7 +128,7 @@ static void yaffs_spare_init(struct yaffs_spare *spare)
 }
 
 static int yaffs_wr_nand(struct yaffs_dev *dev,
-			 int nand_chunk, const u8 * data,
+			 int nand_chunk, const u8 *data,
 			 struct yaffs_spare *spare)
 {
 	if (nand_chunk < dev->param.start_block * dev->param.chunks_per_block) {
@@ -143,7 +143,7 @@ static int yaffs_wr_nand(struct yaffs_dev *dev,
 
 static int yaffs_rd_chunk_nand(struct yaffs_dev *dev,
 			       int nand_chunk,
-			       u8 * data,
+			       u8 *data,
 			       struct yaffs_spare *spare,
 			       enum yaffs_ecc_result *ecc_result,
 			       int correct_errors)
@@ -166,10 +166,10 @@ static int yaffs_rd_chunk_nand(struct yaffs_dev *dev,
 			int ecc_result1, ecc_result2;
 			u8 calc_ecc[3];
 
-			yaffs_ecc_cacl(data, calc_ecc);
+			yaffs_ecc_calc(data, calc_ecc);
 			ecc_result1 =
 			    yaffs_ecc_correct(data, spare->ecc1, calc_ecc);
-			yaffs_ecc_cacl(&data[256], calc_ecc);
+			yaffs_ecc_calc(&data[256], calc_ecc);
 			ecc_result2 =
 			    yaffs_ecc_correct(&data[256], spare->ecc2,
 					      calc_ecc);
@@ -268,9 +268,8 @@ static void yaffs_handle_rd_data_error(struct yaffs_dev *dev, int nand_chunk)
 	int flash_block = nand_chunk / dev->param.chunks_per_block;
 
 	/* Mark the block for retirement */
-	yaffs_get_block_info(dev,
-			     flash_block + dev->block_offset)->needs_retiring =
-	    1;
+	yaffs_get_block_info(dev, flash_block + dev->block_offset)->
+		needs_retiring = 1;
 	yaffs_trace(YAFFS_TRACE_ERROR | YAFFS_TRACE_BAD_BLOCKS,
 		"**>>Block %d marked for retirement",
 		flash_block);
@@ -284,7 +283,7 @@ static void yaffs_handle_rd_data_error(struct yaffs_dev *dev, int nand_chunk)
 
 int yaffs_tags_compat_wr(struct yaffs_dev *dev,
 			 int nand_chunk,
-			 const u8 * data, const struct yaffs_ext_tags *ext_tags)
+			 const u8 *data, const struct yaffs_ext_tags *ext_tags)
 {
 	struct yaffs_spare spare;
 	struct yaffs_tags tags;
@@ -318,7 +317,7 @@ int yaffs_tags_compat_wr(struct yaffs_dev *dev,
 
 int yaffs_tags_compat_rd(struct yaffs_dev *dev,
 			 int nand_chunk,
-			 u8 * data, struct yaffs_ext_tags *ext_tags)
+			 u8 *data, struct yaffs_ext_tags *ext_tags)
 {
 
 	struct yaffs_spare spare;
@@ -391,7 +390,7 @@ int yaffs_tags_compat_mark_bad(struct yaffs_dev *dev, int flash_block)
 int yaffs_tags_compat_query_block(struct yaffs_dev *dev,
 				  int block_no,
 				  enum yaffs_block_state *state,
-				  u32 * seq_number)
+				  u32 *seq_number)
 {
 
 	struct yaffs_spare spare0, spare1;

@@ -44,7 +44,7 @@ static int yaffs_checkpt_erase(struct yaffs_dev *dev)
 
 			if (dev->param.
 			    erase_fn(dev,
-				     i - dev->block_offset /* realign */ )) {
+				     i - dev->block_offset /* realign */)) {
 				bi->block_state = YAFFS_BLOCK_STATE_EMPTY;
 				dev->n_erased_blocks++;
 				dev->n_free_chunks +=
@@ -65,6 +65,7 @@ static void yaffs2_checkpt_find_erased_block(struct yaffs_dev *dev)
 {
 	int i;
 	int blocks_avail = dev->n_erased_blocks - dev->param.n_reserved_blocks;
+
 	yaffs_trace(YAFFS_TRACE_CHECKPOINT,
 		"allocating checkpt block: erased %d reserved %d avail %d next %d ",
 		dev->n_erased_blocks, dev->param.n_reserved_blocks,
@@ -136,7 +137,6 @@ static void yaffs2_checkpt_find_block(struct yaffs_dev *dev)
 
 int yaffs2_checkpt_open(struct yaffs_dev *dev, int writing)
 {
-
 	dev->checkpt_open_write = writing;
 
 	/* Got the functions we need? */
@@ -257,7 +257,6 @@ int yaffs2_checkpt_wr(struct yaffs_dev *dev, const void *data, int n_bytes)
 {
 	int i = 0;
 	int ok = 1;
-
 	u8 *data_bytes = (u8 *) data;
 
 	if (!dev->checkpt_buffer)
@@ -289,10 +288,8 @@ int yaffs2_checkpt_rd(struct yaffs_dev *dev, void *data, int n_bytes)
 	int i = 0;
 	int ok = 1;
 	struct yaffs_ext_tags tags;
-
 	int chunk;
 	int realigned_chunk;
-
 	u8 *data_bytes = (u8 *) data;
 
 	if (!dev->checkpt_buffer)
@@ -387,10 +384,10 @@ int yaffs_checkpt_close(struct yaffs_dev *dev)
 	}
 
 	dev->n_free_chunks -=
-	    dev->blocks_in_checkpt * dev->param.chunks_per_block;
+		dev->blocks_in_checkpt * dev->param.chunks_per_block;
 	dev->n_erased_blocks -= dev->blocks_in_checkpt;
 
-	yaffs_trace(YAFFS_TRACE_CHECKPOINT,"checkpoint byte count %d",
+	yaffs_trace(YAFFS_TRACE_CHECKPOINT, "checkpoint byte count %d",
 		dev->checkpt_byte_count);
 
 	if (dev->checkpt_buffer) {
@@ -400,7 +397,7 @@ int yaffs_checkpt_close(struct yaffs_dev *dev)
 		return 1;
 	} else {
 		return 0;
-        }
+	}
 }
 
 int yaffs2_checkpt_invalidate_stream(struct yaffs_dev *dev)
