@@ -226,7 +226,7 @@ typedef enum {
 
 //20100609, , Charger Code [START]
 typedef enum {
-	CHG_IC_DEFAULT_MODE=0,    		/* 0  */
+	CHG_IC_DEFAULT_MODE=0,			/* 0  */
 	CHG_IC_TA_MODE,
 	CHG_IC_USB_LO_MODE,
 	CHG_IC_FACTORY_MODE,
@@ -454,11 +454,11 @@ struct star_batt_test_reg {
 #define STAR_BATT_TEST_REG(_name, _code) { .name = _name, .code = _code}
 
 static struct star_batt_test_reg star_batt_test_regs[] = {
-	STAR_BATT_TEST_REG("TestMode",  	 BATT_TEST_MODE),
-	STAR_BATT_TEST_REG("TestCapacity",    BATT_TEST_CAPACITY),
-	STAR_BATT_TEST_REG("TestVoltage",    BATT_TEST_VOLT),
-	STAR_BATT_TEST_REG("TestTemperature", BATT_TEST_TEMP),
-	STAR_BATT_TEST_REG("TestPresent", BATT_TEST_PRESENT),
+	STAR_BATT_TEST_REG("TestMode",		BATT_TEST_MODE),
+	STAR_BATT_TEST_REG("TestCapacity",	BATT_TEST_CAPACITY),
+	STAR_BATT_TEST_REG("TestVoltage",	BATT_TEST_VOLT),
+	STAR_BATT_TEST_REG("TestTemperature",	BATT_TEST_TEMP),
+	STAR_BATT_TEST_REG("TestPresent",	BATT_TEST_PRESENT),
 };
 
 static int star_battery_debug_set(void *data, u64 val)
@@ -2173,7 +2173,7 @@ static ssize_t star_at_charge_store_property(
 
 static struct device_attribute star_at_charge_attr = {
 	.attr = { .name = "at_charge", .mode = S_IRUGO | S_IWUGO,
-			  /* .owner = THIS_MODULE */ },
+			/* .owner = THIS_MODULE */ },
 	.show = star_at_charge_show_property,
 	.store = star_at_charge_store_property,
 };
@@ -2238,7 +2238,7 @@ static ssize_t star_at_chcomp_store_property(
 
 static struct device_attribute star_at_chcomp_attr = {
 	.attr = { .name = "at_chcomp", .mode = S_IRUGO | S_IWUGO,
-			  /* .owner = THIS_MODULE */ },
+			/* .owner = THIS_MODULE */ },
 	.show = star_at_chcomp_show_property,
 	.store = star_at_chcomp_store_property,
 };
