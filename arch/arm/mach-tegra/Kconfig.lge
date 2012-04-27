@@ -95,6 +95,10 @@ config OTF_PSNIT
 	bool "OTF Extra: PowerSave & Nitro feature"
 	default y
 
+config OTF_BATTPROT
+	bool "OTF Extra: Battery Overheat Protection"
+	default y
+
 endif # SPICA_OTF
 
 if LPRINTK
