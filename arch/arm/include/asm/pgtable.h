@@ -309,6 +309,7 @@ extern pgd_t swapper_pg_dir[PTRS_PER_PGD];
 
 /* Find an entry in the second-level page table.. */
 #define pmd_offset(dir, addr)	((pmd_t *)(dir))
+
 #define pmd_none(pmd)		(!pmd_val(pmd))
 #define pmd_present(pmd)	(pmd_val(pmd))
 #define pmd_bad(pmd)		(pmd_val(pmd) & 2)
