@@ -34,6 +34,36 @@
 #include <linux/time.h>
 #include <linux/rtc.h>
 
+#ifdef CONFIG_OTF_BATTPROT
+#include <linux/spica.h>
+unsigned int oldavp_batt;
+unsigned int oldgpu_batt;
+unsigned int oldvde_batt;
+unsigned int oldsmfreq_batt;
+
+void otf_prot_activate()
+{
+    oldavp_batt = AVPFREQ;
+    oldgpu_batt = GPUFREQ;
+    oldvde_batt = VDEFREQ;
+    oldsmfreq_batt = SCREENOFFFREQ;
+    printk(KERN_ALERT "WARNING: Battery Critical Overheat! Activating protection!\n");
+    AVPFREQ = AVPLOW;
+    GPUFREQ = GPULOW;
+    VDEFREQ = VDELOW;
+    SCREENOFFFREQ = SMFREQLOW;
+}
+
+void otf_prot_deactivate()
+{
+    printk(KERN_INFO "Battery Cold. DeActivating protection.\n");
+    AVPFREQ = oldavp_batt;
+    GPUFREQ = oldgpu_batt;
+    VDEFREQ = oldvde_batt;
+    SCREENOFFFREQ = oldsmfreq_batt;
+}
+#endif
+
 #include "nvcommon.h"
 #include "nvos.h"
 #include "nvrm_pmu.h"
@@ -394,6 +424,7 @@ typedef struct tegra_battery_dev {
 	//20100824, , get capacity using battery voltage for demo [END]
 	//NvU32	BatteryLifeTime;
 	//NvU32	BatteryMahConsumed;
+
 	NvU32	ACLineStatus;
 	NvU32	battery_poll_interval;
 	NvBool	present;
@@ -401,6 +432,7 @@ typedef struct tegra_battery_dev {
 	at_comm_status	at_comm_want;
 	NvBool	at_comm_ready;
 #endif // STAR_BATTERY_AT_COMMAND
+
 	NvU32	old_alarm_sec;
 	NvU32	old_checkbat_sec;
 	NvU32	last_cbc_time;
@@ -2265,6 +2297,9 @@ static void charger_control_with_battery_temp(void)
 						batt_dev->charger_setting_chcomp = charging_ic->status;
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_activate();
+#endif
 					}
 				}
 				else if ((batt_dev->batt_temp >= 450) && (batt_dev->batt_temp < 550))
@@ -2283,6 +2318,9 @@ static void charger_control_with_battery_temp(void)
 							batt_dev->charger_setting_chcomp = charging_ic->status;
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_activate();
+#endif
 						}
 					}
 				}
@@ -2300,6 +2338,9 @@ static void charger_control_with_battery_temp(void)
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_GOOD;
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_deactivate();
+#endif
 			}
 			break;
 
@@ -2315,6 +2356,9 @@ static void charger_control_with_battery_temp(void)
 						batt_dev->charger_setting_chcomp = charging_ic->status;
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_activate();
+#endif
 					}
 				}
 				else if (batt_dev->batt_temp <= 420)
@@ -2332,11 +2376,17 @@ static void charger_control_with_battery_temp(void)
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_deactivate();
+#endif
 						}
 					}
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_activate();
+#endif
 			}
 			break;
 
@@ -2357,11 +2407,17 @@ static void charger_control_with_battery_temp(void)
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_deactivate();
+#endif
 						}
 					}
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_activate();
+#endif
 			}
 			break;
 
@@ -2382,6 +2438,9 @@ static void charger_control_with_battery_temp(void)
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
+#ifdef CONFIG_OTF_BATTPROT
+otf_prot_deactivate();
+#endif
 						}
 					}
 				}
