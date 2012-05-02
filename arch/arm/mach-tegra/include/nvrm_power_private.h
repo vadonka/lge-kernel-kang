@@ -663,6 +663,10 @@ void NvRmPrivBusyHintPrintf(
     const NvRmDfsBusyHint* pMultiHint,
     NvU32 NumHints);
 
+/* sys_sync lock up issue */
+void NvRmPrivDfsStopAtNominalBeforeSync(void);
+void NvRmPrivDfsRunAfterSync(void);
+
 #ifdef __cplusplus
 }
 #endif  /* __cplusplus */
