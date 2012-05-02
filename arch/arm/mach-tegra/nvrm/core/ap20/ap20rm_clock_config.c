@@ -42,6 +42,13 @@
 #include "ap15/ap15rm_private.h"
 #include "nvodm_query.h"
 
+extern unsigned int cpu_overclock;
+#if cpu_overclock == 1
+#define USE_FAKE_SHMOO
+#else
+#undef USE_FAKE_SHMOO
+#endif
+
 /* Spica OTF start */
 #ifdef CONFIG_SPICA_OTF
 
@@ -1304,7 +1311,7 @@ Ap20SystemClockSourceFind(
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &M1KHz);
 #else
-#ifdef CONFIG_FAKE_SHMOO
+#ifdef USE_FAKE_SHMOO
         C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, 700000, MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, 700000, MaxKHz, &M1KHz);
@@ -1312,7 +1319,7 @@ Ap20SystemClockSourceFind(
         C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0), MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0), MaxKHz, &M1KHz);
-#endif /* FAKE_SHMOO */
+#endif /* USE_FAKE_SHMOO */
 #endif /* OTF_VDE */
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);

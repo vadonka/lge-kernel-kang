@@ -41,6 +41,13 @@
 #include "ap15/ap15rm_private.h"
 #include "ap15/project_relocation_table.h"
 
+extern unsigned int cpu_overclock;
+#if cpu_overclock == 1
+#define USE_FAKE_SHMOO
+#else
+#undef USE_FAKE_SHMOO
+#endif
+
 /* Spica OTF Start */
 #ifdef CONFIG_SPICA_OTF
 
@@ -208,7 +215,7 @@ module_exit(cleanup_avp_procsfs);
 #endif /* OTF_AVP */
 #endif /* SPICA_OTF */
 
-#ifdef CONFIG_FAKE_SHMOO
+#ifdef USE_FAKE_SHMOO
 #include <linux/kernel.h>
 /**********************************************************************************************
  * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
@@ -281,7 +288,7 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
 	}
 };
 
-#endif // CONFIG_FAKE_SHMOO
+#endif // USE_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \
          (s_ChipFlavor.pSocShmoo->ShmooVoltages[(step)])
@@ -371,7 +378,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     NvRmPrivChipFlavorInit(hRmDevice);
     pShmoo = s_ChipFlavor.pSocShmoo;
     pHwLimits = &pShmoo->ScaledLimitsList[0];
-#ifndef CONFIG_FAKE_SHMOO
+#ifndef USE_FAKE_SHMOO
     pSKUedLimits = pShmoo->pSKUedLimits;
 #else
     pSKUedLimits = pShmoo->pSKUedLimits;
@@ -386,7 +393,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
 #endif // CONFIG_BOOST_PERIPHERALS
 #endif // CONFIG_SPICA_OTF
-#endif // CONFIG_FAKE_SHMOO
+#endif // USE_FAKE_SHMOO
 
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
@@ -652,7 +659,7 @@ NvRmPrivModuleVscaleGetMV(
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
     {
-#ifdef CONFIG_FAKE_SHMOO
+#ifdef USE_FAKE_SHMOO
         for (i = 0; i < fake_CpuShmoo.ShmooVmaxIndex; i++)
         {
             if (FreqKHz <= pScale[i])
@@ -688,7 +695,7 @@ NvRmPrivModuleVscaleGetMaxKHzList(
 
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
-#ifdef CONFIG_FAKE_SHMOO
+#ifdef USE_FAKE_SHMOO
         *pListSize = fake_CpuShmoo.ShmooVmaxIndex + 1;
 #else
         *pListSize = s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex + 1;
@@ -1175,7 +1182,7 @@ static NvError NvRmBootArgChipShmooGet(
         // Shmoo data for dedicated CPU domain
         pChipFlavor->pCpuShmoo = &s_CpuShmoo;
 
-#ifdef CONFIG_FAKE_SHMOO
+#ifdef USE_FAKE_SHMOO
         s_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
         s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
         s_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
