@@ -257,9 +257,9 @@ NvU32 FakeShmooVoltages[] = {
 	880,
 	900,
 	930,
-	1020,
-	1155,
-	1255,
+	1030,
+	1200,
+	1300,
 };
 
 #define MAX_CPU_OC_FREQ 1408000
