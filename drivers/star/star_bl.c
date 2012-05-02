@@ -308,7 +308,12 @@ static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
     {0x0E,0x73},  /* SNSR_LIN_LOG=linear, ALSOUT_LIN_LOG=log, RSET=16k~64k,
                                    * GAIN=low, GM=man gain, ALS_EN=on */
     {0x0F,0x01},  /* SBIAS=3.0V, SBIAS=on */
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-07-25, adjust polling time to 2 secs
+#if 0
     {0x10,0x90},  /* pwm inactive, auto polling, 1sec, +0% */
+#endif
+    {0x10,0xB0},  /* pwm inactive, auto polling, 2sec, +0% */
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-07-25, adjust polling time to 2 secs
     {0x00,0xFF},  /* Channel Enable : ALL */
     {0xFF,0xFE}   /* end or command */
 };
