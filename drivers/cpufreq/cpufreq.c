@@ -32,14 +32,7 @@
 
 #include <trace/events/power.h>
 
-extern unsigned int cpu_overclock;
-#if cpu_overclock == 1
-#define USE_FAKE_SHMOO
-#else
-#undef USE_FAKE_SHMOO
-#endif
-
-#ifdef USE_FAKE_SHMOO
+#ifdef CONFIG_FAKE_SHMOO
 #include "../nvrm/core/common/nvrm_clocks_limits_private.h"
 #include "../nvrm/core/common/nvrm_power_dfs.h"
 #include <nvrm_diag.h>
@@ -53,7 +46,7 @@ int *FakeShmoo_UV_mV_Ptr; /* Stored voltage table from cpufreq sysfs */
 extern NvRmCpuShmoo fake_CpuShmoo;  /* Stored faked CpuShmoo values */
 extern NvRmDfs *fakeShmoo_Dfs;
 
-#endif /* USE_FAKE_SHMOO */
+#endif /* CONFIG_FAKE_SHMOO */
 
 /* Spica OTF Start */
 #ifdef CONFIG_OTF_MAXSCOFF
@@ -767,7 +760,7 @@ static ssize_t show_bios_limit(struct cpufreq_policy *policy, char *buf)
 	return sprintf(buf, "%u\n", policy->cpuinfo.max_freq);
 }
 
-#ifdef USE_FAKE_SHMOO
+#ifdef CONFIG_FAKE_SHMOO
 static ssize_t show_cpu_temp(struct cpufreq_policy *policy, char *buf)
 {
 	int pTemp = 0;
@@ -828,7 +821,7 @@ static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf,
 
 	return count;
 }
-#endif /* USE_FAKE_SHMOO */
+#endif /* CONFIG_FAKE_SHMOO */
 
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
@@ -844,12 +837,12 @@ cpufreq_freq_attr_rw(scaling_min_freq);
 cpufreq_freq_attr_rw(scaling_max_freq);
 cpufreq_freq_attr_rw(scaling_governor);
 cpufreq_freq_attr_rw(scaling_setspeed);
-#ifdef USE_FAKE_SHMOO
+#ifdef CONFIG_FAKE_SHMOO
 cpufreq_freq_attr_ro(cpu_temp);
 cpufreq_freq_attr_ro(frequency_voltage_table);
 cpufreq_freq_attr_ro(scaling_available_frequencies);
 cpufreq_freq_attr_rw(UV_mV_table);
-#endif /* USE_FAKE_SHMOO */
+#endif /* CONFIG_FAKE_SHMOO */
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -863,12 +856,12 @@ static struct attribute *default_attrs[] = {
 	&scaling_driver.attr,
 	&scaling_available_governors.attr,
 	&scaling_setspeed.attr,
-#ifdef USE_FAKE_SHMOO
+#ifdef CONFIG_FAKE_SHMOO
 	&cpu_temp.attr,
 	&frequency_voltage_table.attr,
 	&scaling_available_frequencies.attr,
 	&UV_mV_table.attr,
-#endif /* USE_FAKE_SHMOO */
+#endif /* CONFIG_FAKE_SHMOO */
 	NULL
 };
 
@@ -2540,10 +2533,10 @@ static int __init cpufreq_core_init(void)
 {
 	int cpu;
 
-#ifdef USE_FAKE_SHMOO
+#ifdef CONFIG_FAKE_SHMOO
 	/* Allocate some memory for the voltage tab */
 	FakeShmoo_UV_mV_Ptr = kzalloc(sizeof(int)*(fake_CpuShmoo.ShmooVmaxIndex+1), GFP_KERNEL);
-#endif /* USE_FAKE_SHMOO */
+#endif /* CONFIG_FAKE_SHMOO */
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_policy_cpu, cpu) = -1;
