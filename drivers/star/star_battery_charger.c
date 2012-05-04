@@ -813,12 +813,12 @@ static void star_capacity_from_voltage_via_calculate(void)
 	NvU32	calculate_capacity = 0;
 
 	if ((batt_dev->ACLineStatus == NV_TRUE) && ((batt_dev->charger_state_machine == CHARGER_STATE_RECHARGE) || (batt_dev->charger_state_machine == CHARGER_STATE_CHARGE)))
-		{
+	{
 		if ( batt_dev->batt_vol <= 3828 )
 		{
 			if (  batt_dev->batt_vol < 3656 )
-			calculate_capacity = 1;
-	else
+				calculate_capacity = 1;
+			else
 				calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3655943209)/6239571);
 		}
 		else if (( batt_dev->batt_vol > 3828 ) && ( batt_dev->batt_vol <= 3878 ))
@@ -856,7 +856,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 		if ( batt_dev->batt_vol >= 3970 )
 		{
 			if ( batt_dev->batt_vol >= 4200 )
-			calculate_capacity = 100;
+				calculate_capacity = 100;
 			else
 				calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3223959227)/8766094);
 		}
@@ -883,7 +883,7 @@ static void star_capacity_from_voltage_via_calculate(void)
 		else if ( batt_dev->batt_vol < 3500 )
 		{
 			if (  batt_dev->batt_vol <= 3400 )
-			calculate_capacity = 1;
+				calculate_capacity = 1;
 			else
 				calculate_capacity = (NvU32)((batt_dev->batt_vol*1000000 - 3300357143)/88214286);
 		}
@@ -3274,26 +3274,26 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 
     if (&batt_dev->battery_status_poll_work) 
     {
-	cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
+	  cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
 	  printk("battery_status_poll_work canceled\n");
     }
 	
     if (batt_dev->battery_workqueue)
     {
-	flush_workqueue(batt_dev->battery_workqueue);
-	destroy_workqueue(batt_dev->battery_workqueue);
+	    flush_workqueue(batt_dev->battery_workqueue);
+	    destroy_workqueue(batt_dev->battery_workqueue);
 		printk("battery_workqueue canceled\n");
     }
 
 	if (&(batt_dev->charger_state_read_timer))
 	{
-	del_timer_sync(&(batt_dev->charger_state_read_timer));
+	    del_timer_sync(&(batt_dev->charger_state_read_timer));
 		printk("harger_state_read_timer deleted\n");
 	}	
 
 	if (&(batt_dev->battery_gauge_timer))
 	{
-	del_timer_sync(&(batt_dev->battery_gauge_timer));
+	   del_timer_sync(&(batt_dev->battery_gauge_timer));
 	   printk("battery_gauge_timer deleted\n");
 	}
 #endif
