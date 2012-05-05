@@ -34,36 +34,6 @@
 #include <linux/time.h>
 #include <linux/rtc.h>
 
-#ifdef CONFIG_OTF_BATTPROT
-#include <linux/spica.h>
-unsigned int oldavp_batt;
-unsigned int oldgpu_batt;
-unsigned int oldvde_batt;
-unsigned int oldsmfreq_batt;
-
-void otf_prot_activate()
-{
-    oldavp_batt = AVPFREQ;
-    oldgpu_batt = GPUFREQ;
-    oldvde_batt = VDEFREQ;
-    oldsmfreq_batt = SCREENOFFFREQ;
-    printk(KERN_ALERT "WARNING: Battery Critical Overheat! Activating protection!\n");
-    AVPFREQ = AVPLOW;
-    GPUFREQ = GPULOW;
-    VDEFREQ = VDELOW;
-    SCREENOFFFREQ = SMFREQLOW;
-}
-
-void otf_prot_deactivate()
-{
-    printk(KERN_INFO "Battery Cold. DeActivating protection.\n");
-    AVPFREQ = oldavp_batt;
-    GPUFREQ = oldgpu_batt;
-    VDEFREQ = oldvde_batt;
-    SCREENOFFFREQ = oldsmfreq_batt;
-}
-#endif
-
 #include "nvcommon.h"
 #include "nvos.h"
 #include "nvrm_pmu.h"
@@ -139,6 +109,16 @@ void otf_prot_deactivate()
 #define STAR_VOLT_UNIT 1000
 #else
 #define STAR_VOLT_UNIT 1
+#endif
+
+#if 0
+#define STAR_TEMPERATURE_CRITICAL_OVERHEAT	550
+#define STAR_TEMPERATURE_OVERHEAT		520
+#define STAR_TEMPERATURE_TO_USB_500	450
+#else
+#define STAR_TEMPERATURE_CRITICAL_OVERHEAT	460
+#define STAR_TEMPERATURE_OVERHEAT	450
+#define STAR_TEMPERATURE_TO_USB_500	400
 #endif
 
 typedef enum {
@@ -2231,7 +2211,7 @@ static void charger_control_with_battery_temp(void)
 		{
 			case POWER_SUPPLY_HEALTH_GOOD:
 			{
-				if (batt_dev->batt_temp >= 550)
+				if (batt_dev->batt_temp >= STAR_TEMPERATURE_CRITICAL_OVERHEAT)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2241,12 +2221,9 @@ static void charger_control_with_battery_temp(void)
 						batt_dev->charger_setting_chcomp = charging_ic->status;
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_activate();
-#endif
 					}
 				}
-				else if ((batt_dev->batt_temp >= 450) && (batt_dev->batt_temp < 550))
+				else if (batt_dev->batt_temp >= STAR_TEMPERATURE_TO_USB_500)
 				{
 					// Change Charger Setting : Battery Overheat, USB_500 mode
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
@@ -2262,9 +2239,6 @@ otf_prot_activate();
 							batt_dev->charger_setting_chcomp = charging_ic->status;
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_activate();
-#endif
 						}
 					}
 				}
@@ -2282,15 +2256,12 @@ otf_prot_activate();
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_GOOD;
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_deactivate();
-#endif
 			}
 			break;
 
 			case POWER_SUPPLY_HEALTH_OVERHEAT:
 			{
-				if (batt_dev->batt_temp >= 550)
+				if (batt_dev->batt_temp >= STAR_TEMPERATURE_CRITICAL_OVERHEAT)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2300,9 +2271,6 @@ otf_prot_deactivate();
 						batt_dev->charger_setting_chcomp = charging_ic->status;
 						charging_ic_deactive_for_rechrge();
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_activate();
-#endif
 					}
 				}
 				else if (batt_dev->batt_temp <= 420)
@@ -2320,23 +2288,17 @@ otf_prot_activate();
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_deactivate();
-#endif
 						}
 					}
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_activate();
-#endif
 			}
 			break;
 
 			case POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT:
 			{
-				if (batt_dev->batt_temp <= 520)
+				if (batt_dev->batt_temp <= STAR_TEMPERATURE_OVERHEAT)
 				{
 					if ( charging_ic->status != CHG_IC_DEACTIVE_MODE )
 					{
@@ -2351,17 +2313,11 @@ otf_prot_activate();
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(CHG_IC_DEFAULT_MODE);
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_deactivate();
-#endif
 						}
 					}
 				}
 				else
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_activate();
-#endif
 			}
 			break;
 
@@ -2382,9 +2338,6 @@ otf_prot_activate();
 						{
 							batt_dev->charger_state_machine = CHARGER_STATE_CHARGE;
 							charging_ic_active_for_recharge(batt_dev->charger_setting_chcomp);
-#ifdef CONFIG_OTF_BATTPROT
-otf_prot_deactivate();
-#endif
 						}
 					}
 				}
