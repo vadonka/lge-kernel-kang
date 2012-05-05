@@ -42,7 +42,7 @@ unsigned int GPUHIGH = 350000;
 #ifdef CONFIG_OTF_VDE
 /*******************************************/
 /* Default VDE Freq */
-unsigned int VDEFREQ = 680000;
+unsigned int VDEFREQ = 650000;
 /* Min & Max Limit */
 unsigned int VDELOW = 500000;
 unsigned int VDEHIGH = 700000;
