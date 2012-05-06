@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.32.59
-# Mon Jul 23 12:19:24 2012
+# Mon Jul 23 13:31:46 2012
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -917,6 +917,7 @@ CONFIG_LBEE9QMB_RFKILL=y
 # CONFIG_EEPROM_MAX6875 is not set
 # CONFIG_EEPROM_93CX6 is not set
 # CONFIG_BLX is not set
+CONFIG_VIBRATOR_CONTROL=y
 CONFIG_HAVE_IDE=y
 # CONFIG_IDE is not set
 

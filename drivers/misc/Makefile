@@ -32,3 +32,4 @@ obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_TSPDRV)		+= tspdrv/
 obj-$(CONFIG_BLX)		+= blx.o
 obj-y				+= otf/
+obj-$(CONFIG_VIBRATOR_CONTROL)  += vibrator_control.o
