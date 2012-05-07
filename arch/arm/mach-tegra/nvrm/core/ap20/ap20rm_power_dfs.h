@@ -267,8 +267,8 @@ extern "C"
  * ODM should also set a critical threshold to trigger h/w shutdown
  * mechanism.
  */
-#define NVRM_DTT_DEGREES_HIGH           (90L)
-#define NVRM_DTT_DEGREES_LOW            (60L)
+#define NVRM_DTT_DEGREES_HIGH           (95L)
+#define NVRM_DTT_DEGREES_LOW            (65L)
 #define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
@@ -280,7 +280,7 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
-#define NVRM_AP20_LOW_CORE_MV (950)
+#define NVRM_AP20_LOW_CORE_MV (900)
 #define NVRM_AP20_LOW_CPU_MV (750)
 /// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)

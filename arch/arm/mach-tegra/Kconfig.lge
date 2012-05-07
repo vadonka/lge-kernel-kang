@@ -22,6 +22,49 @@ menuconfig LPRINTK
         bool "LGE Debugging Message"
         depends on MACH_STAR && DEBUG_FS
 
+config FAKE_SHMOO
+	bool "Tegra2 Overclocking Enable"
+	depends on MACH_STAR
+	default y
+
+config MAX_CPU_OC_FREQ
+	int "Maximum CPU Overclock Frequency"
+	default 1500000
+
+config MAX_CPU_OC_VOLT
+	int "Maximum CPU Overclock Voltage"
+	default 1325
+
+config BOOST_PERIPHERALS
+	bool "Tegra2 Overclocking Peripheral Enable"
+	depends on MACH_STAR
+	default y
+
+config MAX_AVP_OC_FREQ
+	int "AVP Overclock Frequency"
+	default 280000
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+
+config MAX_GPU_OC_FREQ
+	int "3D GPU Overclock Frequency"
+	default 350000
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+
+config MAX_DDR_OC_FREQ
+	int "DDR Overclock Frequency"
+	default 350000
+	depends on FAKE_SHMOO && BOOST_PERIPHERALS
+
+config DDR2_SDRAM_FREQ
+	int
+	default 350000 if BOOST_PERIPHERALS
+	default 300000
+
+config EMC_CORE_VOLT
+	int "EMC Core Voltage"
+	default 1150 if BOOST_PERIPHERALS
+	default 1200
+
 if LPRINTK
 config  LPRINTK_ALL
         bool "Select All Devices"

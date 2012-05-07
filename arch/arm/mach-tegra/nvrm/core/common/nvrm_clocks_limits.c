@@ -41,6 +41,77 @@
 #include "ap15/ap15rm_private.h"
 #include "ap15/project_relocation_table.h"
 
+#ifdef CONFIG_FAKE_SHMOO
+#include <linux/kernel.h>
+
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+ *
+ * Improved by Benee @ https://github.com/VorkTeam/vorkKernel-LGP990
+ * Cleaned up and re-organized by Faux123 @ https://github.com/faux123
+ */
+
+/* DEFAULT LG P990 VALUES */
+
+// Maximum recommanded voltage increment per step (by nvidia) -> 100mV
+
+// TEGRA_OC: max cpu low temp: -64
+// TEGRA_OC: max cpu high temp: 60
+// TEGRA_OC: min mV -> 770
+// TEGRA_OC: max mV -> 1000
+// TEGRA_OC: mV[0]-> 750 (770 real)
+// TEGRA_OC: mV[1]-> 800
+// TEGRA_OC: mV[2]-> 850
+// TEGRA_OC: mV[3]-> 875
+// TEGRA_OC: mV[4]-> 950
+// TEGRA_OC: mV[5]-> 1000
+// TEGRA_OC: Hz[0]-> 389000
+// TEGRA_OC: Hz[1]-> 503000
+// TEGRA_OC: Hz[2]-> 655000
+// TEGRA_OC: Hz[3]-> 760000
+// TEGRA_OC: Hz[4]-> 950000
+// TEGRA_OC: Hz[5]-> 1015000
+// TEGRA_OC: Hz[6]-> 1100000 // unused
+// TEGRA_OC: Hz[7]-> 1216000 // unused
+// TEGRA_OC: HwDeviceId-> 101
+// TEGRA_OC: SubClockId-> 0
+// TEGRA_OC: MinKHz-> 32
+
+// Pointer to fake CpuShmoo values
+NvRmCpuShmoo fake_CpuShmoo;
+
+// Max voltage index in the voltage tab (size-1)
+// Total of 7 available spots for P99x/SU660
+NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
+
+NvU32 FakeShmooVoltages[] = {
+    775,
+    825,
+    875,
+    950,
+    1050,
+    1150,
+    1250,
+    CONFIG_MAX_CPU_OC_VOLT,
+};
+
+NvRmScaledClkLimits FakepScaledCpuLimits = {
+    101, // FakepScaledCpuLimits.HwDeviceId
+    0, // FakepScaledCpuLimits.SubClockId
+    32, // FakepScaledCpuLimits.MinKHz
+    // Clock table
+    {
+        216000,
+        503000,
+        655000,
+        816000,
+        1015000,
+        1216000,
+        1408000,
+        CONFIG_MAX_CPU_OC_FREQ,
+    }
+};
+#endif // CONFIG_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \
          (s_ChipFlavor.pSocShmoo->ShmooVoltages[(step)])
@@ -122,7 +193,11 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 {
     NvU32 i;
     NvRmFreqKHz CpuMaxKHz, AvpMaxKHz, VdeMaxKHz, TDMaxKHz, DispMaxKHz;
+#if defined(CONFIG_FAKE_SHMOO) || defined(CONFIG_BOOST_PERIPHERALS)
+    NvRmSKUedLimits* pSKUedLimits;
+#else
     const NvRmSKUedLimits* pSKUedLimits;
+#endif
     const NvRmScaledClkLimits* pHwLimits;
     const NvRmSocShmoo* pShmoo;
 
@@ -131,6 +206,18 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     pShmoo = s_ChipFlavor.pSocShmoo;
     pHwLimits = &pShmoo->ScaledLimitsList[0];
     pSKUedLimits = pShmoo->pSKUedLimits;
+#ifdef CONFIG_FAKE_SHMOO
+    // override default with configuration values
+    // CPU clock duh!
+    pSKUedLimits->CpuMaxKHz = CONFIG_MAX_CPU_OC_FREQ;
+#endif
+
+#ifdef CONFIG_BOOST_PERIPHERALS
+    // AVP clock
+    pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
+    // 3D GPU clock
+    pSKUedLimits->TDMaxKHz = CONFIG_MAX_GPU_OC_FREQ;
+#endif
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
 
@@ -189,6 +276,14 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
             s_pClockScales[id] = pHwLimits[i].MaxKHzList;
         }
     }
+
+#ifdef CONFIG_BOOST_PERIPHERALS
+    s_ClockRangeLimits[NvRmModuleID_Avp].MaxKHz = CONFIG_MAX_AVP_OC_FREQ;
+    s_ClockRangeLimits[NvRmModuleID_2D].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = CONFIG_MAX_GPU_OC_FREQ;
+    s_ClockRangeLimits[NvRmModuleID_Epp].MaxKHz = CONFIG_MAX_DDR_OC_FREQ;
+#endif
+
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)
@@ -380,12 +475,21 @@ NvRmPrivModuleVscaleGetMV(
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
     {
+#ifdef CONFIG_FAKE_SHMOO
+        for (i = 0; i < fake_CpuShmoo.ShmooVmaxIndex; i++)
+        {
+            if (FreqKHz <= pScale[i])
+                break;
+        }
+        return fake_CpuShmoo.ShmooVoltages[i];
+#else
         for (i = 0; i < s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex; i++)
         {
             if (FreqKHz <= pScale[i])
                 break;
         }
         return s_ChipFlavor.pCpuShmoo->ShmooVoltages[i];
+#endif
     }
     // Use common ladder for all other modules or CPU on core rail
     for (i = 0; i < s_ChipFlavor.pSocShmoo->ShmooVmaxIndex; i++)
@@ -407,7 +511,11 @@ NvRmPrivModuleVscaleGetMaxKHzList(
 
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
+#ifdef CONFIG_FAKE_SHMOO
+        *pListSize = fake_CpuShmoo.ShmooVmaxIndex + 1;
+#else
         *pListSize = s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex + 1;
+#endif
     else
         *pListSize = s_ChipFlavor.pSocShmoo->ShmooVmaxIndex + 1;
 
@@ -890,6 +998,14 @@ static NvError NvRmBootArgChipShmooGet(
         // Shmoo data for dedicated CPU domain
         pChipFlavor->pCpuShmoo = &s_CpuShmoo;
 
+#ifdef CONFIG_FAKE_SHMOO
+        s_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
+        s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        s_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
+        fake_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
+        fake_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        fake_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
+#else
         offset = BootArgSh.CpuShmooVoltagesListOffset;
         size = BootArgSh.CpuShmooVoltagesListSize;
         NV_ASSERT (offset + size <= TotalSize);
@@ -905,6 +1021,7 @@ static NvError NvRmBootArgChipShmooGet(
         s_CpuShmoo.pScaledCpuLimits =
             (const NvRmScaledClkLimits*)((NvUPtr)s_pShmooData + offset);
         NV_ASSERT(size == sizeof(*s_CpuShmoo.pScaledCpuLimits));
+#endif
     }
     else
     {

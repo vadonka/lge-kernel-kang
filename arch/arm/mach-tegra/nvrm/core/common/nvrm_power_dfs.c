@@ -52,6 +52,19 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
+#ifdef CONFIG_FAKE_SHMOO
+#include <linux/kernel.h>
+
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+ */
+
+extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
+extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+
+#endif // CONFIG_FAKE_SHMOO
+
 /*****************************************************************************/
 
 // Initial DFS configuration
@@ -810,6 +823,14 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
+#ifdef CONFIG_FAKE_SHMOO
+    /*
+     * Set CPU Clock scaling range manually to
+     * avoid booting up out of specifications
+     * and to minimize the "sleep of death" bug
+     */
+    pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1015000;
+#endif
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -1844,6 +1865,10 @@ NvError NvRmPrivDfsInit(NvRmDeviceHandle hRmDeviceHandle)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
+#ifdef CONFIG_FAKE_SHMOO
+    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
+#endif
+
     NV_ASSERT(hRmDeviceHandle);
     DfsHintsPrintInit();
 
@@ -2226,6 +2251,21 @@ DvsChangeCpuVoltage(
     NvRmDvs* pDvs,
     NvRmMilliVolts TargetMv)
 {
+#ifdef CONFIG_FAKE_SHMOO
+    // Voltage hack
+    int i = 0;
+    if( FakeShmoo_UV_mV_Ptr != NULL )
+    {
+        for(i=0; i <fake_CpuShmoo.ShmooVmaxIndex+1; i++)
+        {
+            if(fake_CpuShmoo.ShmooVoltages[i] == TargetMv)
+            {
+                TargetMv -= FakeShmoo_UV_mV_Ptr[i];
+                break;
+            }
+        }
+    }
+#endif // CONFIG_FAKE_SHMOO
     NV_ASSERT(TargetMv >= pDvs->MinCpuMv);
     NV_ASSERT(TargetMv <= pDvs->NominalCpuMv);
 
@@ -2233,6 +2273,9 @@ DvsChangeCpuVoltage(
     {
         NvRmPmuSetVoltage(hRm, pDvs->CpuRailAddress, TargetMv, NULL);
         pDvs->CurrentCpuMv = TargetMv;
+#ifdef CONFIG_FAKE_SHMOO
+        //printk( "*** fakeShmoo **** -> CurrentCpuMv : %i\n", TargetMv );
+#endif
     }
 }
 
