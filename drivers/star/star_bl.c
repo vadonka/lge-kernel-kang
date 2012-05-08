@@ -1,5 +1,3 @@
-
-
 /*
  * drivers/star/star_bl.c
  *
@@ -17,10 +15,8 @@
  *
  *
  */
-
-
-#include <linux/init.h> 
-#include <linux/module.h> 
+#include <linux/init.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <asm/uaccess.h>
@@ -90,7 +86,7 @@ static int debug_enable_flag = 0x01;
 #define TRUE 0x01
 #endif
 #if !defined(FALSE)
-#define FALSE 0x00 
+#define FALSE 0x00
 #endif
 
 /*
@@ -183,7 +179,7 @@ struct aat2870_drvdata_t {
 };
 
 
-static struct aat2870_drvdata_t *drvdata; 
+static struct aat2870_drvdata_t *drvdata;
 
 //static spinlock_t intensity_lock; //km.lee
 
@@ -216,7 +212,7 @@ struct AAT2870_initial_ALC_cur {
 					   		(0 << BL_FM_REG_INIT_FM))
 static struct aat2870_ctl_tbl_t aat2870bl_fade_in_tbl[] = {
 	{ 0x0c, 0x02 }, //Fade, Disabled
-	{ 0x01, 0x00 }, 
+	{ 0x01, 0x00 },
 	{ 0x00, 0xff },	//LED turn on
 	//{ 0x0c, 0x09 }, //Fade In, Enabled
 	{ 0x0c, BL_FM_REG_FADEIN_EN_VAL }, //Fade In, Enabled
@@ -225,7 +221,7 @@ static struct aat2870_ctl_tbl_t aat2870bl_fade_in_tbl[] = {
 
 
 static struct aat2870_ctl_tbl_t aat2870bl_fade_out_tbl[] = {
-	{ 0x0B, 0x01 }, 
+	{ 0x0B, 0x01 },
 	{ 0x0C, BL_FM_REG_FADEOUT_EN_VAL },  /* FMT=0.6s, DISABLE_FADE_MAIN=0, FADE_MAIN=fade out */
 	{ 0xFF, 0xFE },  /* end of command */		
 };
@@ -510,7 +506,7 @@ static int star_bl_io_init()
 		goto exit;
 	}
 
-	hStarI2csim->hSclGpioPinHandle = NvOdmGpioAcquirePinHandle(hStarI2csim->hI2cServiceGpioHandle, 
+	hStarI2csim->hSclGpioPinHandle = NvOdmGpioAcquirePinHandle(hStarI2csim->hI2cServiceGpioHandle,
             hStarI2csim->sclport,
             hStarI2csim->sclpin);
 	if (!(hStarI2csim->hSclGpioPinHandle)) {
@@ -519,7 +515,7 @@ static int star_bl_io_init()
 		retval = -EBUSY;
 		goto exit;
 	}
-	 
+	
 	hStarI2csim->hSdaGpioPinHandle = NvOdmGpioAcquirePinHandle(hStarI2csim->hI2cServiceGpioHandle,
             hStarI2csim->sdaport,
             hStarI2csim->sdapin);
@@ -631,10 +627,10 @@ star_bl_brightness_linearized(int intensity, int *level)
 {
 	int ret = 0;
 	int remainder;
-    int last_intensity; 
+    int last_intensity;
 
 
-	//101017,  Set the Backlight Brightness to be linearized.[START] 
+	//101017,  Set the Backlight Brightness to be linearized.[START]
 	if (intensity < BRIGHTNESS_MIN) {
 		
 		//Too low for intensity value
@@ -653,17 +649,17 @@ star_bl_brightness_linearized(int intensity, int *level)
 	} else {
 
 		//Too High for intensity value
-		ret = -EINVAL; 
+		ret = -EINVAL;
 	}
 	//101017,  Set the Backlight Brightness to be linearized.[END]
 
 	return ret;
-}  
+}
 
 
 static ssize_t
 star_bl_store_intensity(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
-{    
+{
 	int level, intensity;
 	static struct aat2870_drvdata_t *drv;
 
@@ -687,7 +683,7 @@ star_bl_store_intensity(struct device *dev, struct device_attribute *attr, const
 	//if (drv->op_mode == AAT2870_OP_MODE_ALC && drv->hw_dimming_enable) {
 	if (drv->hw_dimming_enable) {
 
-		if (drv->dim_status == DIMMING_NONE && 
+		if (drv->dim_status == DIMMING_NONE &&
 			drv->intensity > level && intensity == 20) {
 
 			DBG("[BL] DIMMING_START \n");
@@ -761,7 +757,7 @@ star_bl_show_alc_level(struct device *dev, struct device_attribute *attr, char *
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_show_hwdim(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct aat2870_drvdata_t *drv;
@@ -777,7 +773,7 @@ star_bl_show_hwdim(struct device *dev, struct device_attribute *attr, char *buf)
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_store_hwdim(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int dimming;
@@ -808,7 +804,7 @@ star_bl_store_hwdim(struct device *dev, struct device_attribute *attr, const cha
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_show_lsensor_onoff(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct aat2870_drvdata_t *drv;
@@ -824,7 +820,7 @@ star_bl_show_lsensor_onoff(struct device *dev, struct device_attribute *attr, ch
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_store_lsensor_onoff(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int onoff;
@@ -852,7 +848,7 @@ star_bl_store_lsensor_onoff(struct device *dev, struct device_attribute *attr, c
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_show_alc(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct aat2870_drvdata_t *drv;
@@ -869,7 +865,7 @@ star_bl_show_alc(struct device *dev, struct device_attribute *attr, char *buf)
 }
 
 
-static ssize_t 
+static ssize_t
 star_bl_store_alc(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
 	int alc;
@@ -990,12 +986,12 @@ star_bl_store_foff(struct device *dev, struct device_attribute *attr, const char
 		return -EINVAL;
 
 	sscanf(buf, "%d", &onoff);
-    
+
     star_bl_send_cmd(drv, drv->cmds.sleep);
 	drv->status = BL_POWER_STATE_OFF;
 	drv->power_onoff_ref = FALSE;
 	printk("[BL] Power Off\n");
-    
+
 	star_aat2870_reset();
 	printk("[BL] star_aat2870_reset\n");
 
@@ -1092,7 +1088,7 @@ static void star_aat2870_reset_init(void)
 	if (!hBLResetGpio)
 		hBLResetGpio = NvOdmGpioOpen();
 
-	if(!hBLResetGpioPin) 
+	if(!hBLResetGpioPin)
 		hBLResetGpioPin = NvOdmGpioAcquirePinHandle(hBLResetGpio, Port, Pin);
 
 	if (!hBLResetGpioPin)
@@ -1232,7 +1228,7 @@ static int star_aat2870_probe(struct platform_device *pdev)
 		retval = -ENODEV;
 		goto err_input_device;
 	}
-	 
+	
 	hStarI2csim = NvOdmOsAlloc(sizeof(StarI2csim));
 	if (!hStarI2csim) {
 
@@ -1262,7 +1258,7 @@ static int star_aat2870_probe(struct platform_device *pdev)
 
 	INIT_DELAYED_WORK(&drv->delayed_work_bl, star_bl_work_func);
 	//schedule_delayed_work(&drvdata->delayed_work_bl, 100);
-   
+
 #ifdef AP_SUSPEND_STATUS
     //GPIO configuration
     s_modemCheck.gpioHandle = NvOdmGpioOpen();
@@ -1277,8 +1273,8 @@ static int star_aat2870_probe(struct platform_device *pdev)
 #elif defined(CONFIG_MACH_STAR_TMUS)
     port = 'h'-'a';
     pin = 2;
-#endif 
-    s_modemCheck.pinHandle = NvOdmGpioAcquirePinHandle(s_modemCheck.gpioHandle, 
+#endif
+    s_modemCheck.pinHandle = NvOdmGpioAcquirePinHandle(s_modemCheck.gpioHandle,
                                                     port, pin);
     if (!s_modemCheck.pinHandle)
     {
@@ -1286,22 +1282,22 @@ static int star_aat2870_probe(struct platform_device *pdev)
         goto err_modem_chk_gpio_pin_acquire_fail;
     }
     NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 1);
-    NvOdmGpioConfig(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 
+    NvOdmGpioConfig(s_modemCheck.gpioHandle, s_modemCheck.pinHandle,
                     NvOdmGpioPinMode_Output);
 #endif
-   
+
     return 0;
 
 #ifdef AP_SUSPEND_STATUS
 err_modem_chk_gpio_pin_acquire_fail:
-    NvOdmGpioClose(s_modemCheck.gpioHandle); 
+    NvOdmGpioClose(s_modemCheck.gpioHandle);
 err_open_modem_chk_gpio_fail:
 #endif
 
 err_input_device:
 
 err:
-	return retval; 
+	return retval;
 }
 
 
@@ -1309,7 +1305,7 @@ static void star_aat2870_shutdown(struct platform_device *pdev)
 {
 
 	struct aat2870_drvdata_t *drv;
-        printk("star_att2870_shutdown\n"); 
+        printk("star_att2870_shutdown\n");
 
 	drv = drvdata;
 #if 0
@@ -1333,7 +1329,7 @@ static void star_aat2870_shutdown(struct platform_device *pdev)
 
 static struct platform_device star_aat2870_device = {
 	.name = "star_aat2870",
-	.id = 0, 
+	.id = 0,
 };
 
 
@@ -1347,11 +1343,11 @@ static struct platform_driver star_aat2870_driver = {
 };
 
 
-static int __init star_aat2870_init(void)    
+static int __init star_aat2870_init(void)
 {
     int retval = 0;
 	
-	  
+	
     retval = platform_device_register(&star_aat2870_device);
     if (retval < 0) {
 
@@ -1359,7 +1355,7 @@ static int __init star_aat2870_init(void)
 		goto out;
 	}
 
-    retval =  platform_driver_register(&star_aat2870_driver);  
+    retval =  platform_driver_register(&star_aat2870_driver);
     if (retval < 0) {
 
 		printk(KERN_ERR "platform_driver_register failed!\n");
@@ -1368,11 +1364,11 @@ static int __init star_aat2870_init(void)
 
 out:
 	return retval;
-}  
+}
 
 
 static void __exit star_aat2870_exit(void)
-{ 
+{
 	star_bl_io_deinit();//Release Handle
 
 	return platform_driver_unregister(&star_aat2870_driver);

@@ -60,7 +60,7 @@
 //20100926, , Communication with BatteryService for AT Command [END]
 //20100824, , get capacity using battery voltage for demo [START]
 #if defined (USE_ONETIME_VOLTAGE_CAPACITY)
-#include "star_battery_charger.h" // 100823 
+#include "star_battery_charger.h" // 100823
 #endif // USE_ONETIME_VOLTAGE_CAPACITY
 //20100824, , get capacity using battery voltage for demo [END]
 
@@ -271,10 +271,10 @@ NvBool ARRAY_TP_BOOT(void)
 EXPORT_SYMBOL(ARRAY_TP_BOOT);
 //20100915, , For AT_BOOT  [END]
 
-static int tegra_power_get_property(struct power_supply *psy, 
+static int tegra_power_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val);
 
-static int tegra_battery_get_property(struct power_supply *psy, 
+static int tegra_battery_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val);
 
 static int star_at_command_get_property(struct power_supply *psy,
@@ -897,7 +897,7 @@ static void true_valid_cbc_process(NvU32 cbc_value)
 	batt_dev->BatteryGauge_on = NV_TRUE;
 
 	printk("[BATT] previous value = %d, current_value=%d\n", previous_guage , batt_dev->BatteryLifePercent);
-	if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY)) 
+	if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
 		&& previous_guage< batt_dev->BatteryLifePercent   )
 	{
 		batt_dev->BatteryLifePercent = previous_guage;
@@ -1054,7 +1054,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 			}
 
 			// if previous gauge is larger than current gauge during discharging, keep the previous gauge value.
-			if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY)) 
+			if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
 				&& previous_guage < batt_dev->BatteryLifePercent )
 			{
 				batt_dev->BatteryLifePercent = previous_guage ;
@@ -1854,7 +1854,7 @@ static NvBool capacity_with_charger_source_USB(void)
 		capacity_index = 0;
 		goto set_BatteryLifePercent_w_USB;
 	}
-	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now) 
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now)
 	{
 		range_index = batt_dev->BatteryLifePercent;
 		for (; range_index >= 0; range_index--)
@@ -1883,7 +1883,7 @@ set_BatteryLifePercent_w_USB:
 		batt_dev->Capacity_Voltage = capacity_index;
 		//LDB("[bat_cv] CV_w gauge USB(%d)", batt_dev->Capacity_Voltage);
 	}
-	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now) 
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to increase direction (because "Charging state" now)
 	{
 		lprintk(D_BATT, "%s: [Critical] Unexpected Battery gauge value!!!(%d) \n", __func__, capacity_index);
 		batt_dev->Capacity_Voltage = 30; // default setting
@@ -1966,7 +1966,7 @@ static NvBool capacity_without_charger_source(void)
 		capacity_index = 100;
 		goto set_BatteryLifePercent_wo;
 	}
-	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to decrease direction (because "Discharging state" now) 
+	else // After first time, search range is start from slightly reverse direction of previous gauge, and go forward to decrease direction (because "Discharging state" now)
 	{
 		range_index = batt_dev->BatteryLifePercent;
 		for (; range_index <= 100; range_index++ )
@@ -2426,7 +2426,7 @@ static void star_gauge_follower_func(void)
 		{
 			//if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
 			//	batt_dev->BatteryLifePercent += 1;
-			//else 
+			//else
 			if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
 				batt_dev->BatteryLifePercent -= 1;
 		}
@@ -2447,7 +2447,7 @@ static void tegra_battery_status_poll_work(struct work_struct *work)
 #if defined (USE_ONETIME_VOLTAGE_CAPACITY)
 	if (batt_dev->repeat_index == NV_TRUE)
 	{
-		if (!determine_capacity_for_demo())  // 100823 
+		if (!determine_capacity_for_demo())  // 100823
 		{
 			batt_dev->BatteryLifePercent = 103;
 			LDB("[Critical]: capacity for demo is failed!!!!");
@@ -3225,7 +3225,7 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 	  printk("battery_id_poll_work canceled\n");
     }
 
-    if (&batt_dev->battery_status_poll_work) 
+    if (&batt_dev->battery_status_poll_work)
     {
 	  cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
 	  printk("battery_status_poll_work canceled\n");
@@ -3265,7 +3265,7 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hPGBPin);
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hSetPin);
 
-    if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio); 
+    if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio);
 
 #if 0
 
@@ -3402,7 +3402,7 @@ static int tegra_battery_suspend(struct platform_device *dev,
 						if (NvRmPmuWriteAlarm(s_hRmGlobal, next_alarm_sec))
 						{
 							rtc_time_to_tm(next_alarm_sec, &tm);
-							LDB("rtc_write_to_tm: 1[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ", 
+							LDB("rtc_write_to_tm: 1[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ",
 								(tm.tm_year + LINUX_RTC_BASE_YEAR), tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, next_alarm_sec);
 						}
 						else
@@ -3420,7 +3420,7 @@ static int tegra_battery_suspend(struct platform_device *dev,
 						if (NvRmPmuWriteAlarm(s_hRmGlobal, next_alarm_sec))
 						{
 							rtc_time_to_tm(next_alarm_sec, &tm);
-							LDB("rtc_write_to_tm: 2[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ", 
+							LDB("rtc_write_to_tm: 2[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ",
 								(tm.tm_year + LINUX_RTC_BASE_YEAR), tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, next_alarm_sec);
 						}
 						else
@@ -3435,7 +3435,7 @@ static int tegra_battery_suspend(struct platform_device *dev,
 						if (NvRmPmuWriteAlarm(s_hRmGlobal, next_alarm_sec))
 						{
 							rtc_time_to_tm(next_alarm_sec, &tm);
-							LDB("rtc_write_to_tm: 3[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ", 
+							LDB("rtc_write_to_tm: 3[%04d-%02d-%02d %02d:%02d:%02d]: write_time=0x%x ",
 								(tm.tm_year + LINUX_RTC_BASE_YEAR), tm.tm_mon+1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, next_alarm_sec);
 						}
 						else

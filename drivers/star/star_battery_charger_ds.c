@@ -58,7 +58,7 @@
 //20100926, , Communication with BatteryService for AT Command [END]
 //20100824, , get capacity using battery voltage for demo [START]
 #if defined (USE_ONETIME_VOLTAGE_CAPACITY)
-#include "star_battery_charger.h"// 100823 
+#include "star_battery_charger.h"// 100823
 #endif // USE_ONETIME_VOLTAGE_CAPACITY
 //20100824, , get capacity using battery voltage for demo [END]
 
@@ -270,10 +270,10 @@ NvBool ARRAY_TP_BOOT(void)
 EXPORT_SYMBOL(ARRAY_TP_BOOT);
 //20100915, , For AT_BOOT  [END]
 
-static int tegra_power_get_property(struct power_supply *psy, 
+static int tegra_power_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val);
 
-static int tegra_battery_get_property(struct power_supply *psy, 
+static int tegra_battery_get_property(struct power_supply *psy,
 	enum power_supply_property psp, union power_supply_propval *val);
 
 static int star_at_command_get_property(struct power_supply *psy,
@@ -1018,7 +1018,7 @@ static void valid_cbc_check_and_process(NvU32 cbc_value)
 			}
 
 			// if previous gauge is larger than current gauge during discharging, keep the previous gauge value.
-			if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY)) 
+			if( ((batt_dev->ACLineStatus == NV_FALSE) || (batt_dev->charger_state_machine == CHARGER_STATE_FULLBATTERY))
 				&& previous_guage < batt_dev->BatteryLifePercent )
 			{
 				batt_dev->BatteryLifePercent = previous_guage ;
@@ -2354,7 +2354,7 @@ static void star_gauge_follower_func(void)
 	{
 		//if (batt_dev->BatteryGauge > batt_dev->BatteryLifePercent)
 		//	batt_dev->BatteryLifePercent += 1;
-		//else 
+		//else
 		if (batt_dev->BatteryGauge < batt_dev->BatteryLifePercent)
 			batt_dev->BatteryLifePercent -= 1;
 	}
@@ -2376,7 +2376,7 @@ static void tegra_battery_status_poll_work(struct work_struct *work)
 #if defined (USE_ONETIME_VOLTAGE_CAPACITY)
 	if (batt_dev->repeat_index == NV_TRUE)
 	{
-		if (!initialize_capacity())  // 100823 
+		if (!initialize_capacity())  // 100823
 		{
 			batt_dev->BatteryLifePercent = 103;
 			LDB("[Critical]: capacity for demo is failed!!!!");
@@ -3118,7 +3118,7 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 	  printk("battery_id_poll_work canceled\n");
     }
 
-    if (&batt_dev->battery_status_poll_work) 
+    if (&batt_dev->battery_status_poll_work)
     {
 	  cancel_delayed_work_sync(&batt_dev->battery_status_poll_work);
 	  printk("battery_status_poll_work canceled\n");
@@ -3158,7 +3158,7 @@ static void tegra_battery_shutdown(struct platform_device *pdev)
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hPGBPin);
 	NvOdmGpioReleasePinHandle(charging_ic->hGpio, charging_ic->hSetPin);
 
-    if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio); 
+    if (charging_ic->hGpio) NvOdmGpioClose(charging_ic->hGpio);
 
 #if 0
 
@@ -3325,7 +3325,7 @@ static int tegra_battery_suspend(struct platform_device *dev,
 
             if(checkbat_sec <= alarm_sec) {
                 next_alarm_sec = checkbat_sec;
-            } 
+            }
             else if( (checkbat_sec > alarm_sec) && (now_sec <= alarm_sec)) {
                 next_alarm_sec = alarm_sec;
             }
