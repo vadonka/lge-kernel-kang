@@ -22,7 +22,7 @@ unsigned int OFFMAXHIGH = 1015000;
 #ifdef CONFIG_OTF_AVP
 /*******************************************/
 /* Default AVP Freq */
-unsigned int AVPFREQ = 240000;
+unsigned int AVPFREQ = 280000;
 /* Min & Max Limit */
 unsigned int AVPLOW = 200000;
 unsigned int AVPHIGH = 280000;
