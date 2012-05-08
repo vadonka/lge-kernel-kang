@@ -11,6 +11,8 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 
+#define VIBRATORCONTROL_VERSION 1
+
 #define MAX_VIBSTRENGTH 3700
 #define MIN_VIBSTRENGTH 1500
 
@@ -50,11 +52,18 @@ static ssize_t vibratorcontrol_vibstrength_write(struct device * dev, struct dev
     return size;
 }
 
+static ssize_t vibratorcontrol_version(struct device * dev, struct device_attribute * attr, char * buf)
+{
+    return sprintf(buf, "%u\n", VIBRATORCONTROL_VERSION);
+}
+
 static DEVICE_ATTR(vibrator_strength, S_IRUGO | S_IWUGO, vibratorcontrol_vibstrength_read, vibratorcontrol_vibstrength_write);
+static DEVICE_ATTR(version, S_IRUGO , vibratorcontrol_version, NULL);
 
 static struct attribute *vibratorcontrol_attributes[] = 
     {
 	&dev_attr_vibrator_strength.attr,
+	&dev_attr_version.attr,
 	NULL
     };
 
