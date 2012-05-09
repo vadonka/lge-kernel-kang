@@ -640,6 +640,97 @@ static void remove_star_muic_proc_file(void)
 {
     remove_proc_entry(STAR_MUIC_PROC_FILE, NULL);
 }
+
+// LGE_CHANGE_S  2011-08-22, disable MUIC interrupt during FOTA upgrade
+
+static struct proc_dir_entry *muic_interrupt_enable_proc_file;
+#define	MUIC_INTERRUPT_ENABLE_PROC_FILE	"driver/muic_interrupt_enable"
+
+static int muic_interrupt_status;
+
+// forward declaration
+static void muic_interrupt_handler(void* arg);
+
+static ssize_t muic_interrupt_enable_read(struct file *filp, char *buf, size_t len, loff_t *offset)
+{
+	printk(KERN_INFO "[MUIC] interrupt status=%d\n", muic_interrupt_status);
+	return 0;
+}
+
+extern void disable_power_supply_change_notification(void);
+extern void enable_power_supply_change_notification(void);
+
+static ssize_t muic_interrupt_enable_write(struct file *filp, const char *buf, size_t len,
+	loff_t *off)
+{
+	int enable;
+
+	if (len == 0)
+		return -EINVAL;
+
+	sscanf(buf, "%d", &enable);
+
+	// MUIC interrupt is enabled, disable it
+	if (muic_interrupt_status == 1 && enable == 0) {
+		printk(KERN_INFO "[MUIC] disabling MUIC interrupt\n");
+
+		NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
+			s_hMuicHandle.hGpioInterrupt);
+
+		// disable power supply change notification
+		disable_power_supply_change_notification();
+
+		muic_interrupt_status = 0;
+
+	// MUIC interrupt is disabled, enable it
+	} else if (muic_interrupt_status == 0 && enable == 1) {
+		printk(KERN_INFO "[MUIC] enabling MUIC interrupt\n");
+
+		if (NvOdmGpioInterruptRegister(s_hMuicHandle.hGpio, &s_hMuicHandle.hGpioInterrupt,
+			s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_InputInterruptFallingEdge,
+			muic_interrupt_handler, (void*)&s_hMuicHandle, 0) == NV_FALSE) {
+			printk(KERN_ERR "[MUIC] %s: fail to register interrupt\n", __func__);
+			return -ENOSYS;
+		}
+
+		// enable power supply change notification
+		enable_power_supply_change_notification();
+
+		muic_interrupt_status = 1;
+		current_device = DEVICE_NONE;
+
+	} else {
+		printk(KERN_INFO "[MUIC] keep current interrupt status\n");
+	}
+
+	return len;
+}
+
+
+static struct file_operations muic_interrupt_enable_fops = {
+	.read	= muic_interrupt_enable_read,
+	.write	= muic_interrupt_enable_write,
+};
+
+static void create_muic_interrupt_enable_proc_file(void)
+{
+	muic_interrupt_enable_proc_file =
+		create_proc_entry(MUIC_INTERRUPT_ENABLE_PROC_FILE, 0777, NULL);
+	if (muic_interrupt_enable_proc_file) {
+		muic_interrupt_enable_proc_file->proc_fops = &muic_interrupt_enable_fops;
+
+	} else {
+		printk(KERN_ERR "%s: MUIC interrupt enable PROC file creation failed\n", __func__);
+	}
+}
+
+static void remove_muic_interrupt_enable_proc_file(void)
+{
+	remove_proc_entry(MUIC_INTERRUPT_ENABLE_PROC_FILE, NULL);
+}
+
+// LGE_CHANGE_E  2011-08-22, disable MUIC interrupt during FOTA upgrade
+
 #endif 
 
 int max14526_muic_init(TYPE_RESET reset)
@@ -844,6 +935,8 @@ void Set_MAX14526_Charger_Detect(NvU8 int_status_reg)
 {
     NvU8 reg_value;
     printk("-->> MUIC : %s\n",__func__);
+
+	printk(KERN_ERR "[MUIC] charger detect\n");
     
     // charger type detection (0x02=0x02)
     Set_MAX14526_ADDR(CTRL2_REG, CHG_TYPE_M);
@@ -1177,6 +1270,8 @@ void MAX14526_Device_Detection(void)
 {
     NvU8 reg_value;
 
+	printk(KERN_ERR "[MUIC] device detect\n");
+
     //20101002, , keep CP USB state after rebooting [START]
     if(DEVICE_CP_USB_CABLE == boot_muic_state)
     {
@@ -1458,6 +1553,11 @@ static int __devinit muic_probe(struct platform_device *pdev)
     create_star_muic_proc_file();
     current_device = DEVICE_NONE;
 
+// LGE_CHANGE_S  2011-08-22, disable MUIC interrupt during FOTA upgrade
+	muic_interrupt_status = 1;
+	create_muic_interrupt_enable_proc_file();
+// LGE_CHANGE_E  2011-08-22, disable MUIC interrupt during FOTA upgrade
+
     muic_initialize_max(RESET);
 
     //20100915, , move to late_initcall [START] 
@@ -1522,6 +1622,12 @@ static int muic_remove(struct platform_device *pdev)
 #endif
     wake_lock_destroy(&s_hMuicHandle.wlock);
     remove_star_muic_proc_file();
+
+// LGE_CHANGE_S  2011-08-22, disable MUIC interrupt during FOTA upgrade
+	muic_interrupt_status = 0;
+	remove_muic_interrupt_enable_proc_file();
+// LGE_CHANGE_E  2011-08-22, disable MUIC interrupt during FOTA upgrade
+
     return 0;
 }
 
@@ -1536,8 +1642,19 @@ static void muic_shutdown(struct platform_device *pdev)
 		printk("muic_wq canceled\n");
 	}  
 #endif
+
+// LGE_CHANGE_S  2011-08-31, disable MUIC interrupt during FOTA upgrade
+/* original code
     NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
             s_hMuicHandle.hGpioInterrupt);
+*/
+	if (muic_interrupt_status == 1) {
+		NvOdmGpioInterruptUnregister(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC,
+			s_hMuicHandle.hGpioInterrupt);
+
+		muic_interrupt_status = 0;
+	}
+// LGE_CHANGE_E  2011-08-31, disable MUIC interrupt during FOTA upgrade
 
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_Output);
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC , 0x0);
