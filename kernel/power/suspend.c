@@ -34,7 +34,9 @@ const char *const pm_states[PM_SUSPEND_MAX] = {
 };
 
 static struct platform_suspend_ops *suspend_ops;
-
+//20110727 	Patch applied from P990 froyo MR-03
+extern void star_emergency_restart(const char *domain, int timeout);
+extern void star_watchdog_disable();
 /**
  *	suspend_set_ops - Set the global suspend method table.
  *	@ops:	Pointer to ops structure.
@@ -169,6 +171,9 @@ static int suspend_enter(suspend_state_t state)
 	if (!error) {
 		if (!suspend_test(TEST_CORE))
 			error = suspend_ops->enter(state);
+//20110727 	Patch applied from P990 froyo MR-03
+	printk("# AP20 chip wakeup \n");
+	star_emergency_restart("sys",62);
 		sysdev_resume();
 	}
 
@@ -228,6 +233,9 @@ int suspend_devices_and_enter(suspend_state_t state)
 
  Resume_devices:
 	suspend_test_start();
+//20110727 	Patch applied from P990 froyo MR-03
+	printk("# Drv Resume Star\n");
+	star_emergency_restart("sys",61);
 	dpm_resume_end(PMSG_RESUME);
 	suspend_test_finish("resume devices");
 	resume_console();
@@ -275,6 +283,10 @@ int enter_state(suspend_state_t state)
 
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
+
+//20110727 	Patch applied from P990 froyo MR-03
+	printk("[LOG] star_emergency_restart() called at enter_state() \n");
+	star_emergency_restart("sys", 63);
 
 	printk(KERN_INFO "PM: Syncing filesystems ... ");
     /* sys_sync lock up issue */

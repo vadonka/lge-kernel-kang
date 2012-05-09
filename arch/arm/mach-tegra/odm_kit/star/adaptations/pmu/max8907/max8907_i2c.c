@@ -32,6 +32,8 @@
 #define MAX8907_I2C_TIMEOUT     10
 #endif
 
+extern int start_tegra_mach_restart;
+
 NvBool Max8907I2cWrite8(
    NvOdmPmuDeviceHandle hDevice,
    NvU8 Addr,
@@ -50,7 +52,14 @@ NvBool Max8907I2cWrite8(
 
         TransactionInfo.Address = hPmu->DeviceAddr;
         TransactionInfo.Buf = &WriteBuffer[0];
+#if defined(CONFIG_MACH_STAR)
+        if(start_tegra_mach_restart)
+            TransactionInfo.Flags = NVODM_I2C_IS_WRITE | NVODM_I2C_SOFTWARE_CONTROLLER;
+        else
+            TransactionInfo.Flags = NVODM_I2C_IS_WRITE;
+#else
         TransactionInfo.Flags = NVODM_I2C_IS_WRITE;
+#endif
         TransactionInfo.NumBytes = 2;
 #if defined(CONFIG_MACH_STAR)
         status = NvOdmI2cTransaction(hPmu->hOdmI2C, &TransactionInfo, 1,
@@ -103,6 +112,17 @@ NvBool Max8907I2cRead8(
         TransactionInfo[TransactionCount].Buf = &ReadBuffer;
         TransactionInfo[TransactionCount].Flags =
             NVODM_I2C_IS_WRITE | NVODM_I2C_USE_REPEATED_START;
+#if defined(CONFIG_MACH_STAR)
+        if(start_tegra_mach_restart)
+            TransactionInfo[TransactionCount].Flags =
+                NVODM_I2C_IS_WRITE | NVODM_I2C_USE_REPEATED_START | NVODM_I2C_SOFTWARE_CONTROLLER;
+        else
+            TransactionInfo[TransactionCount].Flags =
+                NVODM_I2C_IS_WRITE | NVODM_I2C_USE_REPEATED_START;
+#else
+        TransactionInfo[TransactionCount].Flags =
+            NVODM_I2C_IS_WRITE | NVODM_I2C_USE_REPEATED_START;
+#endif
         TransactionInfo[TransactionCount++].NumBytes = 1;
 
         TransactionInfo[TransactionCount].Address = (hPmu->DeviceAddr | 0x1);

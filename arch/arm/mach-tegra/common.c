@@ -47,6 +47,7 @@
 
 //20110727 	Patch applied from P990 froyo MR-03
 extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
+int start_tegra_mach_restart = 0;
 
 //20110131, , Stop i2c comm during reset
 extern void NvRmPrivDvsStop(void);
@@ -252,6 +253,8 @@ static void tegra_machine_restart(char mode, const char *cmd)
 	NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
 
 	star_emergency_restart("sys",20);
+
+	start_tegra_mach_restart = 1;
 
 	NvRmPrivDvsStop();
 
