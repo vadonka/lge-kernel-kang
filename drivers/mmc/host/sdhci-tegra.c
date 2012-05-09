@@ -151,6 +151,17 @@ static void tegra_sdhci_set_clock(struct sdhci_host *sdhost,
 		if (clock > host->max_clk)
 			clock = host->max_clk;
 		clk_set_rate(host->clk, clock);
+
+// 20111205 mingi.sung@lge.com Check SDIO clock for Wi-Fi [START]
+		if(host->pdev->id == 0) {
+			if( (clock == 187500 && clk_get_rate(host->clk) < 187500)
+					|| (clock == 48000000 && clk_get_rate(host->clk) < 48000000) ) { 
+				clk_set_rate(host->clk, clock);
+				printk("[Wi-Fi] %s:%d clk_set_rate again!\n",__func__,__LINE__);
+			}
+		}
+// 20111205 mingi.sung@lge.com Check SDIO clock for Wi-Fi [END]
+		
 		sdhost->max_clk = clk_get_rate(host->clk);
 		dev_dbg(&host->pdev->dev, "clock request: %uKHz. currently "
 			"%uKHz\n", clock/1000, sdhost->max_clk/1000);

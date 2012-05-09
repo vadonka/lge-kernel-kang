@@ -1162,6 +1162,8 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	host = mmc_priv(mmc);
 
+    sdhci_set_clock(host, ios->clock); //LGE_LAB joongyong.park@lge.com 20111220 nvidia patch applied  
+
 	spin_lock_irqsave(&host->lock, flags);
 
 	if (host->flags & SDHCI_DEVICE_DEAD)
@@ -1176,7 +1178,7 @@ static void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		sdhci_reinit(host);
 	}
 
-	sdhci_set_clock(host, ios->clock);
+	//sdhci_set_clock(host, ios->clock); //joongyong.park@lge.com 20111220 nvidia patch applied 
 
 	if (ios->power_mode == MMC_POWER_OFF)
 		sdhci_set_power(host, -1);
