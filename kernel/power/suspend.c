@@ -16,6 +16,7 @@
 #include <linux/cpu.h>
 #include <linux/syscalls.h>
 #include "power.h"
+#include "nvrm_power_private.h"
 
 #ifdef CONFIG_OTF_MAXSCOFF
 #include <linux/earlysuspend.h>
@@ -276,9 +277,12 @@ int enter_state(suspend_state_t state)
 		return -EBUSY;
 
 	printk(KERN_INFO "PM: Syncing filesystems ... ");
+    /* sys_sync lock up issue */
+    NvRmPrivDfsStopAtNominalBeforeSync();
 	sys_sync();
 	printk("done.\n");
-
+	NvRmPrivDfsRunAfterSync();
+	
 	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state]);
 	error = suspend_prepare();
 	if (error)
