@@ -179,6 +179,12 @@ int tegra_fb_pan_display(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	u32 addr;
 
+// LGE_CHANGE_S [youngseok.jeong@lge.com] 2011-07-25, not allow to change framebuffer address
+// nVidia NVDDK DISP will handle framebuffer address.
+// Framebuffer address change through fb sysfs is not allowed.
+	return 0;
+// LGE_CHANGE_E [youngseok.jeong@lge.com] 2011-07-25, not allow to change framebuffer address
+
 	if( !tegra_fb_power_on() ) {
 		return -EINVAL;
 	}
