@@ -687,6 +687,7 @@ void tegra2_periph_reset_assert(struct clk *c)
 
 		clk_writel(PERIPH_CLK_TO_ENB_BIT(c),
 			   RST_DEVICES_SET + PERIPH_CLK_TO_ENB_SET_REG(c));
+	}
 }
 }
 
