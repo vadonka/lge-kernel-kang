@@ -483,14 +483,27 @@ ifx_spi_unthrottle(struct tty_struct *tty)
 /* End of IFX SPI Operations */
 
 /* ################################################################################################################ */
-
+// ebs 
+#define AP_SUSPEND_STATUS
+// ebs 
 /* TTY - SPI driver Operations */
+#ifdef AP_SUSPEND_STATUS
+typedef struct ModemCheckRec
+{
+    NvOdmServicesGpioHandle gpioHandle;
+    NvOdmGpioPinHandle  pinHandle;
+} ModemCheck;
+
+static ModemCheck s_modemCheck;
+#endif
+
+
 static int 
 ifx_spi_probe(struct spi_device *spi)
 {
 	int status;
 	struct ifx_spi_data *spi_data;
-	static int index = 0;
+	static int index, pin, port_temp = 0;
 
 	const NvOdmPeripheralConnectivity *pConnectivity = NULL;
 	NvU32 MrdyPort;
@@ -759,6 +772,11 @@ static int ifx_spi_suspend(struct platform_device *pdev, pm_message_t state)
 	is_suspended = 1;
 	spin_unlock_irqrestore(&spi_suspend_lock, flags);
 #endif 
+
+#ifdef AP_SUSPEND_STATUS
+	NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 0);
+#endif
+
 	printk("#####################\n");
 	printk("[IFX_SPI SUSPEND] flag=%d is_suspend_flag = %d\n", bSuspend, is_suspended);
 
@@ -792,6 +810,11 @@ static int ifx_spi_resume(struct platform_device *pdev)
 	is_suspended = 0;
 	spin_unlock_irqrestore(&spi_suspend_lock, flags);
 #endif 
+
+#ifdef AP_SUSPEND_STATUS
+	NvOdmGpioSetState(s_modemCheck.gpioHandle, s_modemCheck.pinHandle, 1);
+#endif 
+
 	printk("#####################\n");
 
 	printk("[IFX_SPI RESUME] flag=%d is_suspend_flag = %d\n", bSuspend, is_suspended);
@@ -1310,6 +1333,7 @@ ifx_spi_handle_work(struct work_struct *work)
 	   {
 		  // To Do how to handle the PM OFF state during 1sec
 		  printk("[EBS] mdm_spi_handle_work error is_suspended is (0x%x)\n",is_suspended);
+		  return;
 	   }
    }
 #endif

@@ -307,57 +307,19 @@ static ssize_t star_reset_show(struct device *dev,
             struct device_attribute *attr, char *buf)
 {
 
-    unsigned char tmpbuf[3];
+    unsigned char tmpbuf[2];
     int ret;
     int tag;
 
-    read_cmd_reserved_buffer(tmpbuf, 3);
-    printk(" power key reserved_buffer = %c%c%c\n",tmpbuf[0],tmpbuf[1],tmpbuf[2]);
+    read_cmd_reserved_buffer(tmpbuf,1);
+    printk(" power key reserved_buffer = %x\n",tmpbuf[0]);
 
-    #define _COLDBOOT          0   
-    #define _NORMAL_WARMBOOT   1
-    #define _HIDDEN_RESET      2
-
-    if ('p' == tmpbuf[0])
-    {
-      printk("star_powekey : hidden reset detected\n");
-      tag = _HIDDEN_RESET;
-      ret = sprintf(buf,"%d\n",tag);
-      tmpbuf[1] = NULL; tmpbuf[2] = NULL;
-      write_cmd_reserved_buffer(tmpbuf,3);
-      return ret;
-    }
-  
-    if ('w' == tmpbuf[0])
-    {
-	    switch (tmpbuf[1])
-	    {
-		    case 'm': // reboot immediately
-		    case 'a': // panic
-                    printk("star_powekey : hidden reset detected\n");
-	            tag = _HIDDEN_RESET;
-		    tmpbuf[2] = NULL;
-		    break;
-		    case 'e': //recovery
-                    printk("star_powekey : factory reset detected\n");
-		    tag = _NORMAL_WARMBOOT;
-		    tmpbuf[2] = NULL;
-		    break;
-		    default : // reboot other case (ex adb)
-                    printk("star_powekey : warm boot detected\n");
-		    tag = _NORMAL_WARMBOOT;
-		    tmpbuf[1] = NULL; tmpbuf[2] = NULL;
-		    break;
-	    }
-    }
+    if ('w' == tmpbuf[0]||'p'== tmpbuf[0])
+        tag = 1;
     else
-    {
-       printk("star_powekey : cold boot detected\n");
-       tag = _COLDBOOT; 
-       memset(tmpbuf,NULL,3);
-    }    
+        tag = 0;
+
     ret = sprintf(buf,"%d\n",tag);
-    write_cmd_reserved_buffer(tmpbuf,3);
     return ret;
 }
 
@@ -385,8 +347,7 @@ static struct attribute *star_reset_attributes[] = {
 static const struct attribute_group star_reset_group = {
     .attrs = star_reset_attributes,
 };
-//20101110, , Function for Warm-boot [END]
-
+#endif
 // 20110209  disable gpio interrupt during power-off  [START] 
 //extern void muic_gpio_interrupt_mask();
 extern void keep_touch_led_on();
@@ -394,7 +355,6 @@ extern void keep_touch_led_on();
 static ssize_t star_poweroff_store(struct device *dev, struct device_attribute *attr, char *buf, size_t count)
 {
     u32 val = 0;
-    unsigned char tmpbuf[3] = { NULL, };
     val = simple_strtoul(buf, NULL, 10);
 
     pwky_shutdown = 1;
@@ -406,7 +366,6 @@ static ssize_t star_poweroff_store(struct device *dev, struct device_attribute *
         wake_lock(&s_powerkey.wlock);
         tegra_gpio_disable_all_irq();
         keep_touch_led_on();
-        write_cmd_reserved_buffer(tmpbuf,3);
     }
     return count;
 }
@@ -644,7 +603,6 @@ static int powerkey_remove(struct platform_device *pdev)
     
     NvOdmGpioReleasePinHandle(s_powerkey.gpioHandle, s_powerkey.pinHandle);
     NvOdmGpioClose(s_powerkey.gpioHandle);
-    
 #ifdef POWERKEY_DELAYED_WORKQUEUE
     wake_lock_destroy(&s_powerkey.wlock);
 #endif
