@@ -71,7 +71,7 @@ struct suspend_context
 volatile struct suspend_context tegra_sctx;
 bool core_lock_on = false;
 
-unsigned long save_avp_resume_addr = 0;
+static unsigned long avp_resume_address = 0;
 
 #ifdef CONFIG_HOTPLUG_CPU
 extern void tegra_board_nvodm_suspend(void);
@@ -214,10 +214,7 @@ static noinline void restore_cpu_complex(bool wait_plls)
 	 * by CPU boot-up code - wait for PLL stabilization if PLLX
 	 * was enabled, or if explicitly requested by caller */
 
-	reg = readl(clk_rst + CLK_RESET_PLLX_BASE);
-	/* mask out bit 27 - not to check PLL lock bit */
-	BUG_ON((reg & (~(1 << 27))) !=
-      (tegra_sctx.pllx_base & (~(1 << 27))));
+	BUG_ON(readl(clk_rst + CLK_RESET_PLLX_BASE) != tegra_sctx.pllx_base);
 
 	if ((tegra_sctx.pllx_base & (1<<30)) || wait_plls) {
 		while (readl(tmrus)-tegra_sctx.pllx_timeout >= 0x80000000UL)
@@ -502,12 +499,6 @@ static void tegra_suspend_dram(bool lp0_ok)
 	} else {
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP0);
 
-        //20110213, , sched_clock mismatch issue after deepsleep [START]
-        #if defined(CONFIG_MACH_STAR)
-        tegra_lp0_sched_clock_clear();
-        #endif
-        //20110213, , sched_clock mismatch issue after deepsleep [END]
-
 		mode |= TEGRA_POWER_CPU_PWRREQ_OE;
 		mode |= TEGRA_POWER_PWRREQ_OE;
 		mode |= TEGRA_POWER_EFFECT_LP0;
@@ -677,11 +668,14 @@ static int tegra_suspend_prepare_late(void)
 		return -EIO;
 	}
 
-	/* write 0 to PMC_SCRATCH39 so that AVP halts after WB0 resume
-	 * we resume AVP after the basic resume on CPU is done */
-	writel(0, pmc + PMC_SCRATCH39);
-	save_avp_resume_addr = *((volatile unsigned int *)iram_avp_resume);
-	rmb();
+        /* store avp resume address that AVP firmware wrote
+         * in 1st word of IRAM */
+         avp_resume_address = *((unsigned long *)iram_avp_resume);
+         rmb();
+
+         /* write 0 to PMC_SCRATCH39 so that AVP halts after WB0 resume
+         * we resume AVP after the basic resume on CPU is done */
+         writel(0, pmc + PMC_SCRATCH39);
 
 #endif
 	disable_irq(INT_SYS_STATS_MON);
@@ -705,7 +699,7 @@ static void tegra_suspend_wake(void)
 	}
 	tegra_board_nvodm_resume();
 #endif
-	ret = tegra_avp_resume(save_avp_resume_addr);
+	ret = tegra_avp_resume(avp_resume_address);
 	if (ret < 0)
 		pr_err("%s: AVP failed to resume\n", __func__);
 }
@@ -742,7 +736,7 @@ static int tegra_suspend_enter(suspend_state_t state)
 		tegra_irq_suspend();
 		tegra_dma_suspend();
 		tegra_pinmux_suspend();
-                tegra_timer_suspend();
+		tegra_timer_suspend();
 		tegra_gpio_suspend();
 		tegra_clk_suspend();
 
@@ -758,9 +752,8 @@ static int tegra_suspend_enter(suspend_state_t state)
 		}
 	}
 	*/
-	
 	unmask_wakeup_suspended_irqs();
-	
+
 	if (!pdata->dram_suspend || !iram_save) {
 		/* lie about the power state so that the RM restarts DVFS */
 		NvRmPrivPowerSetState(s_hRmGlobal, NvRmPowerState_LP1);
