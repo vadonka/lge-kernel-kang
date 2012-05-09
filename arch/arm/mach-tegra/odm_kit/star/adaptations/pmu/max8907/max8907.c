@@ -48,7 +48,7 @@
 #include <linux/err.h>
 #endif // CONFIG_MACH_STAR
 //20100528, , Write the description here in detail [END]
-
+#include <linux/delay.h>
 //20100428, , This define for Debug Message function [START]
 #include <mach/lprintk.h>
 
@@ -1569,7 +1569,9 @@ Max8907WhiteLEDSwitch(
     NvOdmPmuDeviceHandle hDevice,
     NvU8 data)
 {
-    NvU8 CtlData;
+	// LGE_UPDATE_S	VRTC level change --> FET ON --> SYS_RESET_N LOW --> TRF issue happens
+    volatile NvU8 CtlData;
+	// LGE_UPDATE_E	VRTC level change --> FET ON --> SYS_RESET_N LOW --> TRF issue happens
 
     if(data){
         //CtlData = 0x00;
@@ -1588,6 +1590,15 @@ Max8907WhiteLEDSwitch(
         if (!Max8907I2cWrite8(hDevice, MAX8907_ILED_CNTL, CtlData))
             return NV_FALSE;
     }else{
+
+		// LGE_UPDATE_S	VRTC level change --> FET ON --> SYS_RESET_N LOW --> TRF issue happens
+		// Turn Off the White LED with 2 STEP (0x0A --> 0x04 --> 0x0 , 1mA --> 0.4mA --> 0ff)
+        CtlData = 0x04;
+        if (!Max8907I2cWrite8(hDevice, MAX8907_ILED_CNTL, CtlData))
+            return NV_FALSE;
+		msleep(400);
+		// LGE_UPDATE_E	VRTC level change --> FET ON --> SYS_RESET_N LOW --> TRF issue happens
+	
         CtlData = 0x00;
         if (!Max8907I2cWrite8(hDevice, MAX8907_ILED_CNTL, CtlData))
             return NV_FALSE;
@@ -1945,12 +1956,8 @@ Max8952WriteVoltageReg(
         //20100819 skip same voltage setting [END]
 
         // Set voltage level
-        #if defined(TMUS_B)   //TMUS revB
         //20100819, , Voltage bug fix
         data = pSupplyInfo->SetVoltage(MilliVolts) | MAX8952_FPWM_EN0;
-        #else 
-        data = pSupplyInfo->SetVoltage(MilliVolts);
-        #endif
 
         if (!Max8952I2cWrite8(hDevice, pSupplyInfo->OutputVoltageRegAddr, data))
             return NV_FALSE;

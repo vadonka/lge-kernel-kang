@@ -57,7 +57,8 @@ extern "C"
 #define MAX8907_REQUESTVOLTAGE_LDO18       1800     //VI 1.8V
 #define MAX8907_REQUESTVOLTAGE_LDO19       1800     //TOUCH 1.8V
 #define MAX8907_REQUESTVOLTAGE_LDO20       0
-#define MAX8907_REQUESTVOLTAGE_WLED        0x14     //0x14(2mA)  <- 0x46(7mA) <- 0x64(10mA) : 0x00(0.1mA)~0xff(25.5mA)
+// LGE_CHANGE_S youngseok.jeong@lge.com LED brightness to 1mA
+#define MAX8907_REQUESTVOLTAGE_WLED        0x0a     //0x0A(1mA) <- 0x14(2mA)  <- 0x46(7mA) <- 0x64(10mA) : 0x00(0.1mA)~0xff(25.5mA)
 #else
 #error "NOT SURPORTED!!!"
 #endif
