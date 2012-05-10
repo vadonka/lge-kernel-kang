@@ -141,6 +141,7 @@ if [ -e $kh/arch/arm/boot/zImage ]; then
 mkdir -p $ch/$cdir
 cp -r $kinstsrc/* -d $ch/$cdir
 
+mkdir -p $ch/$cdir/system/lib/modules
 for m in `find $kh -name '*.ko'`; do
     cp $m $ch/$cdir/system/lib/modules/
 done
