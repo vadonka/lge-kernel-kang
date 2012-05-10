@@ -31,6 +31,7 @@
 #include <linux/debugfs.h>
 #include <linux/power_supply.h>
 #include <linux/wakelock.h>
+#include <linux/fastchg.h>
 
 #include "nvcommon.h"
 #include "nvos.h"
@@ -640,12 +641,19 @@ static void star_charger_activation_work(NvU32 Mode)
 	{
 		case CHG_IC_DEFAULT_MODE:
 		case CHG_IC_USB_LO_MODE:
+		if(force_charge_mode == 0) {
 			batt_dev->charging_source = NvCharger_Type_USB;
 			star_battery_data_onetime_update(Update_Power_Data);
 			break;
+		}
 
 		case CHG_IC_TA_MODE:
 		case CHG_IC_FACTORY_MODE:
+		if(force_charge_mode == 2) {
+			batt_dev->charging_source = NvCharger_Type_USB;
+			star_battery_data_onetime_update(Update_Power_Data);
+			break;
+		}
 			batt_dev->charging_source = NvCharger_Type_AC;
 			star_battery_data_onetime_update(Update_Power_Data);
 			break;
