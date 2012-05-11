@@ -54,3 +54,4 @@ obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_SENSORS_AK8975)	+= akm8975.o
 obj-$(CONFIG_FSYNC_CONTROL)	+= fsync_control.o
 obj-$(CONFIG_VIBRATOR_CONTROL)  += vibrator_control.o
+obj-y				+= otf/

@@ -1,4 +1,5 @@
 #include <linux/spica.h>
+
 #define PROC_DIR "spica"
 
 #ifdef CONFIG_OTF_CPU1
