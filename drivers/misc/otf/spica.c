@@ -23,7 +23,7 @@ unsigned int OFFMAXHIGH = 1015000;
 #ifdef CONFIG_OTF_AVP
 /*******************************************/
 /* Default AVP Freq */
-unsigned int AVPFREQ = 280000;
+unsigned int AVPFREQ = 240000;
 /* Min & Max Limit */
 unsigned int AVPLOW = 200000;
 unsigned int AVPHIGH = 280000;
@@ -33,7 +33,7 @@ unsigned int AVPHIGH = 280000;
 #ifdef CONFIG_OTF_GPU
 /*******************************************/
 /* Default GPU Freq */
-unsigned int GPUFREQ = 350000;
+unsigned int GPUFREQ = 300000;
 /* Min & Max Limit */
 unsigned int GPULOW = 280000;
 unsigned int GPUHIGH = 350000;
