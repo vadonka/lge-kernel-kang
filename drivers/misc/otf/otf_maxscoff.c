@@ -1,4 +1,4 @@
-#include <linux/spica.h>
+#include "otf.h"
 
 #define MAXSM_PROCFS_NAME "screenoff_maxcpufreq"
 #define MAXSM_PROCFS_SIZE 7

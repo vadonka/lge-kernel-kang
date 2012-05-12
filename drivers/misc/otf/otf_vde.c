@@ -1,4 +1,4 @@
-#include <linux/spica.h>
+#include "otf.h"
 
 static struct proc_dir_entry *spica_dir;
 

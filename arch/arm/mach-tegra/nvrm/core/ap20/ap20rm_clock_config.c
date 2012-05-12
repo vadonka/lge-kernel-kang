@@ -42,9 +42,9 @@
 #include "ap15/ap15rm_private.h"
 #include "nvodm_query.h"
 
-/* Spica OTF start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
+/* OTF start */
+#ifdef CONFIG_OTF
+#include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF end */
 
 // Enable CPU/EMC ratio policy
@@ -1217,7 +1217,7 @@ Ap20SystemClockSourceFind(
      */
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
-#ifdef CONFIG_OTF_VDE
+#ifdef CONFIG_OTF
         C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, VDEFREQ, MaxKHz, &M1KHz);
@@ -1231,7 +1231,7 @@ Ap20SystemClockSourceFind(
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0), MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2, NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0), MaxKHz, &M1KHz);
 #endif /* FAKE_SHMOO */
-#endif /* OTF_VDE */
+#endif /* OTF */
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);
         if ((DomainKHz <= P2KHz) && (P2KHz < SourceKHz))

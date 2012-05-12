@@ -41,9 +41,9 @@
 #include "ap15/ap15rm_private.h"
 #include "ap15/project_relocation_table.h"
 
-/* Spica OTF Start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
+/* OTF Start */
+#ifdef CONFIG_OTF
+#include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
 #ifdef CONFIG_FAKE_SHMOO
@@ -216,15 +216,15 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // override default with configuration values
     // CPU clock duh!
     pSKUedLimits->CpuMaxKHz = MAX_CPU_OC_FREQ;
-#ifndef CONFIG_SPICA_OTF
+#ifndef CONFIG_OTF
 #ifdef CONFIG_BOOST_PERIPHERALS
     // AVP clock
     pSKUedLimits->AvpMaxKHz = CONFIG_MAX_AVP_OC_FREQ;
     // 3D clock
     pSKUedLimits->TDMaxKHz = CONFIG_MAX_3D_OC_FREQ;
-#endif // CONFIG_BOOST_PERIPHERALS
-#endif // CONFIG_SPICA_OTF
-#endif // CONFIG_FAKE_SHMOO
+#endif // BOOST_PERIPHERALS
+#endif // OTF
+#endif // FAKE_SHMOO
 
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
@@ -238,7 +238,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
 
-#ifdef CONFIG_OTF_AVP
+#ifdef CONFIG_OTF
     AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
 #else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
@@ -365,7 +365,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
 
-#ifdef CONFIG_OTF_GPU
+#ifdef CONFIG_OTF
     TDMaxKHz = GPUFREQ; // pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = GPUFREQ;
@@ -373,7 +373,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     TDMaxKHz = pSKUedLimits->TDMaxKHz;
     TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
-#endif // OTF_GPU
+#endif // OTF
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)

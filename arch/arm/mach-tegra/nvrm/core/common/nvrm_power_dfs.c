@@ -50,9 +50,9 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
-/* Spica OTF Start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
+/* OTF Start */
+#ifdef CONFIG_OTF
+#include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
 #ifdef CONFIG_FAKE_SHMOO

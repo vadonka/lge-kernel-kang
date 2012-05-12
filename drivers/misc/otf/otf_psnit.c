@@ -1,4 +1,4 @@
-#include <linux/spica.h>
+#include "otf.h"
 
 /* PowerSave and Nitro */
 #define PW_PROCFS_NAME "powersave"

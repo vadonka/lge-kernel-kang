@@ -562,15 +562,15 @@ source "drivers/misc/carma/Kconfig"
 source "drivers/misc/otf/Kconfig"
 
 config FSYNC_CONTROL
-        bool "Support for FSync Control"
-        default y
-        help
-          Say Y here to enable FSync Control
+	bool "Support for FSync Control"
+	default y
+	help
+	 Say Y here to enable FSync Control
 
 config VIBRATOR_CONTROL
-        bool "Support for Vibrator Control"
-        default y
-        help
-          Say Y here to enable Vibrator Control
+	bool "Support for Vibrator Control"
+	default y
+	help
+	 Say Y here to enable Vibrator Control
 
 endif # MISC_DEVICES

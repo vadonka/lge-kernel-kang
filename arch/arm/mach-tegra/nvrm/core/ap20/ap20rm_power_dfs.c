@@ -41,9 +41,9 @@
 #include "ap20/arclk_rst.h"
 #include "ap20/arapb_misc.h"
 
-/* Spica OTF Start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
+/* OTF Start */
+#ifdef CONFIG_OTF
+#include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
 /*****************************************************************************/
@@ -423,12 +423,12 @@ NvRmPrivAp20GetPmRequest(
     // Assume initial slave CPU1 On request
     static NvRmPmRequest s_LastPmRequest = (NvRmPmRequest_CpuOnFlag | 0x1);
 
-#ifdef CONFIG_OTF_CPU1
+#ifdef CONFIG_OTF
     NvRmFreqKHz s_Cpu1OnMinKHz = 0;
     NvRmFreqKHz s_Cpu1OffMaxKHz = 0;
 #else
     static NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
-#endif /* OTF_CPU1 */
+#endif /* OTF */
 
     static NvU32 s_Cpu1OnPendingCnt = 0, s_Cpu1OffPendingCnt = 0;
 

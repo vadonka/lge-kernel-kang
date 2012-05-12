@@ -32,12 +32,12 @@
 
 #include <trace/events/power.h>
 
-/* Spica OTF Start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
+/* OTF Start */
+#ifdef CONFIG_OTF
+#include "../misc/otf/otf.h"
 #include <linux/earlysuspend.h>
 #include <linux/sched.h>
-#endif /* OTF_MAXSCOFF */
+#endif /* OTF */
 
 #ifdef CONFIG_FAKE_SHMOO
 #include "../nvrm/core/common/nvrm_clocks_limits_private.h"
@@ -2117,7 +2117,7 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 
-#ifdef CONFIG_OTF_MAXSCOFF
+#ifdef CONFIG_OTF
 unsigned int oldmaxclock;
 unsigned int oldminclock;
 unsigned int oldmincpu1on;
@@ -2135,153 +2135,63 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 	for_each_online_cpu(cpu) {
 		struct cpufreq_policy *cpu_policy, new_policy;
 		cpu_policy = cpufreq_cpu_get(cpu);
+
 		if (!cpu_policy)
 			continue;
+
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
 
-#ifdef CONFIG_OTF_AVP
-			oldavpfreq = AVPFREQ;
-#endif
+		oldavpfreq = AVPFREQ;
+		oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
+		oldgpufreq = GPUFREQ;
+		oldvdefreq = VDEFREQ;
+		oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
+		oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
+		oldmaxclock = cpu_policy->max;
+		oldminclock = cpu_policy->min;
+		new_policy.max = SCREENOFFFREQ;
+		new_policy.min = oldminclock;
+		__cpufreq_set_policy(cpu_policy, &new_policy);
+		cpu_policy->user_policy.policy = cpu_policy->policy;
 
-#ifdef CONFIG_OTF_CPU1
-			oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
-#endif
-
-#ifdef CONFIG_OTF_GPU
-			oldgpufreq = GPUFREQ;
-#endif
-
-#ifdef CONFIG_OTF_VDE
-			oldvdefreq = VDEFREQ;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
-			oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
-			oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
-#endif
-
-			oldmaxclock = cpu_policy->max;
-			oldminclock = cpu_policy->min;
-			new_policy.max = SCREENOFFFREQ;
-			new_policy.min = oldminclock;
-			__cpufreq_set_policy(cpu_policy, &new_policy);
-			cpu_policy->user_policy.policy = cpu_policy->policy;
-
-#ifdef CONFIG_OTF_PSNIT
 		if (PWONOFF == 4) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 230000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 320000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 630000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 40000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
-#endif
 
 		} else if (PWONOFF == 5) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 220000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 310000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 620000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 30000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
 
 		} else if (PWONOFF == 6) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 200000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 300000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 600000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 10000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
 
 		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 240000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 350000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 680000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 50000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
-#endif
-
 		}
-#endif /* OTF_PSNIT */
+
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2290,11 +2200,14 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 
 static void powersave_late_resume(struct early_suspend *handler) {
 	int cpu;
+
 	for_each_online_cpu(cpu) {
 		struct cpufreq_policy *cpu_policy, new_policy;
 		cpu_policy = cpufreq_cpu_get(cpu);
+
 		if (!cpu_policy)
 			continue;
+
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
 			new_policy.max = oldmaxclock;
@@ -2302,144 +2215,53 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			__cpufreq_set_policy(cpu_policy, &new_policy);
 			cpu_policy->user_policy.policy = cpu_policy->policy;
 
-#ifdef CONFIG_OTF_PSNIT
 		if (PWONOFF == 1) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 230000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 320000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 630000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 40000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
-#endif
 
 		} else if (PWONOFF == 2) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 220000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 310000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 620000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 30000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
 
 		} else if (PWONOFF == 3) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 210000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 300000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 610000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 10000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
-#endif
 
 		} else if (NITROONOFF == 1) {
 			PWONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = 750000;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = 270000;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = 350000;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = 700000;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = 50000;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
-#endif
+
 		/* applying powersave 4,5,6 for screen off purposes only, restoring normal to screen wakeup */
 		} else if ((PWONOFF == 4) || (PWONOFF == 5) || (PWONOFF == 6)) {
 			NITROONOFF = 0;
-
-#ifdef CONFIG_OTF_CPU1
 			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
-#endif
-
-#ifdef CONFIG_OTF_AVP
 			AVPFREQ = oldavpfreq;
-#endif
-
-#ifdef CONFIG_OTF_GPU
 			GPUFREQ = oldgpufreq;
-#endif
-
-#ifdef CONFIG_OTF_VDE
 			VDEFREQ = oldvdefreq;
-#endif
-
-#ifdef CONFIG_OTF_DDR2MIN
 			NVRM_AP20_DDR2_MIN_KHZ = oldddr2;
-#endif
-
-#ifdef CONFIG_OTF_LPDDR2
 			NVRM_AP20_LPDDR2_MIN_KHZ = oldlpddr2;
-#endif
-
 		}
-#endif /* OTF_PSNIT */
+
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
 			cpufreq_cpu_put(cpu_policy);
@@ -2451,7 +2273,7 @@ static struct early_suspend _powersave_early_suspend = {
 	.resume = powersave_late_resume,
 	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
 };
-#endif /* OTF_MAXSCOFF */
+#endif /* OTF */
 
 static int __init cpufreq_core_init(void)
 {
@@ -2472,7 +2294,7 @@ static int __init cpufreq_core_init(void)
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
 
-#ifdef CONFIG_OTF_MAXSCOFF
+#ifdef CONFIG_OTF
 	register_early_suspend(&_powersave_early_suspend);
 #endif
 
