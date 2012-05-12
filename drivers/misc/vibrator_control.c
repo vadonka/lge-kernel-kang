@@ -13,7 +13,7 @@
 
 #define VIBRATORCONTROL_VERSION 1
 
-#define MAX_VIBSTRENGTH 3700
+#define MAX_VIBSTRENGTH 3600
 #define MIN_VIBSTRENGTH 1500
 
 extern void request_railcap(void);
