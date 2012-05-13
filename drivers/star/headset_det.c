@@ -120,6 +120,7 @@ int suspend_status = 0;
 //static struct wake_lock hook_det_lock;
 //20101117, , gpio wakeup from LP1 [END]
 
+static struct wake_lock headset_wake_lock;  //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
 
 extern void star_headsetdet_bias(int bias);	//20100421  for framwork function used in kernel ==> error [LGE]
 extern void star_Mic_bias(int bias);  //20110726 detecting headset when resuming
@@ -422,6 +423,7 @@ static void headset_int_handler(void *dev_id)
 	else
 	{
 	    schedule_delayed_work(&headset_sw_data->delayed_work,	msecs_to_jiffies(type_detection_time));	
+	    wake_lock_timeout(&headset_wake_lock, msecs_to_jiffies(type_detection_time + 50));	 //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
     }
 	NvOdmGpioInterruptDone(s_hHeadsetHandle.hheadsetInterrupt);	//20100420  for next interrupt (nVidia Interrupt Spec.) [LGE]
 }
@@ -718,6 +720,7 @@ static int headsetdet_probe(struct platform_device *pdev)
 	/* Perform initial detection */
 	headset_sw_data = switch_data;
 
+	wake_lock_init(&headset_wake_lock, WAKE_LOCK_SUSPEND, "headset_wlock"); //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
 	//headset_det_work(&switch_data->work);
 	lprintk(D_AUDIO, KERN_ERR "##(Headset_det.c)## headset detection - headset_det_work() first detection - success..!!\n"); //20100421  [LGE]	
 
@@ -820,6 +823,7 @@ static int headsetdet_remove(struct platform_device *pdev)
 	cancel_work_sync(&switch_data->work);
 	cancel_delayed_work_sync(&switch_data->delayed_work);
 	
+	wake_lock_destroy(&headset_wake_lock);		//20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
 /*====================== nVidia GPIO Control(S) =======================*/
     NvOdmGpioInterruptUnregister(s_hHeadsetHandle.hGpio, s_hHeadsetHandle.h_Headset_Detection, s_hHeadsetHandle.hheadsetInterrupt);
    
@@ -883,6 +887,7 @@ static int headset_resume(struct platform_device *pdev)
         input_report_key(headset_sw_data->ip_dev_wake, KEY_VOLUMEDOWN, 0);
 		input_sync(headset_sw_data->ip_dev_wake);
         
+	  cancel_delayed_work_sync(&headset_sw_data->delayed_work); //20111017 heejeong.seo@lge.com Problem that no wake up when disconn headset in calling
         schedule_delayed_work(&headset_sw_data->delayed_work,	msecs_to_jiffies(300));	
     }
     
