@@ -1,161 +1,330 @@
+/* drivers/misc/otf/otf_cpu1.c
+ *
+ * Original source by Benee (c) 2012
+ *
+ * Modified for the OTF by vadonka (c) 2012
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
+
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 #include "otf.h"
 
-static struct proc_dir_entry *spica_dir;
+/** Define the LG variables
+ * You need to undef or comment out the original LG definitions
+ * in 'arch/arm/mach-tegra/nvrm/core/ap20/ap20rm_power_dfs.h'
+ */
+unsigned int NVRM_CPU1_ON_MIN_KHZ;
+unsigned int NVRM_CPU1_OFF_MAX_KHZ;
+unsigned int NVRM_CPU1_ON_PENDING_MS;
+unsigned int NVRM_CPU1_OFF_PENDING_MS;
 
-/* CPU1 ON MIN */
-#define CPUON_PROCFS_NAME "mincpu1on"
-#define CPUON_PROCFS_SIZE 8
-static unsigned long procfs_buffer_size_cpuon = 0;
-static struct proc_dir_entry *CPUON_Proc_File;
-static char procfs_buffer_cpuon[CPUON_PROCFS_SIZE];
-extern unsigned int ONMINLOW;
-extern unsigned int ONMINHIGH;
+/** Static containers */
+/*
+ * Defines CPU frequency threshold for slave CPU1 power management:
+ * - CPU1 is turned Off when cpu clock is below ONMINKHZ for
+ *   ONDELAY time in a row
+ * - CPU1 is turned On when cpu clock is above OFFMAXKHZ for
+ *   OFFDELAY time in a row
+ */
+static unsigned int MIN_ONMINKHZ  = 216000;	/* Minimum ON_MIN_KHZ value     */
+static unsigned int MAX_ONMINKHZ  = 1015000;	/* Maximum ON_MIN_KHZ value     */
+static unsigned int DEF_ONMINKHZ  = 816000;	/* Default ON_MIN_KHZ value     */
 
-int cpuon_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+static unsigned int MIN_ONDELAY   = 300;	/* Minimum ON_PENDING_MS value  */
+static unsigned int MAX_ONDELAY   = 2500;	/* Maximum ON_PENDING_MS value  */
+static unsigned int DEF_ONDELAY   = 2000;	/* Default ON_PENDING_MS value  */
+
+static unsigned int MIN_OFFMAXKHZ = 216000;	/* Minimum OFF_MAX_KHZ value    */
+static unsigned int MAX_OFFMAXKHZ = 1015000;	/* Maximum OFF_MAX_KHZ value    */
+static unsigned int DEF_OFFMAXKHZ = 860000;	/* Default OFF_MAX_KHZ value    */
+
+static unsigned int MIN_OFFDELAY  = 300;	/* Mininum OFF_PENDING_MS value */
+static unsigned int MAX_OFFDELAY  = 2000;	/* Maximum OFF_PENDING_MS value */
+static unsigned int DEF_OFFDELAY  = 1000;	/* Default OFF_PENDING_MS value */
+/** Static containers end */
+
+/* Boot time values */
+static unsigned int onminkhz  = 816000;		/* ON_MIN_KHZ boot time value     */
+static unsigned int ondelay   = 2000;		/* ON_PENDING_MS boot time value  */
+
+static unsigned int offmaxkhz = 860000;		/* OFF_MAX_KHZ boot time value    */
+static unsigned int offdelay  = 1000;		/* OFF_PENDING_MS boot time value */
+/* Boot time values end */
+
+/** Container definitions */
+/* ON_MIN_KHZ */
+unsigned int onminkhzcontrol_value(void)
+{
+	return onminkhz;
+}
+EXPORT_SYMBOL(onminkhzcontrol_value);
+
+/* OFF_MAX_KHZ */
+unsigned int offmaxkhzcontrol_value(void)
+{
+	return offmaxkhz;
+}
+EXPORT_SYMBOL(offmaxkhzcontrol_value);
+
+/* ON_PENDING_MS */
+unsigned int ondelaycontrol_value(void)
+{
+	return ondelay;
+}
+EXPORT_SYMBOL(ondelaycontrol_value);
+
+/* OFF_PENDING_MS */
+unsigned int offdelaycontrol_value(void)
+{
+	return offdelay;
+}
+EXPORT_SYMBOL(offdelaycontrol_value);
+/** Definition ends */
+
+/** SYSFS */
+/* ON_MIN_KHZ */
+static ssize_t onminkhzcontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", onminkhz);
+}
+
+static ssize_t onminkhzcontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int data;
+
+	if (sscanf(buf, "%d\n", &data) == 1)
+	{
+		if (data != onminkhz)
+		{
+			onminkhz = min(max(data, MIN_ONMINKHZ), MAX_ONMINKHZ);
+			/* LG variable get the new value */
+			NVRM_CPU1_ON_MIN_KHZ = onminkhzcontrol_value();
+			pr_info("CPU1_ON_MIN_KHZ threshold changed to %d\n", onminkhz);
+		}
+	}
+	else
+	{
+		pr_info("CPU1_ON_MIN_KHZ invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t onminkhzcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_ONMINKHZ);
+}
+
+static ssize_t onminkhzcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_ONMINKHZ);
+}
+
+static ssize_t onminkhzcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_ONMINKHZ);
+}
+
+/* OFF_MAX_KHZ */
+static ssize_t offmaxkhzcontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", offmaxkhz);
+}
+
+static ssize_t offmaxkhzcontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int data;
+
+	if (sscanf(buf, "%d\n", &data) == 1)
+	{
+		if (data != offmaxkhz)
+		{
+			offmaxkhz = min(max(data, MIN_OFFMAXKHZ), MAX_OFFMAXKHZ);
+			/* LG variable get the new value */
+			NVRM_CPU1_OFF_MAX_KHZ = offmaxkhzcontrol_value();
+			pr_info("CPU1_OFF_MAX_KHZ threshold changed to %d\n", offmaxkhz);
+		}
+	}
+	else
+	{
+		pr_info("CPU1_OFF_MAX_KHZ invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t offmaxkhzcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_OFFMAXKHZ);
+}
+
+static ssize_t offmaxkhzcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_OFFMAXKHZ);
+}
+
+static ssize_t offmaxkhzcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_OFFMAXKHZ);
+}
+
+/* ON_PENDING_MS */
+static ssize_t ondelaycontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", ondelay);
+}
+
+static ssize_t ondelaycontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int data;
+
+	if (sscanf(buf, "%d\n", &data) == 1)
+	{
+		if (data != ondelay)
+		{
+			ondelay = min(max(data, MIN_ONDELAY), MAX_ONDELAY);
+			/* LG variable get the new value */
+			NVRM_CPU1_ON_PENDING_MS = ondelaycontrol_value();
+			pr_info("CPU1_ON_PENDING_MS threshold changed to %d\n", ondelay);
+		}
+	}
+	else
+	{
+		pr_info("CPU1_ON_PENDING_MS invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t ondelaycontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_ONDELAY);
+}
+
+static ssize_t ondelaycontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_ONDELAY);
+}
+
+static ssize_t ondelaycontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_ONDELAY);
+}
+
+/* OFF_PENDING_MS */
+static ssize_t offdelaycontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", offdelay);
+}
+
+static ssize_t offdelaycontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int data;
+
+	if (sscanf(buf, "%d\n", &data) == 1)
+	{
+		if (data != offdelay)
+		{
+			offdelay = min(max(data, MIN_OFFDELAY), MAX_OFFDELAY);
+			/* LG variable get the new value */
+			NVRM_CPU1_OFF_PENDING_MS = offdelaycontrol_value();
+			pr_info("CPU1_OFF_PENDING_MS threshold changed to %d\n", offdelay);
+		}
+	}
+	else
+	{
+		pr_info("CPU1_OFF_PENDING_MS invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t offdelaycontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_OFFDELAY);
+}
+
+static ssize_t offdelaycontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_OFFDELAY);
+}
+
+static ssize_t offdelaycontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_OFFDELAY);
+}
+
+/** SYSFS attributes */
+/* ON_MIN_KHZ */
+static DEVICE_ATTR(onminkhz, S_IRUGO | S_IWUGO, onminkhzcontrol_value_read, onminkhzcontrol_value_write);
+static DEVICE_ATTR(onminkhzmin, S_IRUGO , onminkhzcontrol_min, NULL);
+static DEVICE_ATTR(onminkhzmax, S_IRUGO , onminkhzcontrol_max, NULL);
+static DEVICE_ATTR(onminkhzdef, S_IRUGO , onminkhzcontrol_def, NULL);
+
+/* ON_PENDING_MS */
+static DEVICE_ATTR(ondelay, S_IRUGO | S_IWUGO, ondelaycontrol_value_read, ondelaycontrol_value_write);
+static DEVICE_ATTR(ondelaymin, S_IRUGO , ondelaycontrol_min, NULL);
+static DEVICE_ATTR(ondelaymax, S_IRUGO , ondelaycontrol_max, NULL);
+static DEVICE_ATTR(ondelaydef, S_IRUGO , ondelaycontrol_def, NULL);
+
+/* OFF_MAX_KHZ */
+static DEVICE_ATTR(offmaxkhz, S_IRUGO | S_IWUGO, offmaxkhzcontrol_value_read, offmaxkhzcontrol_value_write);
+static DEVICE_ATTR(offmaxkhzmin, S_IRUGO , offmaxkhzcontrol_min, NULL);
+static DEVICE_ATTR(offmaxkhzmax, S_IRUGO , offmaxkhzcontrol_max, NULL);
+static DEVICE_ATTR(offmaxkhzdef, S_IRUGO , offmaxkhzcontrol_def, NULL);
+
+/* OFF_PENDING_MS */
+static DEVICE_ATTR(offdelay, S_IRUGO | S_IWUGO, offdelaycontrol_value_read, offdelaycontrol_value_write);
+static DEVICE_ATTR(offdelaymin, S_IRUGO , offdelaycontrol_min, NULL);
+static DEVICE_ATTR(offdelaymax, S_IRUGO , offdelaycontrol_max, NULL);
+static DEVICE_ATTR(offdelaydef, S_IRUGO , offdelaycontrol_def, NULL);
+
+static struct attribute *cpu1control_attributes[] = {
+	&dev_attr_onminkhz.attr,
+	&dev_attr_onminkhzmin.attr,
+	&dev_attr_onminkhzmax.attr,
+	&dev_attr_onminkhzdef.attr,
+	&dev_attr_ondelay.attr,
+	&dev_attr_ondelaymin.attr,
+	&dev_attr_ondelaymax.attr,
+	&dev_attr_ondelaydef.attr,
+	&dev_attr_offmaxkhz.attr,
+	&dev_attr_offmaxkhzmin.attr,
+	&dev_attr_offmaxkhzmax.attr,
+	&dev_attr_offmaxkhzdef.attr,
+	&dev_attr_offdelay.attr,
+	&dev_attr_offdelaymin.attr,
+	&dev_attr_offdelaymax.attr,
+	&dev_attr_offdelaydef.attr,
+	NULL
+};
+
+static struct attribute_group cpu1control_group = {
+	.attrs  = cpu1control_attributes,
+};
+
+static struct miscdevice cpu1control_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "cpu1control",
+};
+
+static int __init cpu1control_init(void) {
 	int ret;
-	printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", CPUON_PROCFS_NAME);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, cpu1control_device.name);
+	ret = misc_register(&cpu1control_device);
 
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_cpuon, procfs_buffer_size_cpuon);
-		ret = procfs_buffer_size_cpuon;
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, cpu1control_device.name);
+		return 1;
 	}
 
-	return ret;
-}
-
-int cpuon_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_cpuon;
-	temp_cpuon = 0;
-
-	if ( sscanf(buffer,"%d",&temp_cpuon) < 1 )
-		return procfs_buffer_size_cpuon;
-
-	if ( temp_cpuon < ONMINLOW || temp_cpuon > ONMINHIGH )
-		return procfs_buffer_size_cpuon;
-
-	procfs_buffer_size_cpuon = count;
-
-	if (procfs_buffer_size_cpuon > CPUON_PROCFS_SIZE) {
-		procfs_buffer_size_cpuon = CPUON_PROCFS_SIZE;
+	if (sysfs_create_group(&cpu1control_device.this_device->kobj, &cpu1control_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
+		pr_err("Failed to create sysfs group for device (%s)!\n", cpu1control_device.name);
 	}
-
-	if (copy_from_user(procfs_buffer_cpuon, buffer, procfs_buffer_size_cpuon)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_cpuon,"%u",&NVRM_CPU1_ON_MIN_KHZ);
-	return procfs_buffer_size_cpuon;
-}
-
-static int __init init_cpuon_procsfs(void) {
-	CPUON_Proc_File = spica_add(CPUON_PROCFS_NAME);
-
-	if (CPUON_Proc_File == NULL) {
-		spica_remove(CPUON_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", CPUON_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		CPUON_Proc_File->read_proc	= cpuon_procfile_read;
-		CPUON_Proc_File->write_proc	= cpuon_procfile_write;
-		CPUON_Proc_File->mode		= S_IFREG | S_IRUGO;
-		CPUON_Proc_File->uid		= 0;
-		CPUON_Proc_File->gid		= 0;
-		CPUON_Proc_File->size		= 37;
-		sprintf(procfs_buffer_cpuon,"%d",NVRM_CPU1_ON_MIN_KHZ);
-		procfs_buffer_size_cpuon	= strlen(procfs_buffer_cpuon);
-		printk(KERN_INFO "/proc/spica/%s created\n", CPUON_PROCFS_NAME);
-	}
-
 	return 0;
 }
 
-module_init(init_cpuon_procsfs);
-
-static void __exit cleanup_cpuon_procsfs(void) {
-	spica_remove(CPUON_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", CPUON_PROCFS_NAME);
-}
-
-module_exit(cleanup_cpuon_procsfs);
-
-/* CPU1 OFF MAX */
-#define CPUOFF_PROCFS_NAME "maxcpu1off"
-#define CPUOFF_PROCFS_SIZE 8
-extern unsigned int OFFMAXLOW;
-extern unsigned int OFFMAXHIGH;
-static struct proc_dir_entry *CPUOFF_Proc_File;
-static char procfs_buffer_cpuoff[CPUOFF_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_cpuoff = 0;
-
-int cpuoff_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-	int ret;
-	printk(KERN_INFO "cpuoff_procfile_read (/proc/spica/%s) called\n", CPUOFF_PROCFS_NAME);
-
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_cpuoff, procfs_buffer_size_cpuoff);
-		ret = procfs_buffer_size_cpuoff;
-	}
-
-	return ret;
-}
-
-int cpuoff_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_cpuoff;
-	temp_cpuoff = 0;
-
-	if ( sscanf(buffer,"%d",&temp_cpuoff) < 1 )
-		return procfs_buffer_size_cpuoff;
-
-	if ( temp_cpuoff < OFFMAXLOW || temp_cpuoff > OFFMAXHIGH )
-		return procfs_buffer_size_cpuoff;
-
-	procfs_buffer_size_cpuoff = count;
-
-	if (procfs_buffer_size_cpuoff > CPUOFF_PROCFS_SIZE) {
-		procfs_buffer_size_cpuoff = CPUOFF_PROCFS_SIZE;
-	}
-
-	if (copy_from_user(procfs_buffer_cpuoff, buffer, procfs_buffer_size_cpuoff)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_cpuoff,"%u",&NVRM_CPU1_OFF_MAX_KHZ);
-	return procfs_buffer_size_cpuoff;
-}
-
-static int __init cpuoff_procsfs(void) {
-	CPUOFF_Proc_File = spica_add(CPUOFF_PROCFS_NAME);
-
-	if (CPUOFF_Proc_File == NULL) {
-		spica_remove(CPUOFF_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", CPUOFF_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		CPUOFF_Proc_File->read_proc	= cpuoff_procfile_read;
-		CPUOFF_Proc_File->write_proc	= cpuoff_procfile_write;
-		CPUOFF_Proc_File->mode		= S_IFREG | S_IRUGO;
-		CPUOFF_Proc_File->uid		= 0;
-		CPUOFF_Proc_File->gid		= 0;
-		CPUOFF_Proc_File->size		= 37;
-		sprintf(procfs_buffer_cpuoff,"%d",NVRM_CPU1_OFF_MAX_KHZ);
-		procfs_buffer_size_cpuoff	= strlen(procfs_buffer_cpuoff);
-		printk(KERN_INFO "/proc/spica/%s created\n", CPUOFF_PROCFS_NAME);
-}
-
-	return 0;
-}
-
-module_init(cpuoff_procsfs);
-
-static void __exit cpu_cleanup_cpuoff_procsfs(void) {
-	spica_remove(CPUOFF_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", CPUOFF_PROCFS_NAME);
-}
-
-module_exit(cpu_cleanup_cpuoff_procsfs);
+device_initcall(cpu1control_init);

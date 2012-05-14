@@ -3,20 +3,6 @@
 #define PROC_DIR "spica"
 
 /*******************************************/
-/* CPU1 On Min Khz */
-/* Default value */
-unsigned int NVRM_CPU1_ON_MIN_KHZ = 816000;
-/* Min & Max Limit */
-unsigned int ONMINLOW = 216000;
-unsigned int ONMINHIGH = 1015000;
-/*******************************************/
-/* CPU1 Off Max Khz */
-/* Default value */
-unsigned int NVRM_CPU1_OFF_MAX_KHZ = 860000;
-/* Min & Max Limit */
-unsigned int OFFMAXLOW = 216000;
-unsigned int OFFMAXHIGH = 1015000;
-/*******************************************/
 /* Default AVP Freq */
 unsigned int AVPFREQ = 240000;
 /* Min & Max Limit */

@@ -249,10 +249,9 @@ extern "C"
 #ifndef CONFIG_OTF
 #define NVRM_CPU1_ON_MIN_KHZ (0)
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
-#endif /* OTF */
-
 #define NVRM_CPU1_ON_PENDING_MS (2000)
 #define NVRM_CPU1_OFF_PENDING_MS (1000)
+#endif /* OTF */
 
 /*
  * Defines AP20 Thermal policy parameters.
