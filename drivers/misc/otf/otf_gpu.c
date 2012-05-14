@@ -1,80 +1,112 @@
-#include "otf.h"
+/* drivers/misc/otf/otf_gpu.c
+ *
+ * Original source by Benee (c) 2012
+ *
+ * Modified for the OTF by vadonka 2012
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
-static struct proc_dir_entry *spica_dir;
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 
-/* GPU Freq */
-#define GPU_PROCFS_NAME "gpufreq"
-#define GPU_PROCFS_SIZE 8
-static struct proc_dir_entry *GPU_Proc_File;
-static char procfs_buffer_gpu[GPU_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_gpu = 0;
+/* Static containers */
+static unsigned int MIN_GPUFREQ = 300000;
+static unsigned int MAX_GPUFREQ = 400000;
+static unsigned int DEF_GPUFREQ = 350000;
 
-int gpu_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+/* Boot time value */
+unsigned int gpufreq = 350000;
+
+static ssize_t gpufreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", gpufreq);
+}
+
+extern unsigned int nitro;
+static ssize_t gpufreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int datagpu;
+
+	if (sscanf(buf, "%d\n", &datagpu) == 1)
+	{
+		if (datagpu != gpufreq)
+		{
+			if (nitro == 1)
+			{
+				gpufreq = MAX_GPUFREQ;
+				pr_info("NITRO Enabled! GPUCONTROL threshold changed to %d\n", gpufreq);
+			}
+			else
+			{
+				gpufreq = min(max(datagpu, MIN_GPUFREQ), MAX_GPUFREQ);
+				pr_info("GPUCONTROL threshold changed to %d\n", gpufreq);
+			}
+		}
+	}
+	else
+	{
+		pr_info("GPUCONTROL invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t gpucontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_GPUFREQ);
+}
+
+static ssize_t gpucontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_GPUFREQ);
+}
+
+static ssize_t gpucontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_GPUFREQ);
+}
+
+static DEVICE_ATTR(gpufreq, S_IRUGO | S_IWUGO, gpufreq_read, gpufreq_write);
+static DEVICE_ATTR(gpufreqmin, S_IRUGO , gpucontrol_min, NULL);
+static DEVICE_ATTR(gpufreqmax, S_IRUGO , gpucontrol_max, NULL);
+static DEVICE_ATTR(gpufreqdef, S_IRUGO , gpucontrol_def, NULL);
+
+static struct attribute *gpucontrol_attributes[] = {
+	&dev_attr_gpufreq.attr,
+	&dev_attr_gpufreqmin.attr,
+	&dev_attr_gpufreqmax.attr,
+	&dev_attr_gpufreqdef.attr,
+	NULL
+};
+
+static struct attribute_group gpucontrol_group = {
+	.attrs  = gpucontrol_attributes,
+};
+
+static struct miscdevice gpucontrol_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "gpucontrol",
+};
+
+static int __init gpucontrol_init(void) {
 	int ret;
-	printk(KERN_INFO "gpu_procfile_read (/proc/spica/%s) called\n", GPU_PROCFS_NAME);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, gpucontrol_device.name);
+	ret = misc_register(&gpucontrol_device);
 
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_gpu, procfs_buffer_size_gpu);
-		ret = procfs_buffer_size_gpu;
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, gpucontrol_device.name);
+		return 1;
 	}
 
-	return ret;
-}
-
-int gpu_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_gpu;
-	temp_gpu = 0;
-
-	if ( sscanf(buffer,"%d",&temp_gpu) < 1 )
-		return procfs_buffer_size_gpu;
-
-	if ( temp_gpu < GPULOW || temp_gpu > GPUHIGH )
-		return procfs_buffer_size_gpu;
-
-	procfs_buffer_size_gpu = count;
-
-	if (procfs_buffer_size_gpu > GPU_PROCFS_SIZE) {
-		procfs_buffer_size_gpu = GPU_PROCFS_SIZE;
+	if (sysfs_create_group(&gpucontrol_device.this_device->kobj, &gpucontrol_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
+		pr_err("Failed to create sysfs group for device (%s)!\n", gpucontrol_device.name);
 	}
-
-	if (copy_from_user(procfs_buffer_gpu, buffer, procfs_buffer_size_gpu)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_gpu,"%u",&GPUFREQ);
-	return procfs_buffer_size_gpu;
-}
-
-static int __init init_gpu_procsfs(void) {
-	GPU_Proc_File = spica_add(GPU_PROCFS_NAME);
-
-	if (GPU_Proc_File == NULL) {
-		spica_remove(GPU_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", GPU_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		GPU_Proc_File->read_proc	= gpu_procfile_read;
-		GPU_Proc_File->write_proc	= gpu_procfile_write;
-		GPU_Proc_File->mode		= S_IFREG | S_IRUGO;
-		GPU_Proc_File->uid		= 0;
-		GPU_Proc_File->gid		= 0;
-		GPU_Proc_File->size		= 37;
-		sprintf(procfs_buffer_gpu,"%d",GPUFREQ);
-		procfs_buffer_size_gpu		= strlen(procfs_buffer_gpu);
-		printk(KERN_INFO "/proc/spica/%s created\n", GPU_PROCFS_NAME);
-	}
-
 	return 0;
 }
 
-module_init(init_gpu_procsfs);
-
-static void __exit cleanup_gpu_procsfs(void) {
-	spica_remove(GPU_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", GPU_PROCFS_NAME);
-}
-
-module_exit(cleanup_gpu_procsfs);
+device_initcall(gpucontrol_init);

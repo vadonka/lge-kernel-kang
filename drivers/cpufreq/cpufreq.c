@@ -2120,12 +2120,6 @@ EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
 #ifdef CONFIG_OTF
 unsigned int oldmaxclock;
 unsigned int oldminclock;
-unsigned int oldmincpu1on;
-unsigned int oldgpufreq;
-unsigned int oldvdefreq;
-unsigned int oldcoremv;
-unsigned int oldlowcpu;
-unsigned int oldavpfreq;
 
 static void powersave_early_suspend(struct early_suspend *handler) {
 	int cpu;
@@ -2140,45 +2134,12 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
 
-		oldavpfreq = avpfreq;
-		oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
-		oldgpufreq = GPUFREQ;
-		oldvdefreq = VDEFREQ;
 		oldmaxclock = cpu_policy->max;
 		oldminclock = cpu_policy->min;
-		new_policy.max = SCREENOFFFREQ;
+		new_policy.max = scroffmaxfreq;
 		new_policy.min = oldminclock;
 		__cpufreq_set_policy(cpu_policy, &new_policy);
 		cpu_policy->user_policy.policy = cpu_policy->policy;
-
-		if (PWONOFF == 4) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			avpfreq = 230000;
-			GPUFREQ = 320000;
-			VDEFREQ = 630000;
-
-		} else if (PWONOFF == 5) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			avpfreq = 220000;
-			GPUFREQ = 310000;
-			VDEFREQ = 620000;
-
-		} else if (PWONOFF == 6) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			avpfreq = 200000;
-			GPUFREQ = 300000;
-			VDEFREQ = 600000;
-
-		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			avpfreq = 240000;
-			GPUFREQ = 350000;
-			VDEFREQ = 680000;
-		}
 
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:
@@ -2202,43 +2163,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			new_policy.min = oldminclock;
 			__cpufreq_set_policy(cpu_policy, &new_policy);
 			cpu_policy->user_policy.policy = cpu_policy->policy;
-
-		if (PWONOFF == 1) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			avpfreq = 230000;
-			GPUFREQ = 320000;
-			VDEFREQ = 630000;
-
-		} else if (PWONOFF == 2) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			avpfreq = 220000;
-			GPUFREQ = 310000;
-			VDEFREQ = 620000;
-
-		} else if (PWONOFF == 3) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			avpfreq = 210000;
-			GPUFREQ = 300000;
-			VDEFREQ = 610000;
-
-		} else if (NITROONOFF == 1) {
-			PWONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = 750000;
-			avpfreq = 270000;
-			GPUFREQ = 350000;
-			VDEFREQ = 700000;
-
-		/* applying powersave 4,5,6 for screen off purposes only, restoring normal to screen wakeup */
-		} else if ((PWONOFF == 4) || (PWONOFF == 5) || (PWONOFF == 6)) {
-			NITROONOFF = 0;
-			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
-			avpfreq = oldavpfreq;
-			GPUFREQ = oldgpufreq;
-			VDEFREQ = oldvdefreq;
-		}
 
 			cpu_policy->user_policy.governor = cpu_policy->governor;
 			out:

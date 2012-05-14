@@ -1,77 +1,103 @@
-#include "otf.h"
+/* drivers/misc/otf/otf_maxscroffmax.c
+ *
+ * Original source by Benee (c) 2012
+ *
+ * Modified for the OTF by vadonka 2012
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
-#define MAXSM_PROCFS_NAME "screenoff_maxcpufreq"
-#define MAXSM_PROCFS_SIZE 7
-static struct proc_dir_entry *MAXSM_Proc_File;
-static char procfs_buffer_sm[MAXSM_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_sm = 0;
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 
-int maxsm_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+/* Static containers */
+static unsigned int MIN_SCROFFMAXFREQ = 324000;
+static unsigned int MAX_SCROFFMAXFREQ = 816000;
+static unsigned int DEF_SCROFFMAXFREQ = 324000;
+
+/* Boot time value */
+unsigned int scroffmaxfreq = 324000;
+
+static ssize_t scroffmaxfreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", scroffmaxfreq);
+}
+
+static ssize_t scroffmaxfreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int datascoff;
+
+	if (sscanf(buf, "%d\n", &datascoff) == 1)
+	{
+		if (datascoff != scroffmaxfreq)
+		{
+			scroffmaxfreq = min(max(datascoff, MIN_SCROFFMAXFREQ), MAX_SCROFFMAXFREQ);
+			pr_info("SCROFFMAXCONTROL threshold changed to %d\n", scroffmaxfreq);
+		}
+	}
+	else
+	{
+		pr_info("SCROFFMAXCONTROL invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t scroffmaxcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_SCROFFMAXFREQ);
+}
+
+static ssize_t scroffmaxcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_SCROFFMAXFREQ);
+}
+
+static ssize_t scroffmaxcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_SCROFFMAXFREQ);
+}
+
+static DEVICE_ATTR(scroffmaxfreq, S_IRUGO | S_IWUGO, scroffmaxfreq_read, scroffmaxfreq_write);
+static DEVICE_ATTR(scroffmaxfreqmin, S_IRUGO , scroffmaxcontrol_min, NULL);
+static DEVICE_ATTR(scroffmaxfreqmax, S_IRUGO , scroffmaxcontrol_max, NULL);
+static DEVICE_ATTR(scroffmaxfreqdef, S_IRUGO , scroffmaxcontrol_def, NULL);
+
+static struct attribute *scroffmaxcontrol_attributes[] = {
+	&dev_attr_scroffmaxfreq.attr,
+	&dev_attr_scroffmaxfreqmin.attr,
+	&dev_attr_scroffmaxfreqmax.attr,
+	&dev_attr_scroffmaxfreqdef.attr,
+	NULL
+};
+
+static struct attribute_group scroffmaxcontrol_group = {
+	.attrs  = scroffmaxcontrol_attributes,
+};
+
+static struct miscdevice scroffmaxcontrol_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "scroffmaxcontrol",
+};
+
+static int __init scroffmaxcontrol_init(void) {
 	int ret;
-	printk(KERN_INFO "procfile_read (/proc/spica/%s) called\n", MAXSM_PROCFS_NAME);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, scroffmaxcontrol_device.name);
+	ret = misc_register(&scroffmaxcontrol_device);
 
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_sm, procfs_buffer_size_sm);
-		ret = procfs_buffer_size_sm;
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, scroffmaxcontrol_device.name);
+		return 1;
 	}
 
-	return ret;
-}
-
-int maxsm_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_sm;
-	temp_sm = 0;
-
-	if ( sscanf(buffer,"%d",&temp_sm) < 1 )
-		return procfs_buffer_size_sm;
-
-	if ( temp_sm < SMFREQLOW || temp_sm > SMFREQHIGH )
-		return procfs_buffer_size_sm;
-
-	procfs_buffer_size_sm = count;
-
-	if (procfs_buffer_size_sm > MAXSM_PROCFS_SIZE) {
-		procfs_buffer_size_sm = MAXSM_PROCFS_SIZE;
+	if (sysfs_create_group(&scroffmaxcontrol_device.this_device->kobj, &scroffmaxcontrol_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
+		pr_err("Failed to create sysfs group for device (%s)!\n", scroffmaxcontrol_device.name);
 	}
-
-	if (copy_from_user(procfs_buffer_sm, buffer, procfs_buffer_size_sm)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_sm,"%u",&SCREENOFFFREQ);
-	return procfs_buffer_size_sm;
-}
-
-static int __init init_maxsm_procsfs(void) {
-	MAXSM_Proc_File = spica_add(MAXSM_PROCFS_NAME);
-
-	if (MAXSM_Proc_File == NULL) {
-		spica_remove(MAXSM_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", MAXSM_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		MAXSM_Proc_File->read_proc	= maxsm_procfile_read;
-		MAXSM_Proc_File->write_proc	= maxsm_procfile_write;
-		MAXSM_Proc_File->mode		= S_IFREG | S_IRUGO;
-		MAXSM_Proc_File->uid		= 0;
-		MAXSM_Proc_File->gid		= 0;
-		MAXSM_Proc_File->size		= 37;
-		sprintf(procfs_buffer_sm,"%d",SCREENOFFFREQ);
-		procfs_buffer_size_sm		= strlen(procfs_buffer_sm);
-		printk(KERN_INFO "/proc/spica/%s created\n", MAXSM_PROCFS_NAME);
-	}
-
 	return 0;
 }
 
-module_init(init_maxsm_procsfs);
-
-static void __exit cleanup_maxsm_procsfs(void) {
-	spica_remove(MAXSM_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", MAXSM_PROCFS_NAME);
-}
-
-module_exit(cleanup_maxsm_procsfs);
+device_initcall(scroffmaxcontrol_init);

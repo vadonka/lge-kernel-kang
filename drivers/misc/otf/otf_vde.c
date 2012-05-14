@@ -1,80 +1,112 @@
-#include "otf.h"
+/* drivers/misc/otf/otf_vde.c
+ *
+ * Original source by Benee (c) 2012
+ *
+ * Modified for the OTF by vadonka 2012
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
-static struct proc_dir_entry *spica_dir;
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 
-/* VDE Freq */
-#define VDE_PROCFS_NAME "vdefreq"
-#define VDE_PROCFS_SIZE 8
-static struct proc_dir_entry *VDE_Proc_File;
-static char procfs_buffer_vde[VDE_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_vde = 0;
+/* Static containers */
+static unsigned int MIN_VDEFREQ = 600000;
+static unsigned int MAX_VDEFREQ = 700000;
+static unsigned int DEF_VDEFREQ = 650000;
 
-int vde_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+/* Boot time value */
+unsigned int vdefreq = 650000;
+
+static ssize_t vdefreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", vdefreq);
+}
+
+extern unsigned int nitro;
+static ssize_t vdefreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int datavde;
+
+	if (sscanf(buf, "%d\n", &datavde) == 1)
+	{
+		if (datavde != vdefreq)
+		{
+			if (nitro == 1)
+			{
+				vdefreq = MAX_VDEFREQ;
+				pr_info("NITRO Enabled! VDECONTROL threshold changed to %d\n", vdefreq);
+			}
+			else
+			{
+				vdefreq = min(max(datavde, MIN_VDEFREQ), MAX_VDEFREQ);
+				pr_info("VDECONTROL threshold changed to %d\n", vdefreq);
+			}
+		}
+	}
+	else
+	{
+		pr_info("VDECONTROL invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t vdecontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_VDEFREQ);
+}
+
+static ssize_t vdecontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_VDEFREQ);
+}
+
+static ssize_t vdecontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_VDEFREQ);
+}
+
+static DEVICE_ATTR(vdefreq, S_IRUGO | S_IWUGO, vdefreq_read, vdefreq_write);
+static DEVICE_ATTR(vdefreqmin, S_IRUGO , vdecontrol_min, NULL);
+static DEVICE_ATTR(vdefreqmax, S_IRUGO , vdecontrol_max, NULL);
+static DEVICE_ATTR(vdefreqdef, S_IRUGO , vdecontrol_def, NULL);
+
+static struct attribute *vdecontrol_attributes[] = {
+	&dev_attr_vdefreq.attr,
+	&dev_attr_vdefreqmin.attr,
+	&dev_attr_vdefreqmax.attr,
+	&dev_attr_vdefreqdef.attr,
+	NULL
+};
+
+static struct attribute_group vdecontrol_group = {
+	.attrs  = vdecontrol_attributes,
+};
+
+static struct miscdevice vdecontrol_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "vdecontrol",
+};
+
+static int __init vdecontrol_init(void) {
 	int ret;
-	printk(KERN_INFO "vde_procfile_read (/proc/spica/%s) called\n", VDE_PROCFS_NAME);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, vdecontrol_device.name);
+	ret = misc_register(&vdecontrol_device);
 
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_vde, procfs_buffer_size_vde);
-		ret = procfs_buffer_size_vde;
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, vdecontrol_device.name);
+		return 1;
 	}
 
-	return ret;
-}
-
-int vde_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_vde;
-	temp_vde = 0;
-
-	if ( sscanf(buffer,"%d",&temp_vde) < 1 )
-		return procfs_buffer_size_vde;
-
-	if ( temp_vde < VDELOW || temp_vde > VDEHIGH )
-		return procfs_buffer_size_vde;
-
-	procfs_buffer_size_vde = count;
-
-	if (procfs_buffer_size_vde > VDE_PROCFS_SIZE) {
-		procfs_buffer_size_vde = VDE_PROCFS_SIZE;
+	if (sysfs_create_group(&vdecontrol_device.this_device->kobj, &vdecontrol_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
+		pr_err("Failed to create sysfs group for device (%s)!\n", vdecontrol_device.name);
 	}
-
-	if (copy_from_user(procfs_buffer_vde, buffer, procfs_buffer_size_vde)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_vde,"%u",&VDEFREQ);
-	return procfs_buffer_size_vde;
-}
-
-static int __init init_vde_procsfs(void) {
-	VDE_Proc_File = spica_add(VDE_PROCFS_NAME);
-
-	if (VDE_Proc_File == NULL) {
-		spica_remove(VDE_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", VDE_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		VDE_Proc_File->read_proc	= vde_procfile_read;
-		VDE_Proc_File->write_proc	= vde_procfile_write;
-		VDE_Proc_File->mode		= S_IFREG | S_IRUGO;
-		VDE_Proc_File->uid		= 0;
-		VDE_Proc_File->gid		= 0;
-		VDE_Proc_File->size		= 37;
-		sprintf(procfs_buffer_vde,"%d",VDEFREQ);
-		procfs_buffer_size_vde		= strlen(procfs_buffer_vde);
-		printk(KERN_INFO "/proc/spica/%s created\n", VDE_PROCFS_NAME);
-	}
-
 	return 0;
 }
 
-module_init(init_vde_procsfs);
-
-static void __exit cleanup_vde_procsfs(void) {
-	spica_remove(VDE_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", VDE_PROCFS_NAME);
-}
-
-module_exit(cleanup_vde_procsfs);
+device_initcall(vdecontrol_init);
