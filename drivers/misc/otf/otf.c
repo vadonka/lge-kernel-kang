@@ -3,12 +3,6 @@
 #define PROC_DIR "spica"
 
 /*******************************************/
-/* Default AVP Freq */
-unsigned int AVPFREQ = 240000;
-/* Min & Max Limit */
-unsigned int AVPLOW = 200000;
-unsigned int AVPHIGH = 280000;
-/*******************************************/
 /* Default GPU Freq */
 unsigned int GPUFREQ = 350000;
 /* Min & Max Limit */

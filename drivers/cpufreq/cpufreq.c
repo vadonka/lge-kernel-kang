@@ -2140,7 +2140,7 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 		if (cpufreq_get_policy(&new_policy, cpu))
 			goto out;
 
-		oldavpfreq = AVPFREQ;
+		oldavpfreq = avpfreq;
 		oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
 		oldgpufreq = GPUFREQ;
 		oldvdefreq = VDEFREQ;
@@ -2154,28 +2154,28 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 		if (PWONOFF == 4) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			AVPFREQ = 230000;
+			avpfreq = 230000;
 			GPUFREQ = 320000;
 			VDEFREQ = 630000;
 
 		} else if (PWONOFF == 5) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			AVPFREQ = 220000;
+			avpfreq = 220000;
 			GPUFREQ = 310000;
 			VDEFREQ = 620000;
 
 		} else if (PWONOFF == 6) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			AVPFREQ = 200000;
+			avpfreq = 200000;
 			GPUFREQ = 300000;
 			VDEFREQ = 600000;
 
 		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			AVPFREQ = 240000;
+			avpfreq = 240000;
 			GPUFREQ = 350000;
 			VDEFREQ = 680000;
 		}
@@ -2206,28 +2206,28 @@ static void powersave_late_resume(struct early_suspend *handler) {
 		if (PWONOFF == 1) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			AVPFREQ = 230000;
+			avpfreq = 230000;
 			GPUFREQ = 320000;
 			VDEFREQ = 630000;
 
 		} else if (PWONOFF == 2) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 810000;
-			AVPFREQ = 220000;
+			avpfreq = 220000;
 			GPUFREQ = 310000;
 			VDEFREQ = 620000;
 
 		} else if (PWONOFF == 3) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 1015000;
-			AVPFREQ = 210000;
+			avpfreq = 210000;
 			GPUFREQ = 300000;
 			VDEFREQ = 610000;
 
 		} else if (NITROONOFF == 1) {
 			PWONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = 750000;
-			AVPFREQ = 270000;
+			avpfreq = 270000;
 			GPUFREQ = 350000;
 			VDEFREQ = 700000;
 
@@ -2235,7 +2235,7 @@ static void powersave_late_resume(struct early_suspend *handler) {
 		} else if ((PWONOFF == 4) || (PWONOFF == 5) || (PWONOFF == 6)) {
 			NITROONOFF = 0;
 			NVRM_CPU1_ON_MIN_KHZ = oldmincpu1on;
-			AVPFREQ = oldavpfreq;
+			avpfreq = oldavpfreq;
 			GPUFREQ = oldgpufreq;
 			VDEFREQ = oldvdefreq;
 		}

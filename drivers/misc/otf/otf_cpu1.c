@@ -13,7 +13,6 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/miscdevice.h>
-#include "otf.h"
 
 /** Define the LG variables
  * You need to undef or comment out the original LG definitions
@@ -50,51 +49,21 @@ static unsigned int DEF_OFFDELAY  = 1000;	/* Default OFF_PENDING_MS value */
 /** Static containers end */
 
 /* Boot time values */
-static unsigned int onminkhz  = 816000;		/* ON_MIN_KHZ boot time value     */
-static unsigned int ondelay   = 2000;		/* ON_PENDING_MS boot time value  */
+unsigned int onminkhz  = 816000;		/* ON_MIN_KHZ boot time value     */
+unsigned int ondelay   = 2000;			/* ON_PENDING_MS boot time value  */
 
-static unsigned int offmaxkhz = 860000;		/* OFF_MAX_KHZ boot time value    */
-static unsigned int offdelay  = 1000;		/* OFF_PENDING_MS boot time value */
+unsigned int offmaxkhz = 860000;		/* OFF_MAX_KHZ boot time value    */
+unsigned int offdelay  = 1000;			/* OFF_PENDING_MS boot time value */
 /* Boot time values end */
-
-/** Container definitions */
-/* ON_MIN_KHZ */
-unsigned int onminkhzcontrol_value(void)
-{
-	return onminkhz;
-}
-EXPORT_SYMBOL(onminkhzcontrol_value);
-
-/* OFF_MAX_KHZ */
-unsigned int offmaxkhzcontrol_value(void)
-{
-	return offmaxkhz;
-}
-EXPORT_SYMBOL(offmaxkhzcontrol_value);
-
-/* ON_PENDING_MS */
-unsigned int ondelaycontrol_value(void)
-{
-	return ondelay;
-}
-EXPORT_SYMBOL(ondelaycontrol_value);
-
-/* OFF_PENDING_MS */
-unsigned int offdelaycontrol_value(void)
-{
-	return offdelay;
-}
-EXPORT_SYMBOL(offdelaycontrol_value);
-/** Definition ends */
 
 /** SYSFS */
 /* ON_MIN_KHZ */
-static ssize_t onminkhzcontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t onminkhz_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%d\n", onminkhz);
 }
 
-static ssize_t onminkhzcontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+static ssize_t onminkhz_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int data;
 
@@ -104,7 +73,7 @@ static ssize_t onminkhzcontrol_value_write(struct device * dev, struct device_at
 		{
 			onminkhz = min(max(data, MIN_ONMINKHZ), MAX_ONMINKHZ);
 			/* LG variable get the new value */
-			NVRM_CPU1_ON_MIN_KHZ = onminkhzcontrol_value();
+			NVRM_CPU1_ON_MIN_KHZ = onminkhz;
 			pr_info("CPU1_ON_MIN_KHZ threshold changed to %d\n", onminkhz);
 		}
 	}
@@ -115,28 +84,28 @@ static ssize_t onminkhzcontrol_value_write(struct device * dev, struct device_at
 	return size;
 }
 
-static ssize_t onminkhzcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t onminkhz_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_ONMINKHZ);
 }
 
-static ssize_t onminkhzcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t onminkhz_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_ONMINKHZ);
 }
 
-static ssize_t onminkhzcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t onminkhz_def(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", DEF_ONMINKHZ);
 }
 
 /* OFF_MAX_KHZ */
-static ssize_t offmaxkhzcontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offmaxkhz_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%d\n", offmaxkhz);
 }
 
-static ssize_t offmaxkhzcontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+static ssize_t offmaxkhz_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int data;
 
@@ -146,7 +115,7 @@ static ssize_t offmaxkhzcontrol_value_write(struct device * dev, struct device_a
 		{
 			offmaxkhz = min(max(data, MIN_OFFMAXKHZ), MAX_OFFMAXKHZ);
 			/* LG variable get the new value */
-			NVRM_CPU1_OFF_MAX_KHZ = offmaxkhzcontrol_value();
+			NVRM_CPU1_OFF_MAX_KHZ = offmaxkhz;
 			pr_info("CPU1_OFF_MAX_KHZ threshold changed to %d\n", offmaxkhz);
 		}
 	}
@@ -157,28 +126,28 @@ static ssize_t offmaxkhzcontrol_value_write(struct device * dev, struct device_a
 	return size;
 }
 
-static ssize_t offmaxkhzcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offmaxkhz_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_OFFMAXKHZ);
 }
 
-static ssize_t offmaxkhzcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offmaxkhz_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_OFFMAXKHZ);
 }
 
-static ssize_t offmaxkhzcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offmaxkhz_def(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", DEF_OFFMAXKHZ);
 }
 
 /* ON_PENDING_MS */
-static ssize_t ondelaycontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t ondelay_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%d\n", ondelay);
 }
 
-static ssize_t ondelaycontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+static ssize_t ondelay_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int data;
 
@@ -188,7 +157,7 @@ static ssize_t ondelaycontrol_value_write(struct device * dev, struct device_att
 		{
 			ondelay = min(max(data, MIN_ONDELAY), MAX_ONDELAY);
 			/* LG variable get the new value */
-			NVRM_CPU1_ON_PENDING_MS = ondelaycontrol_value();
+			NVRM_CPU1_ON_PENDING_MS = ondelay;
 			pr_info("CPU1_ON_PENDING_MS threshold changed to %d\n", ondelay);
 		}
 	}
@@ -199,28 +168,28 @@ static ssize_t ondelaycontrol_value_write(struct device * dev, struct device_att
 	return size;
 }
 
-static ssize_t ondelaycontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t ondelay_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_ONDELAY);
 }
 
-static ssize_t ondelaycontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t ondelay_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_ONDELAY);
 }
 
-static ssize_t ondelaycontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t ondelay_def(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", DEF_ONDELAY);
 }
 
 /* OFF_PENDING_MS */
-static ssize_t offdelaycontrol_value_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offdelay_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%d\n", offdelay);
 }
 
-static ssize_t offdelaycontrol_value_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+static ssize_t offdelay_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int data;
 
@@ -230,7 +199,7 @@ static ssize_t offdelaycontrol_value_write(struct device * dev, struct device_at
 		{
 			offdelay = min(max(data, MIN_OFFDELAY), MAX_OFFDELAY);
 			/* LG variable get the new value */
-			NVRM_CPU1_OFF_PENDING_MS = offdelaycontrol_value();
+			NVRM_CPU1_OFF_PENDING_MS = offdelay;
 			pr_info("CPU1_OFF_PENDING_MS threshold changed to %d\n", offdelay);
 		}
 	}
@@ -241,45 +210,45 @@ static ssize_t offdelaycontrol_value_write(struct device * dev, struct device_at
 	return size;
 }
 
-static ssize_t offdelaycontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offdelay_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_OFFDELAY);
 }
 
-static ssize_t offdelaycontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offdelay_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_OFFDELAY);
 }
 
-static ssize_t offdelaycontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t offdelay_def(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", DEF_OFFDELAY);
 }
 
 /** SYSFS attributes */
 /* ON_MIN_KHZ */
-static DEVICE_ATTR(onminkhz, S_IRUGO | S_IWUGO, onminkhzcontrol_value_read, onminkhzcontrol_value_write);
-static DEVICE_ATTR(onminkhzmin, S_IRUGO , onminkhzcontrol_min, NULL);
-static DEVICE_ATTR(onminkhzmax, S_IRUGO , onminkhzcontrol_max, NULL);
-static DEVICE_ATTR(onminkhzdef, S_IRUGO , onminkhzcontrol_def, NULL);
+static DEVICE_ATTR(onminkhz, S_IRUGO | S_IWUGO, onminkhz_read, onminkhz_write);
+static DEVICE_ATTR(onminkhzmin, S_IRUGO , onminkhz_min, NULL);
+static DEVICE_ATTR(onminkhzmax, S_IRUGO , onminkhz_max, NULL);
+static DEVICE_ATTR(onminkhzdef, S_IRUGO , onminkhz_def, NULL);
 
 /* ON_PENDING_MS */
-static DEVICE_ATTR(ondelay, S_IRUGO | S_IWUGO, ondelaycontrol_value_read, ondelaycontrol_value_write);
-static DEVICE_ATTR(ondelaymin, S_IRUGO , ondelaycontrol_min, NULL);
-static DEVICE_ATTR(ondelaymax, S_IRUGO , ondelaycontrol_max, NULL);
-static DEVICE_ATTR(ondelaydef, S_IRUGO , ondelaycontrol_def, NULL);
+static DEVICE_ATTR(ondelay, S_IRUGO | S_IWUGO, ondelay_read, ondelay_write);
+static DEVICE_ATTR(ondelaymin, S_IRUGO , ondelay_min, NULL);
+static DEVICE_ATTR(ondelaymax, S_IRUGO , ondelay_max, NULL);
+static DEVICE_ATTR(ondelaydef, S_IRUGO , ondelay_def, NULL);
 
 /* OFF_MAX_KHZ */
-static DEVICE_ATTR(offmaxkhz, S_IRUGO | S_IWUGO, offmaxkhzcontrol_value_read, offmaxkhzcontrol_value_write);
-static DEVICE_ATTR(offmaxkhzmin, S_IRUGO , offmaxkhzcontrol_min, NULL);
-static DEVICE_ATTR(offmaxkhzmax, S_IRUGO , offmaxkhzcontrol_max, NULL);
-static DEVICE_ATTR(offmaxkhzdef, S_IRUGO , offmaxkhzcontrol_def, NULL);
+static DEVICE_ATTR(offmaxkhz, S_IRUGO | S_IWUGO, offmaxkhz_read, offmaxkhz_write);
+static DEVICE_ATTR(offmaxkhzmin, S_IRUGO , offmaxkhz_min, NULL);
+static DEVICE_ATTR(offmaxkhzmax, S_IRUGO , offmaxkhz_max, NULL);
+static DEVICE_ATTR(offmaxkhzdef, S_IRUGO , offmaxkhz_def, NULL);
 
 /* OFF_PENDING_MS */
-static DEVICE_ATTR(offdelay, S_IRUGO | S_IWUGO, offdelaycontrol_value_read, offdelaycontrol_value_write);
-static DEVICE_ATTR(offdelaymin, S_IRUGO , offdelaycontrol_min, NULL);
-static DEVICE_ATTR(offdelaymax, S_IRUGO , offdelaycontrol_max, NULL);
-static DEVICE_ATTR(offdelaydef, S_IRUGO , offdelaycontrol_def, NULL);
+static DEVICE_ATTR(offdelay, S_IRUGO | S_IWUGO, offdelay_read, offdelay_write);
+static DEVICE_ATTR(offdelaymin, S_IRUGO , offdelay_min, NULL);
+static DEVICE_ATTR(offdelaymax, S_IRUGO , offdelay_max, NULL);
+static DEVICE_ATTR(offdelaydef, S_IRUGO , offdelay_def, NULL);
 
 static struct attribute *cpu1control_attributes[] = {
 	&dev_attr_onminkhz.attr,

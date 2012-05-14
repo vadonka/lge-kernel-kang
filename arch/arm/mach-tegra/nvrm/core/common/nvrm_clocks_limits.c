@@ -239,7 +239,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // as for AVP/System clock
 
 #ifdef CONFIG_OTF
-    AvpMaxKHz = AVPFREQ; //pSKUedLimits->AvpMaxKHz;
+    AvpMaxKHz = avpfreq; //pSKUedLimits->AvpMaxKHz;
 #else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
 #endif

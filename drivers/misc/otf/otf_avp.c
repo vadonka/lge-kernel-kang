@@ -1,80 +1,103 @@
-#include "otf.h"
+/* drivers/misc/otf/otf_avp.c
+ *
+ * Original source by Benee (c) 2012
+ *
+ * Modified for the OTF by vadonka 2012
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ */
 
-static struct proc_dir_entry *spica_dir;
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 
-/* AVP Freq */
-#define AVP_PROCFS_NAME "avpfreq"
-#define AVP_PROCFS_SIZE 8
-static struct proc_dir_entry *AVP_Proc_File;
-static char procfs_buffer_avp[AVP_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_avp = 0;
+/* Static containers */
+static unsigned int MIN_AVPFREQ = 200000;
+static unsigned int MAX_AVPFREQ = 280000;
+static unsigned int DEF_AVPFREQ = 240000;
 
-int avp_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
+/* Boot time value */
+unsigned int avpfreq = 240000;
+
+static ssize_t avpfreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%d\n", avpfreq);
+}
+
+static ssize_t avpfreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
+{
+	int data;
+
+	if (sscanf(buf, "%d\n", &data) == 1)
+	{
+		if (data != avpfreq)
+		{
+			avpfreq = min(max(data, MIN_AVPFREQ), MAX_AVPFREQ);
+			pr_info("AVPCONTROL threshold changed to %d\n", avpfreq);
+		}
+	}
+	else
+	{
+		pr_info("AVPCONTROL invalid input\n");
+	}
+	return size;
+}
+
+static ssize_t avpcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MIN_AVPFREQ);
+}
+
+static ssize_t avpcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", MAX_AVPFREQ);
+}
+
+static ssize_t avpcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%u\n", DEF_AVPFREQ);
+}
+
+static DEVICE_ATTR(avpfreq, S_IRUGO | S_IWUGO, avpfreq_read, avpfreq_write);
+static DEVICE_ATTR(avpfreqmin, S_IRUGO , avpcontrol_min, NULL);
+static DEVICE_ATTR(avpfreqmax, S_IRUGO , avpcontrol_max, NULL);
+static DEVICE_ATTR(avpfreqdef, S_IRUGO , avpcontrol_def, NULL);
+
+static struct attribute *avpcontrol_attributes[] = {
+	&dev_attr_avpfreq.attr,
+	&dev_attr_avpfreqmin.attr,
+	&dev_attr_avpfreqmax.attr,
+	&dev_attr_avpfreqdef.attr,
+	NULL
+};
+
+static struct attribute_group avpcontrol_group = {
+	.attrs  = avpcontrol_attributes,
+};
+
+static struct miscdevice avpcontrol_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "avpcontrol",
+};
+
+static int __init avpcontrol_init(void) {
 	int ret;
-	printk(KERN_INFO "avp_procfile_read (/proc/spica/%s) called\n", AVP_PROCFS_NAME);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, avpcontrol_device.name);
+	ret = misc_register(&avpcontrol_device);
 
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_avp, procfs_buffer_size_avp);
-		ret = procfs_buffer_size_avp;
+	if (ret) {
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, avpcontrol_device.name);
+		return 1;
 	}
 
-	return ret;
-}
-
-int avp_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_avp;
-	temp_avp = 0;
-
-	if ( sscanf(buffer,"%d",&temp_avp) < 1 )
-		return procfs_buffer_size_avp;
-
-	if ( temp_avp < AVPLOW || temp_avp > AVPHIGH )
-		return procfs_buffer_size_avp;
-
-	procfs_buffer_size_avp = count;
-
-	if (procfs_buffer_size_avp > AVP_PROCFS_SIZE) {
-		procfs_buffer_size_avp = AVP_PROCFS_SIZE;
+	if (sysfs_create_group(&avpcontrol_device.this_device->kobj, &avpcontrol_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
+		pr_err("Failed to create sysfs group for device (%s)!\n", avpcontrol_device.name);
 	}
-
-	if (copy_from_user(procfs_buffer_avp, buffer, procfs_buffer_size_avp)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_avp,"%u",&AVPFREQ);
-	return procfs_buffer_size_avp;
-}
-
-static int __init init_avp_procsfs(void) {
-	AVP_Proc_File = spica_add(AVP_PROCFS_NAME);
-
-	if (AVP_Proc_File == NULL) {
-		spica_remove(AVP_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", AVP_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		AVP_Proc_File->read_proc	= avp_procfile_read;
-		AVP_Proc_File->write_proc	= avp_procfile_write;
-		AVP_Proc_File->mode		= S_IFREG | S_IRUGO;
-		AVP_Proc_File->uid		= 0;
-		AVP_Proc_File->gid		= 0;
-		AVP_Proc_File->size		= 37;
-		sprintf(procfs_buffer_avp,"%d",AVPFREQ);
-		procfs_buffer_size_avp		= strlen(procfs_buffer_avp);
-		printk(KERN_INFO "/proc/spica/%s created\n", AVP_PROCFS_NAME);
-	}
-
 	return 0;
 }
 
-module_init(init_avp_procsfs);
-
-static void __exit cleanup_avp_procsfs(void) {
-	spica_remove(AVP_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", AVP_PROCFS_NAME);
-}
-
-module_exit(cleanup_avp_procsfs);
+device_initcall(avpcontrol_init);
