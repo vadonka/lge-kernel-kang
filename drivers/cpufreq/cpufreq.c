@@ -2125,8 +2125,6 @@ unsigned int oldgpufreq;
 unsigned int oldvdefreq;
 unsigned int oldcoremv;
 unsigned int oldlowcpu;
-unsigned int oldddr2;
-unsigned int oldlpddr2;
 unsigned int oldavpfreq;
 
 static void powersave_early_suspend(struct early_suspend *handler) {
@@ -2146,8 +2144,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 		oldmincpu1on = NVRM_CPU1_ON_MIN_KHZ;
 		oldgpufreq = GPUFREQ;
 		oldvdefreq = VDEFREQ;
-		oldddr2 = NVRM_AP20_DDR2_MIN_KHZ;
-		oldlpddr2 = NVRM_AP20_LPDDR2_MIN_KHZ;
 		oldmaxclock = cpu_policy->max;
 		oldminclock = cpu_policy->min;
 		new_policy.max = SCREENOFFFREQ;
@@ -2161,8 +2157,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			AVPFREQ = 230000;
 			GPUFREQ = 320000;
 			VDEFREQ = 630000;
-			NVRM_AP20_DDR2_MIN_KHZ = 40000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 
 		} else if (PWONOFF == 5) {
 			NITROONOFF = 0;
@@ -2170,8 +2164,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			AVPFREQ = 220000;
 			GPUFREQ = 310000;
 			VDEFREQ = 620000;
-			NVRM_AP20_DDR2_MIN_KHZ = 30000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 
 		} else if (PWONOFF == 6) {
 			NITROONOFF = 0;
@@ -2179,8 +2171,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			AVPFREQ = 200000;
 			GPUFREQ = 300000;
 			VDEFREQ = 600000;
-			NVRM_AP20_DDR2_MIN_KHZ = 10000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 
 		} else if ((PWONOFF == 0) && (NITROONOFF != 1)) {
 			NITROONOFF = 0;
@@ -2188,8 +2178,6 @@ static void powersave_early_suspend(struct early_suspend *handler) {
 			AVPFREQ = 240000;
 			GPUFREQ = 350000;
 			VDEFREQ = 680000;
-			NVRM_AP20_DDR2_MIN_KHZ = 50000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 		}
 
 			cpu_policy->user_policy.governor = cpu_policy->governor;
@@ -2221,8 +2209,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = 230000;
 			GPUFREQ = 320000;
 			VDEFREQ = 630000;
-			NVRM_AP20_DDR2_MIN_KHZ = 40000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 15000;
 
 		} else if (PWONOFF == 2) {
 			NITROONOFF = 0;
@@ -2230,8 +2216,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = 220000;
 			GPUFREQ = 310000;
 			VDEFREQ = 620000;
-			NVRM_AP20_DDR2_MIN_KHZ = 30000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 
 		} else if (PWONOFF == 3) {
 			NITROONOFF = 0;
@@ -2239,8 +2223,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = 210000;
 			GPUFREQ = 300000;
 			VDEFREQ = 610000;
-			NVRM_AP20_DDR2_MIN_KHZ = 10000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 12000;
 
 		} else if (NITROONOFF == 1) {
 			PWONOFF = 0;
@@ -2248,8 +2230,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = 270000;
 			GPUFREQ = 350000;
 			VDEFREQ = 700000;
-			NVRM_AP20_DDR2_MIN_KHZ = 50000;
-			NVRM_AP20_LPDDR2_MIN_KHZ = 18000;
 
 		/* applying powersave 4,5,6 for screen off purposes only, restoring normal to screen wakeup */
 		} else if ((PWONOFF == 4) || (PWONOFF == 5) || (PWONOFF == 6)) {
@@ -2258,8 +2238,6 @@ static void powersave_late_resume(struct early_suspend *handler) {
 			AVPFREQ = oldavpfreq;
 			GPUFREQ = oldgpufreq;
 			VDEFREQ = oldvdefreq;
-			NVRM_AP20_DDR2_MIN_KHZ = oldddr2;
-			NVRM_AP20_LPDDR2_MIN_KHZ = oldlpddr2;
 		}
 
 			cpu_policy->user_policy.governor = cpu_policy->governor;

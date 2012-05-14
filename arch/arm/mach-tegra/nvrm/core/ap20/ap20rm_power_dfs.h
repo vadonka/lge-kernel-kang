@@ -189,13 +189,8 @@ extern "C"
 
 // Defines minimum scaling limit for each supported SDRAM type
 
-#ifndef CONFIG_OTF
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
-#endif /* OTF */
-
-#ifndef CONFIG_OTF
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
-#endif /* OTF */
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
