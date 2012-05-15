@@ -27,32 +27,28 @@ static ssize_t avpfreq_read(struct device * dev, struct device_attribute * attr,
 	return sprintf(buf, "%d\n", avpfreq);
 }
 
+/** SYSFS */
 extern unsigned int nitro;
 static ssize_t avpfreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int dataavp;
 
-	if (sscanf(buf, "%d\n", &dataavp) == 1)
+	if (nitro != 1)
 	{
-		if (dataavp != avpfreq)
+		if (sscanf(buf, "%d\n", &dataavp) == 1)
 		{
-			if (nitro == 1)
-			{
-				avpfreq = MAX_AVPFREQ;
-				pr_info("NITRO Enabled! AVPCONTROL threshold changed to %d\n", avpfreq);
-			}
-			else
+			if (dataavp != avpfreq)
 			{
 				avpfreq = min(max(dataavp, MIN_AVPFREQ), MAX_AVPFREQ);
 				pr_info("AVPCONTROL threshold changed to %d\n", avpfreq);
 			}
 		}
+		else
+		{
+			pr_info("AVPCONTROL invalid input\n");
+		}
+		return size;
 	}
-	else
-	{
-		pr_info("AVPCONTROL invalid input\n");
-	}
-	return size;
 }
 
 static ssize_t avpcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)

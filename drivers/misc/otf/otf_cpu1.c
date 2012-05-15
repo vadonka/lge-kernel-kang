@@ -18,10 +18,6 @@
  * You need to undef or comment out the original LG definitions
  * in 'arch/arm/mach-tegra/nvrm/core/ap20/ap20rm_power_dfs.h'
  */
-unsigned int NVRM_CPU1_ON_MIN_KHZ;
-unsigned int NVRM_CPU1_OFF_MAX_KHZ;
-unsigned int NVRM_CPU1_ON_PENDING_MS;
-unsigned int NVRM_CPU1_OFF_PENDING_MS;
 
 /** Static containers */
 /*
@@ -46,6 +42,7 @@ static unsigned int DEF_OFFMAXKHZ = 860000;	/* Default OFF_MAX_KHZ value    */
 static unsigned int MIN_OFFDELAY  = 200;	/* Mininum OFF_PENDING_MS value */
 static unsigned int MAX_OFFDELAY  = 2000;	/* Maximum OFF_PENDING_MS value */
 static unsigned int DEF_OFFDELAY  = 1000;	/* Default OFF_PENDING_MS value */
+
 /** Static containers end */
 
 /* Boot time values */
@@ -54,6 +51,11 @@ unsigned int ondelay   = 2000;			/* ON_PENDING_MS boot time value  */
 
 unsigned int offmaxkhz = 860000;		/* OFF_MAX_KHZ boot time value    */
 unsigned int offdelay  = 1000;			/* OFF_PENDING_MS boot time value */
+
+unsigned int NVRM_CPU1_ON_MIN_KHZ     = 816000;	/* ON_MIN_KHZ                     */
+unsigned int NVRM_CPU1_ON_PENDING_MS  = 2000;	/* ON_PENDING_MS                  */
+unsigned int NVRM_CPU1_OFF_MAX_KHZ    = 860000;	/* OFF_MAX_KHZ                    */
+unsigned int NVRM_CPU1_OFF_PENDING_MS = 1000;	/* OFF_PENDING_MS                 */
 /* Boot time values end */
 
 /** SYSFS */
@@ -68,7 +70,7 @@ static ssize_t onminkhz_write(struct device * dev, struct device_attribute * att
 {
 	int dataonminkhz;
 
-	if (nitro == 0)
+	if (nitro != 1)
 	{
 		if (sscanf(buf, "%d\n", &dataonminkhz) == 1)
 		{

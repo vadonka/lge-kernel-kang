@@ -16,43 +16,39 @@
 
 /* Static containers */
 static unsigned int MIN_GPUFREQ = 300000;
-static unsigned int MAX_GPUFREQ = 400000;
-static unsigned int DEF_GPUFREQ = 350000;
+static unsigned int MAX_GPUFREQ = 366000;
+static unsigned int DEF_GPUFREQ = 333000;
 
 /* Boot time value */
-unsigned int gpufreq = 350000;
+unsigned int gpufreq = 333000;
 
 static ssize_t gpufreq_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%d\n", gpufreq);
 }
 
+/** SYSFS */
 extern unsigned int nitro;
 static ssize_t gpufreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int datagpu;
 
-	if (sscanf(buf, "%d\n", &datagpu) == 1)
+	if (nitro != 1)
 	{
-		if (datagpu != gpufreq)
+		if (sscanf(buf, "%d\n", &datagpu) == 1)
 		{
-			if (nitro == 1)
-			{
-				gpufreq = MAX_GPUFREQ;
-				pr_info("NITRO Enabled! GPUCONTROL threshold changed to %d\n", gpufreq);
-			}
-			else
+			if (datagpu != gpufreq)
 			{
 				gpufreq = min(max(datagpu, MIN_GPUFREQ), MAX_GPUFREQ);
 				pr_info("GPUCONTROL threshold changed to %d\n", gpufreq);
 			}
 		}
+		else
+		{
+			pr_info("GPUCONTROL invalid input\n");
+		}
+		return size;
 	}
-	else
-	{
-		pr_info("GPUCONTROL invalid input\n");
-	}
-	return size;
 }
 
 static ssize_t gpucontrol_min(struct device * dev, struct device_attribute * attr, char * buf)

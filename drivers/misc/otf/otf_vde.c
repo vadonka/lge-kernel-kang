@@ -27,32 +27,28 @@ static ssize_t vdefreq_read(struct device * dev, struct device_attribute * attr,
 	return sprintf(buf, "%d\n", vdefreq);
 }
 
+/** SYSFS */
 extern unsigned int nitro;
 static ssize_t vdefreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
 {
 	int datavde;
 
-	if (sscanf(buf, "%d\n", &datavde) == 1)
+	if (nitro != 1)
 	{
-		if (datavde != vdefreq)
+		if (sscanf(buf, "%d\n", &datavde) == 1)
 		{
-			if (nitro == 1)
-			{
-				vdefreq = MAX_VDEFREQ;
-				pr_info("NITRO Enabled! VDECONTROL threshold changed to %d\n", vdefreq);
-			}
-			else
+			if (datavde != vdefreq)
 			{
 				vdefreq = min(max(datavde, MIN_VDEFREQ), MAX_VDEFREQ);
 				pr_info("VDECONTROL threshold changed to %d\n", vdefreq);
 			}
 		}
+		else
+		{
+			pr_info("VDECONTROL invalid input\n");
+		}
+		return size;
 	}
-	else
-	{
-		pr_info("VDECONTROL invalid input\n");
-	}
-	return size;
 }
 
 static ssize_t vdecontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
