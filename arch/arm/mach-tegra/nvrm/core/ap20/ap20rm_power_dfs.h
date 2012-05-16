@@ -285,7 +285,6 @@ extern "C"
 // Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
 
-#ifdef CONFIG_CPU_REL_REQ
 // Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \
 ((((sku) == 23) || \
@@ -300,8 +299,6 @@ extern "C"
 ((sku) == 20) || \
 ((sku) == 27) || \
 ((sku) == 28)) ? 850 : 0)
-
-#endif
 
 /*****************************************************************************
  * Adjust EMC scaling algorithm parameters based on the SDRAM type selected by

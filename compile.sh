@@ -73,8 +73,8 @@ value=$2
 	dsbatt="1"
 	;;
 	"--oc")
-	config_oc_orig=`grep "CONFIG_FAKE_SHMOO" $kh/.config`
-	config_oc_enable=`echo "CONFIG_FAKE_SHMOO=y"`
+	config_oc_orig=`grep "CONFIG_OVERCLOCK" $kh/.config`
+	config_oc_enable=`echo "CONFIG_OVERCLOCK=y"`
 	sed -i "s/$config_oc_orig/$config_oc_enable/g" $kh/.config
 	overclock="1"
 	;;
@@ -93,7 +93,6 @@ done
 
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
-export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
 if [ "$overclock" == "1" ]; then
 	export ocver="OC"
@@ -102,21 +101,11 @@ else
 fi
 
 if [ "$dsbatt" == "0" ]; then
-	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
 		sed -i "s/$cver/$nver/g" $kh/.config
-	else
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
-		sed -i "s/$cver/$nver/g" $kh/.config
-	fi
 else
-	if [ "$otf" == "0" ]; then
 		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS"'`
 		sed -i "s/$cver/$nver/g" $kh/.config
-	else
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_OTF"'`
-		sed -i "s/$cver/$nver/g" $kh/.config
-	fi
 fi
 
 export starttime=`date +%s`
@@ -161,5 +150,5 @@ fi
 # Disable the extra options by the default
 config_ds_new=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 sed -i "s/$config_ds_new/# CONFIG_USE_DS_BATTERY_DRIVER is not set/g" $kh/.config
-config_oc_new=`grep "CONFIG_FAKE_SHMOO" $kh/.config`
-sed -i "s/$config_oc_new/# CONFIG_FAKE_SHMOO is not set/g" $kh/.config
+config_oc_new=`grep "CONFIG_OVERCLOCK" $kh/.config`
+sed -i "s/$config_oc_new/# CONFIG_OVERCLOCK is not set/g" $kh/.config

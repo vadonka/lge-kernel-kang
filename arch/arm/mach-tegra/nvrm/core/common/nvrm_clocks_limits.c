@@ -46,6 +46,43 @@
 #include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
+#ifdef CONFIG_OVERCLOCK
+#include <linux/kernel.h>
+
+#define MAX_OVERCLOCK (1408000)
+NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo values
+NvU32 FakeShmooVmaxIndex = 7; // Max voltage index in the voltage tab (size-1)
+
+NvU32 FakeShmooVoltages[] = {
+    750,
+    800,
+    850,
+    875,
+    950,
+    1050,
+    1150,
+    1250,
+};
+
+NvRmScaledClkLimits FakepScaledCpuLimits = {
+    101, // FakepScaledCpuLimits.HwDeviceId
+    0, // FakepScaledCpuLimits.SubClockId
+    32, // FakepScaledCpuLimits.MinKHz
+    // Clock table
+    {
+    216000,
+    456000,
+    608000,
+    760000,
+    816000,
+    1000000,
+    1216000,
+    1408000
+    }
+};
+
+#endif /* OVERCLOCK END */
+
 #define NvRmPrivGetStepMV(hRmDevice, step) \
          (s_ChipFlavor.pSocShmoo->ShmooVoltages[(step)])
 
@@ -97,6 +134,10 @@ static NvRmSocShmoo s_SocShmoo;
 static NvRmCpuShmoo s_CpuShmoo;
 static void* s_pShmooData = NULL;
 
+#ifdef CONFIG_OVERCLOCK
+NvRmCpuShmoo *ExposedCpuShmoo = &s_CpuShmoo;
+#endif /* OVERCLOCK END */
+
 static NvError
 NvRmBootArgChipShmooGet(
     NvRmDeviceHandle hRmDevice,
@@ -147,11 +188,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
 
-	AvpMaxKHz =
 #ifdef CONFIG_OTF
-    avpfreq;
+    AvpMaxKHz = avpfreq;
 #else
-    pSKUedLimits->AvpMaxKHz;
+    AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
 #endif
 
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
@@ -240,9 +280,15 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 
     // Set upper clock boundaries for devices on CPU bus (CPU, Mselect,
     // CMC) with combined Absolute/Scaled limits
+
+#ifdef CONFIG_OVERCLOCK
+    CpuMaxKHz = MAX_OVERCLOCK;
+#else
     CpuMaxKHz = pSKUedLimits->CpuMaxKHz;
     CpuMaxKHz = NV_MIN(
         CpuMaxKHz, s_ClockRangeLimits[NvRmModuleID_Cpu].MaxKHz);
+#endif /* OVERCLOCK END */
+
     s_ClockRangeLimits[NvRmModuleID_Cpu].MaxKHz = CpuMaxKHz;
     if ((hRmDevice->ChipId.Id == 0x15) || (hRmDevice->ChipId.Id == 0x16))
     {
@@ -275,18 +321,14 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
 
-    TDMaxKHz =
 #ifdef CONFIG_OTF
-    gpufreq;
-#else
-    pSKUedLimits->TDMaxKHz;
-#endif
+    TDMaxKHz = gpufreq;
     TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz =
-#ifdef CONFIG_OTF
-    gpufreq;
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = gpufreq;
 #else
-    TDMaxKHz;
+    TDMaxKHz = pSKUedLimits->TDMaxKHz;
+    TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
+    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
 #endif
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
@@ -404,12 +446,20 @@ NvRmPrivModuleVscaleGetMV(
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
     {
+#ifdef CONFIG_OVERCLOCK
+        for (i = 0; i < fake_CpuShmoo.ShmooVmaxIndex; i++)
+#else
         for (i = 0; i < s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex; i++)
+#endif /* OVERCLOCK END */
         {
             if (FreqKHz <= pScale[i])
                 break;
         }
+#ifdef CONFIG_OVERCLOCK
+        return fake_CpuShmoo.ShmooVoltages[i];
+#else
         return s_ChipFlavor.pCpuShmoo->ShmooVoltages[i];
+#endif /* OVERCLOCK END */
     }
     // Use common ladder for all other modules or CPU on core rail
     for (i = 0; i < s_ChipFlavor.pSocShmoo->ShmooVmaxIndex; i++)
@@ -431,7 +481,11 @@ NvRmPrivModuleVscaleGetMaxKHzList(
 
     // Use CPU specific voltage ladder if SoC has dedicated CPU rail
     if (s_ChipFlavor.pCpuShmoo && (Module == NvRmModuleID_Cpu))
+#ifdef CONFIG_OVERCLOCK
+        *pListSize = fake_CpuShmoo.ShmooVmaxIndex + 1;
+#else
         *pListSize = s_ChipFlavor.pCpuShmoo->ShmooVmaxIndex + 1;
+#endif /* OVERCLOCK */
     else
         *pListSize = s_ChipFlavor.pSocShmoo->ShmooVmaxIndex + 1;
 
@@ -913,7 +967,14 @@ static NvError NvRmBootArgChipShmooGet(
     {
         // Shmoo data for dedicated CPU domain
         pChipFlavor->pCpuShmoo = &s_CpuShmoo;
-
+#ifdef CONFIG_OVERCLOCK
+        s_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
+        s_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        s_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
+        fake_CpuShmoo.ShmooVoltages = &FakeShmooVoltages[0];
+        fake_CpuShmoo.ShmooVmaxIndex = FakeShmooVmaxIndex;
+        fake_CpuShmoo.pScaledCpuLimits = &FakepScaledCpuLimits;
+#else
         offset = BootArgSh.CpuShmooVoltagesListOffset;
         size = BootArgSh.CpuShmooVoltagesListSize;
         NV_ASSERT (offset + size <= TotalSize);
@@ -929,6 +990,7 @@ static NvError NvRmBootArgChipShmooGet(
         s_CpuShmoo.pScaledCpuLimits =
             (const NvRmScaledClkLimits*)((NvUPtr)s_pShmooData + offset);
         NV_ASSERT(size == sizeof(*s_CpuShmoo.pScaledCpuLimits));
+#endif /* OVERCLOCK */
     }
     else
     {

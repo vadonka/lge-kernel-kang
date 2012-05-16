@@ -55,6 +55,15 @@
 #include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
+#ifdef CONFIG_OVERCLOCK
+#include <linux/kernel.h>
+
+extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
+NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+#endif /* OVERCLOCK END */
+
+/*****************************************************************************/
+
 // Initial DFS configuration
 #define AP15_FPGA_FREQ (8330)
 #define AP20_FPGA_FREQ (13000)
@@ -82,6 +91,8 @@
 
 // Allow PMUs with CPU voltage range above chip minimum
 #define NVRM_DVS_ACCEPT_PMU_HIGH_CPU_MIN (1)
+
+/*****************************************************************************/
 
 // TODO: Always Disable before check-in
 // Module debug: 0=disable, 1=enable
@@ -809,6 +820,11 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
+
+#ifdef CONFIG_OVERCLOCK
+    pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1000000;
+#endif /* OVERCLOCK END */
+
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -2058,6 +2074,10 @@ void NvRmPrivDfsResync(void)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
+#ifdef CONFIG_OVERCLOCK
+    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
+#endif /* OVERCLOCK END */
+
     DfsClockFreqGet(pDfs->hRm, &DfsKHz);
 
     NvOsIntrMutexLock(pDfs->hIntrMutex);
@@ -2365,17 +2385,15 @@ void NvRmPrivDvsInit(void)
     }
     else if (pDfs->hRm->ChipId.Id == 0x20)
     {
-#ifdef CONFIG_CPU_REL_REQ
-        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv, NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
-#endif
+        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv,
+            NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
         NV_ASSERT(pDvs->MinCoreMv <= pDvs->NominalCoreMv);
         pDvs->LowCornerCoreMv = NV_MAX(NVRM_AP20_LOW_CORE_MV, pDvs->MinCoreMv);
         pDvs->LowCornerCoreMv =
             NV_MIN(pDvs->LowCornerCoreMv, pDvs->NominalCoreMv);
 
-#ifdef CONFIG_CPU_REL_REQ
-        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv, NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
-#endif
+        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv,
+            NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
         NV_ASSERT(pDvs->MinCpuMv <= pDvs->NominalCpuMv);
         pDvs->LowCornerCpuMv = NV_MAX(NVRM_AP20_LOW_CPU_MV, pDvs->MinCpuMv);
         pDvs->LowCornerCpuMv =
@@ -3683,6 +3701,92 @@ NvRmDfsSetLowVoltageThreshold(
     }
     NvRmPrivUnlockSharedPll();
 }
+
+#ifdef CONFIG_OVERCLOCK
+NvError
+NvRmDvsGetCpuVoltageThresholds(
+    NvRmDeviceHandle hRmDeviceHandle,
+    NvRmMilliVolts* LowMv,
+    NvRmMilliVolts* NominalMv)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
+
+        NvRmPrivLockSharedPll();
+        *LowMv = pDvs->MinCpuMv;
+        *NominalMv = pDvs->NominalCpuMv;
+        NvRmPrivUnlockSharedPll();
+
+        return NvSuccess;
+    }
+
+    return NvError_NotSupported;
+}
+
+NvError
+NvRmDvsSetCpuVoltageThresholds(
+    NvRmDeviceHandle hRmDeviceHandle,
+    NvRmMilliVolts LowMv,
+    NvRmMilliVolts NominalMv)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+    NvRmPmuVddRailCapabilities cap;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
+        NvRmPmuGetCapabilities(hRmDeviceHandle, pDvs->CpuRailAddress, &cap);
+        if (cap.RmProtected == NV_TRUE)
+            return NvError_NotSupported;
+
+        if (NominalMv > cap.MaxMilliVolts)
+            NominalMv = cap.MaxMilliVolts;
+        else if (NominalMv < cap.MinMilliVolts)
+            NominalMv = cap.MinMilliVolts;
+
+        if (LowMv > cap.MaxMilliVolts)
+            LowMv = cap.MaxMilliVolts;
+        else if (LowMv < cap.MinMilliVolts)
+            LowMv = cap.MinMilliVolts;
+
+        if (LowMv > NominalMv)
+            LowMv = NominalMv;
+
+        NvRmPrivLockSharedPll();
+        pDvs->MinCpuMv = LowMv;
+        pDvs->LowCornerCpuMv = LowMv;
+        pDvs->NominalCpuMv = NominalMv;
+        pDvs->UpdateFlag = NV_TRUE;
+        NvRmPrivUnlockSharedPll();
+
+        return NvSuccess;
+    }
+
+    return NvError_NotSupported;
+}
+
+NvError
+NvRmDvsSetCpuVoltageThresholdsToLimits(NvRmDeviceHandle hRmDeviceHandle)
+{
+    return NvRmDvsSetCpuVoltageThresholds(hRmDeviceHandle, 0,
+                                                        NvRmVoltsUnspecified);
+}
+
+void
+NvRmDvsForceUpdate(NvRmDeviceHandle hRmDeviceHandle)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    NvRmPrivLockSharedPll();
+    pDvs->UpdateFlag = NV_TRUE;
+    NvRmPrivUnlockSharedPll();
+}
+#endif /* OVERCLOCK END */
 
 /*****************************************************************************/
 // DTT PUBLIC INTERFACES
