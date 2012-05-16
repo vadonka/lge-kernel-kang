@@ -90,12 +90,12 @@ NvRmCpuShmoo fake_CpuShmoo;
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
 NvU32 FakeShmooVoltages[] = {
-	770,
+	775,
 	790,
 	825,
+	875,
 	950,
-	1025,
-	1100,
+	1050,
 	1150,
 	1250,
 };
