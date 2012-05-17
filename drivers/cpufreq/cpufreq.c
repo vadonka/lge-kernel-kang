@@ -32,13 +32,6 @@
 
 #include <trace/events/power.h>
 
-/* OTF Start */
-#ifdef CONFIG_OTF
-#include "../misc/otf/otf.h"
-#include <linux/earlysuspend.h>
-#include <linux/sched.h>
-#endif /* OTF */
-
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -1919,68 +1912,7 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver)
 
 	return 0;
 }
-
 EXPORT_SYMBOL_GPL(cpufreq_unregister_driver);
-
-#ifdef CONFIG_OTF
-unsigned int oldmaxclock;
-unsigned int oldminclock;
-
-static void powersave_early_suspend(struct early_suspend *handler) {
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		struct cpufreq_policy *cpu_policy, new_policy;
-		cpu_policy = cpufreq_cpu_get(cpu);
-
-		if (!cpu_policy)
-			continue;
-
-		if (cpufreq_get_policy(&new_policy, cpu))
-			goto out;
-
-		oldmaxclock = cpu_policy->max;
-		oldminclock = cpu_policy->min;
-		new_policy.max = scroffmaxfreq;
-		new_policy.min = oldminclock;
-		__cpufreq_set_policy(cpu_policy, &new_policy);
-		cpu_policy->user_policy.policy = cpu_policy->policy;
-
-			cpu_policy->user_policy.governor = cpu_policy->governor;
-			out:
-			cpufreq_cpu_put(cpu_policy);
-	}
-}
-
-static void powersave_late_resume(struct early_suspend *handler) {
-	int cpu;
-
-	for_each_online_cpu(cpu) {
-		struct cpufreq_policy *cpu_policy, new_policy;
-		cpu_policy = cpufreq_cpu_get(cpu);
-
-		if (!cpu_policy)
-			continue;
-
-		if (cpufreq_get_policy(&new_policy, cpu))
-			goto out;
-			new_policy.max = oldmaxclock;
-			new_policy.min = oldminclock;
-			__cpufreq_set_policy(cpu_policy, &new_policy);
-			cpu_policy->user_policy.policy = cpu_policy->policy;
-
-			cpu_policy->user_policy.governor = cpu_policy->governor;
-			out:
-			cpufreq_cpu_put(cpu_policy);
-	}
-}
-
-static struct early_suspend _powersave_early_suspend = {
-	.suspend = powersave_early_suspend,
-	.resume = powersave_late_resume,
-	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
-};
-#endif /* OTF */
 
 static int __init cpufreq_core_init(void)
 {
@@ -1995,10 +1927,6 @@ static int __init cpufreq_core_init(void)
 							    &cpu_sysdev_class.kset.kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
-
-#ifdef CONFIG_OTF
-	register_early_suspend(&_powersave_early_suspend);
-#endif
 
 	return 0;
 }

@@ -16,6 +16,5 @@ extern unsigned int NVRM_CPU1_OFF_PENDING_MS;
 extern unsigned int avpfreq;
 extern unsigned int gpufreq;
 extern unsigned int vdefreq;
-extern unsigned int scroffmaxfreq;
 
 #endif
