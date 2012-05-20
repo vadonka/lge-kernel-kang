@@ -18,14 +18,14 @@ config STAR_HIDDEN_RESET
 	depends on MACH_STAR
 	default n
 
-config OVERCLOCK
-	bool "SysFS controlled OverClock (c) Benee"
-	depends on MACH_STAR
-	default n
-
 menuconfig LPRINTK
         bool "LGE Debugging Message"
         depends on MACH_STAR && DEBUG_FS
+
+config FAKE_SHMOO
+	bool "Tegra2 Overclocking Enable"
+	depends on MACH_STAR
+	default y
 
 if LPRINTK
 config  LPRINTK_ALL

@@ -55,14 +55,18 @@
 #include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
 
-#ifdef CONFIG_OVERCLOCK
+#ifdef CONFIG_FAKE_SHMOO
 #include <linux/kernel.h>
 
-extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
-NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
-#endif /* OVERCLOCK END */
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
+ */
 
-/*****************************************************************************/
+extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
+extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+
+#endif // CONFIG_FAKE_SHMOO
 
 // Initial DFS configuration
 #define AP15_FPGA_FREQ (8330)
@@ -91,8 +95,6 @@ NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
 
 // Allow PMUs with CPU voltage range above chip minimum
 #define NVRM_DVS_ACCEPT_PMU_HIGH_CPU_MIN (1)
-
-/*****************************************************************************/
 
 // TODO: Always Disable before check-in
 // Module debug: 0=disable, 1=enable
@@ -820,11 +822,14 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
-
-#ifdef CONFIG_OVERCLOCK
+#ifdef CONFIG_FAKE_SHMOO
+    /*
+     * Set CPU Clock scaling range manually to
+     * avoid booting up out of specifications
+     * and to minimize the "sleep of death" bug
+     */
     pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1000000;
-#endif /* OVERCLOCK END */
-
+#endif
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -1859,6 +1864,10 @@ NvError NvRmPrivDfsInit(NvRmDeviceHandle hRmDeviceHandle)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
+#ifdef CONFIG_FAKE_SHMOO
+    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
+#endif
+
     NV_ASSERT(hRmDeviceHandle);
     DfsHintsPrintInit();
 
@@ -2074,10 +2083,6 @@ void NvRmPrivDfsResync(void)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
-#ifdef CONFIG_OVERCLOCK
-    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
-#endif /* OVERCLOCK END */
-
     DfsClockFreqGet(pDfs->hRm, &DfsKHz);
 
     NvOsIntrMutexLock(pDfs->hIntrMutex);
@@ -2245,6 +2250,21 @@ DvsChangeCpuVoltage(
     NvRmDvs* pDvs,
     NvRmMilliVolts TargetMv)
 {
+#ifdef CONFIG_FAKE_SHMOO
+    // Voltage hack
+    int i = 0;
+    if( FakeShmoo_UV_mV_Ptr != NULL )
+    {
+        for(i=0; i <fake_CpuShmoo.ShmooVmaxIndex+1; i++)
+        {
+            if(fake_CpuShmoo.ShmooVoltages[i] == TargetMv)
+            {
+                TargetMv -= FakeShmoo_UV_mV_Ptr[i];
+                break;
+            }
+        }
+    }
+#endif // CONFIG_FAKE_SHMOO
     NV_ASSERT(TargetMv >= pDvs->MinCpuMv);
     NV_ASSERT(TargetMv <= pDvs->NominalCpuMv);
 
@@ -2252,6 +2272,9 @@ DvsChangeCpuVoltage(
     {
         NvRmPmuSetVoltage(hRm, pDvs->CpuRailAddress, TargetMv, NULL);
         pDvs->CurrentCpuMv = TargetMv;
+#ifdef CONFIG_FAKE_SHMOO
+        //printk( "*** fakeShmoo **** -> CurrentCpuMv : %i\n", TargetMv );
+#endif
     }
 }
 
@@ -3701,92 +3724,6 @@ NvRmDfsSetLowVoltageThreshold(
     }
     NvRmPrivUnlockSharedPll();
 }
-
-#ifdef CONFIG_OVERCLOCK
-NvError
-NvRmDvsGetCpuVoltageThresholds(
-    NvRmDeviceHandle hRmDeviceHandle,
-    NvRmMilliVolts* LowMv,
-    NvRmMilliVolts* NominalMv)
-{
-    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
-
-    NV_ASSERT(hRmDeviceHandle);
-
-    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
-
-        NvRmPrivLockSharedPll();
-        *LowMv = pDvs->MinCpuMv;
-        *NominalMv = pDvs->NominalCpuMv;
-        NvRmPrivUnlockSharedPll();
-
-        return NvSuccess;
-    }
-
-    return NvError_NotSupported;
-}
-
-NvError
-NvRmDvsSetCpuVoltageThresholds(
-    NvRmDeviceHandle hRmDeviceHandle,
-    NvRmMilliVolts LowMv,
-    NvRmMilliVolts NominalMv)
-{
-    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
-    NvRmPmuVddRailCapabilities cap;
-
-    NV_ASSERT(hRmDeviceHandle);
-
-    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
-        NvRmPmuGetCapabilities(hRmDeviceHandle, pDvs->CpuRailAddress, &cap);
-        if (cap.RmProtected == NV_TRUE)
-            return NvError_NotSupported;
-
-        if (NominalMv > cap.MaxMilliVolts)
-            NominalMv = cap.MaxMilliVolts;
-        else if (NominalMv < cap.MinMilliVolts)
-            NominalMv = cap.MinMilliVolts;
-
-        if (LowMv > cap.MaxMilliVolts)
-            LowMv = cap.MaxMilliVolts;
-        else if (LowMv < cap.MinMilliVolts)
-            LowMv = cap.MinMilliVolts;
-
-        if (LowMv > NominalMv)
-            LowMv = NominalMv;
-
-        NvRmPrivLockSharedPll();
-        pDvs->MinCpuMv = LowMv;
-        pDvs->LowCornerCpuMv = LowMv;
-        pDvs->NominalCpuMv = NominalMv;
-        pDvs->UpdateFlag = NV_TRUE;
-        NvRmPrivUnlockSharedPll();
-
-        return NvSuccess;
-    }
-
-    return NvError_NotSupported;
-}
-
-NvError
-NvRmDvsSetCpuVoltageThresholdsToLimits(NvRmDeviceHandle hRmDeviceHandle)
-{
-    return NvRmDvsSetCpuVoltageThresholds(hRmDeviceHandle, 0,
-                                                        NvRmVoltsUnspecified);
-}
-
-void
-NvRmDvsForceUpdate(NvRmDeviceHandle hRmDeviceHandle)
-{
-    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
-
-    NV_ASSERT(hRmDeviceHandle);
-
-    NvRmPrivLockSharedPll();
-    pDvs->UpdateFlag = NV_TRUE;
-    NvRmPrivUnlockSharedPll();
-}
-#endif /* OVERCLOCK END */
 
 /*****************************************************************************/
 // DTT PUBLIC INTERFACES
