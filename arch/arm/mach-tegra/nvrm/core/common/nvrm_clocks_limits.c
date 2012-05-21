@@ -218,8 +218,14 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // override default with configuration values
     // CPU clock duh!
     pSKUedLimits->CpuMaxKHz = MAX_CPU_OC_FREQ;
-#endif // FAKE_SHMOO
+#endif
 
+#ifdef CONFIG_OTF
+    // AVP clock
+    pSKUedLimits->AvpMaxKHz = avpfreq;
+    // 3D GPU clock
+    pSKUedLimits->TDMaxKHz = gpufreq;
+#endif
     NvOsDebugPrintf("NVRM corner (%d, %d)\n",
         s_ChipFlavor.corner, s_ChipFlavor.CpuCorner);
 
@@ -231,13 +237,7 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
     // Combine AVP/System clock absolute limit with scaling V/F ladder upper
     // boundary, and set default clock range for all present modules the same
     // as for AVP/System clock
-
-#ifdef CONFIG_OTF
-    AvpMaxKHz = avpfreq;
-#else
     AvpMaxKHz = pSKUedLimits->AvpMaxKHz;
-#endif
-
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
     {
         if (pHwLimits[i].HwDeviceId == NV_DEVID_AVP)
@@ -358,16 +358,10 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         NVRM_SDRAM_MIN_KHZ;
 
     // Set 3D upper clock boundary with combined Absolute/Scaled limit.
-
-#ifdef CONFIG_OTF
-    TDMaxKHz = gpufreq;
-    TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
-    s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = gpufreq;
-#else
     TDMaxKHz = pSKUedLimits->TDMaxKHz;
-    TDMaxKHz = NV_MIN(TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
+    TDMaxKHz = NV_MIN(
+        TDMaxKHz, s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz);
     s_ClockRangeLimits[NvRmModuleID_3D].MaxKHz = TDMaxKHz;
-#endif
 
     // Set Display upper clock boundary with combined Absolute/Scaled limit.
     // (fill in clock limits for both display heads)

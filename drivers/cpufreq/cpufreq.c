@@ -32,6 +32,22 @@
 
 #include <trace/events/power.h>
 
+//#define DISABLE_FAKE_SHMOO_UV
+#ifdef CONFIG_FAKE_SHMOO
+#include "../nvrm/core/common/nvrm_clocks_limits_private.h"
+#include "../nvrm/core/common/nvrm_power_dfs.h"
+#include <nvrm_diag.h>
+
+/*
+ * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/tegra_lg_p990_kernel_oc_uv
+ * Inspired by mblaster @ https://github.com/mblaster/linux_2.6.32_folio100
+ */
+
+int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
+extern NvRmCpuShmoo fake_CpuShmoo;  // Stored faked CpuShmoo values
+extern NvRmDfs *fakeShmoo_Dfs;
+#endif // CONFIG_FAKE_SHMOO
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -44,22 +60,6 @@ static DEFINE_PER_CPU(struct cpufreq_policy *, cpufreq_cpu_data);
 static DEFINE_PER_CPU(char[CPUFREQ_NAME_LEN], cpufreq_cpu_governor);
 #endif
 static DEFINE_SPINLOCK(cpufreq_driver_lock);
-
-#ifdef CONFIG_FAKE_SHMOO
-#include "../nvrm/core/common/nvrm_clocks_limits_private.h"
-#include "../nvrm/core/common/nvrm_power_dfs.h"
-#include <nvrm_diag.h>
-
-/*
- * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/tegra_lg_p990_kernel_oc_uv
- * Inspired by mblaster @ https://github.com/mblaster/linux_2.6.32_folio100
- */
-
-int *FakeShmoo_UV_mV_Ptr; /* Stored voltage table from cpufreq sysfs */
-extern NvRmCpuShmoo fake_CpuShmoo;  /* Stored faked CpuShmoo values */
-extern NvRmDfs *fakeShmoo_Dfs;
-
-#endif /* CONFIG_FAKE_SHMOO */
 
 /*
  * cpu_policy_rwsem is a per CPU reader-writer semaphore designed to cure
@@ -634,6 +634,7 @@ static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
 	return table - buf;
 }
 
+#ifndef DISABLE_FAKE_SHMOO_UV
 static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf, size_t count)
 {
 	int ret = sscanf( buf, "%i %i %i %i %i %i %i %i", &FakeShmoo_UV_mV_Ptr[7], &FakeShmoo_UV_mV_Ptr[6],
@@ -645,7 +646,8 @@ static ssize_t store_UV_mV_table(struct cpufreq_policy *policy, const char *buf,
 
 	return count;
 }
-#endif /* CONFIG_FAKE_SHMOO */
+#endif // DISABLE_FAKE_SHMOO_UV
+#endif // CONFIG_FAKE_SHMOO
 
 cpufreq_freq_attr_ro_perm(cpuinfo_cur_freq, 0400);
 cpufreq_freq_attr_ro(cpuinfo_min_freq);
@@ -665,8 +667,12 @@ cpufreq_freq_attr_rw(scaling_setspeed);
 cpufreq_freq_attr_ro(cpu_temp);
 cpufreq_freq_attr_ro(frequency_voltage_table);
 cpufreq_freq_attr_ro(scaling_available_frequencies);
+#ifdef DISABLE_FAKE_SHMOO_UV
+cpufreq_freq_attr_ro(UV_mV_table);
+#else
 cpufreq_freq_attr_rw(UV_mV_table);
-#endif /* CONFIG_FAKE_SHMOO */
+#endif
+#endif // CONFIG_FAKE_SHMOO
 
 static struct attribute *default_attrs[] = {
 	&cpuinfo_min_freq.attr,
@@ -685,7 +691,7 @@ static struct attribute *default_attrs[] = {
 	&frequency_voltage_table.attr,
 	&scaling_available_frequencies.attr,
 	&UV_mV_table.attr,
-#endif /* CONFIG_FAKE_SHMOO */
+#endif // CONFIG_FAKE_SHMOO
 	NULL
 };
 
@@ -2010,9 +2016,9 @@ static int __init cpufreq_core_init(void)
 	int cpu;
 
 #ifdef CONFIG_FAKE_SHMOO
-	/* Allocate some memory for the voltage tab */
+	// Allocate some memory for the voltage tab
 	FakeShmoo_UV_mV_Ptr = kzalloc(sizeof(int)*(fake_CpuShmoo.ShmooVmaxIndex+1), GFP_KERNEL);
-#endif /* CONFIG_FAKE_SHMOO */
+#endif // CONFIG_FAKE_SHMOO
 
 	for_each_possible_cpu(cpu) {
 		per_cpu(cpufreq_policy_cpu, cpu) = -1;
