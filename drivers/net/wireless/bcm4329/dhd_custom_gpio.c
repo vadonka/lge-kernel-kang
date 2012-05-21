@@ -39,7 +39,11 @@
 #ifdef  CONFIG_BCM4329_GPIO_WL_RESET
 #undef CONFIG_BCM4329_GPIO_WL_RESET
 #endif
+#if defined (CONFIG_MACH_STAR_MDM_C)
+#define CONFIG_BCM4329_GPIO_WL_RESET 131
+#else //TMUS_E
 #define CONFIG_BCM4329_GPIO_WL_RESET 177
+#endif
 // sunghoon.kim, 2010,11,05 , for remove CONFIG_BCM4329_GPIO_WL_RESET in defconfig [END]
 
 /* LGE_CHANGE_S [yoohoo@lge.com] 2009-05-14, support start/stop */
