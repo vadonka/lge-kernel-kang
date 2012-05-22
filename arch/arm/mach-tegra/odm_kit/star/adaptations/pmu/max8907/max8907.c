@@ -148,14 +148,14 @@ static const NvU32 VoltageTable_SD_A[] = {
 
 // V3, LDO1, LDO4-LDO16, LDO19-20 (millivolts)
 static const NvU32 VoltageTable_SD_B_LDO_B[] = {
-     750,  800,  850,  900,  950, 1000, 1050, 1100,
-    1150, 1200, 1250, 1300, 1350, 1400, 1450, 1500,
-    1550, 1600, 1650, 1700, 1750, 1800, 1850, 1900,
-    1950, 2000, 2050, 2100, 2150, 2200, 2250, 2300,
-    2350, 2400, 2450, 2500, 2550, 2600, 2650, 2700,
-    2750, 2800, 2850, 2900, 2950, 3000, 3050, 3100,
-    3150, 3200, 3250, 3300, 3350, 3400, 3450, 3500,
-    3550, 3600, 3650, 3700, 3750, 3800, 3850, 3900
+     700,  725,  750,  800,  850,  900,  950, 1000,
+    1050, 1100, 1150, 1200, 1250, 1300, 1350, 1400,
+    1450, 1500, 1550, 1600, 1650, 1700, 1750, 1800,
+    1850, 1900, 1950, 2000, 2050, 2100, 2150, 2200,
+    2250, 2300, 2350, 2400, 2450, 2500, 2550, 2600,
+    2650, 2700, 2750, 2800, 2850, 2900, 2950, 3000,
+    3050, 3100, 3150, 3200, 3250, 3300, 3350, 3400,
+    3450, 3500, 3550, 3600, 3650, 3700, 3750, 3800
 };
 
 // LDO2, LDO3, LDO17, LDO18 (millivolts)
@@ -172,13 +172,13 @@ static const NvU32 VoltageTable_LDO_A[] = {
 
 // FAN5355 VOUT_02 (millivolts x 10)
 static const NvU32 VoltageTable_VOUT_02[] = {
-     7500,  7625,  7750,  7875,  8000,  8125,  8250,  8375,
-     8500,  8625,  8750,  8875,  9000,  9125,  9250,  9375,
-     9500,  9625,  9750,  9875, 10000, 10125, 10250, 10375,
-    10500, 10625, 10750, 10875, 11000, 11125, 11250, 11375,
-    11500, 11625, 11750, 11875, 12000, 12125, 12250, 12375,
-    12500, 12625, 12750, 12875, 13000, 13125, 13250, 13375,
-    13500, 13625, 13750, 13875, 14000, 14125, 14250, 14375,
+     7000,  7125,  7250,  7375,  7500,  7625,  7750,  7875,
+     8000,  8125,  8250,  8375,  8500,  8625,  8750,  8875,
+     9000,  9125,  9250,  9375,  9500,  9625,  9750,  9875,
+    10000, 10125, 10250, 10375, 10500, 10625, 10750, 10875,
+    11000, 11125, 11250, 11375, 11500, 11625, 11750, 11875,
+    12000, 12125, 12250, 12375, 12500, 12625, 12750, 12875,
+    13000, 13125, 13250, 13375, 13500, 13625, 13750, 13875,
 };
 
 /*-- Sequencer table --*/
@@ -333,14 +333,14 @@ const NvU8 MIC2826_LDO_Votage_Table[] =
 #endif
 
 #define MAX8907_MIN_OUTPUT_VOLTAGE_SD_A_x10           6375  // 637.5 mV
-#define MAX8907_MIN_OUTPUT_VOLTAGE_SD_B_LDO_B         750   // 750 mV
+#define MAX8907_MIN_OUTPUT_VOLTAGE_SD_B_LDO_B         700   // 700 mV
 #define MAX8907_MIN_OUTPUT_VOLTAGE_LDO_A              650   // 650 mV
 //20100413, , unused
 #ifndef CONFIG_MACH_STAR
-#define FAN5355_MIN_OUTPUT_VOLTAGE_x10                7500  // 750.0 mV
+#define FAN5355_MIN_OUTPUT_VOLTAGE_x10                7000  // 700.0 mV
 #endif
 //20100819, , Voltage bug fix
-#define MAX8952_MIN_OUTPUT_VOLTAGE_x10                7700 // 770.0mV <-- 750.0mV
+#define MAX8952_MIN_OUTPUT_VOLTAGE_x10                7000 // 700.0mV <-- 750.0mV
 
 #define MAX8907_OUTPUT_VOLTAGE_INCREMENT_SD_A_x10     125  // 12.5 mV
 #define MAX8907_OUTPUT_VOLTAGE_INCREMENT_SD_B_LDO_B   50   // 50 mV
@@ -352,13 +352,13 @@ const NvU8 MIC2826_LDO_Votage_Table[] =
 #define MAX8952_OUTPUT_VOLTAGE_INCREMENT_x10          100 // 10 mV
 
 #define MAX8907_MAX_OUTPUT_VOLTAGE_SD_A_x10           14250  // 1,425.0 mV
-#define MAX8907_MAX_OUTPUT_VOLTAGE_SD_B_LDO_B         3900   // 3,900 mV
+#define MAX8907_MAX_OUTPUT_VOLTAGE_SD_B_LDO_B         3800   // 3,800 mV
 #define MAX8907_MAX_OUTPUT_VOLTAGE_LDO_A              2225   // 2,225 mV
 //20100413, , unused
 #ifndef CONFIG_MACH_STAR
-#define FAN5355_MAX_OUTPUT_VOLTAGE_x10                14375  // 1,437.5 mV
+#define FAN5355_MAX_OUTPUT_VOLTAGE_x10                13875  // 1,387.5 mV
 #endif
-#define MAX8952_MAX_OUTPUT_VOLTAGE_x10                13800
+#define MAX8952_MAX_OUTPUT_VOLTAGE_x10                13800  // 1,380.0 mV
 
 #define MAX8907_MIN_OUTPUT_VOLTAGE_RTC                0   // 0 mV
 #define MAX8907_OUTPUT_VOLTAGE_INCREMENT_RTC          1   // Protected; use dummy, non-zero value
@@ -1457,6 +1457,14 @@ Max8907OnOffConfigure(NvOdmPmuDeviceHandle hDevice)
     //data |= (MAX8907_SYSENSEL_RSTINEN_MASK  << MAX8907_SYSENSEL_RSTINEN_SHIFT);
     data |= (MAX8907_SYSENSEL_WKCHG_MASK    << MAX8907_SYSENSEL_WKCHG_SHIFT);
     data |= (MAX8907_SYSENSEL_WKSW_MASK     << MAX8907_SYSENSEL_WKSW_SHIFT);
+#if 0 // disable powerlongkey shutdown
+// LGE_CHANGE_S [  ] 2011-03-09 for H/W power off, not H/W reset , MAX8907C limitation{
+// Enable hard reset - power-off after ONKEY press for 5 seconds
+// (must be enabled for thermal auto-shutdown)
+		data |= (MAX8907_SYSENSEL_HRDSTEN_MASK <<
+				 MAX8907_SYSENSEL_HRDSTEN_SHIFT);
+// LGE_CHANGE_E [  ] 2011-03-09 }
+#endif
 #else
     if (!Max8907I2cRead8(hDevice, MAX8907_SYSENSEL, &data))
         return NV_FALSE;
@@ -2233,6 +2241,13 @@ Max8907Setup(NvOdmPmuDeviceHandle hDevice)
 
     //emmc : for voltage margin
     Max8907SetVoltage(hDevice, Max8907PmuSupply_LDO5, 3000, NULL);
+
+    //20100624, , revB [START]
+    #if defined(CONFIG_MACH_STAR_REV_B)
+    if (!Max8907I2cWrite8(hDevice, 0x9C, 0x1C))
+        return NV_FALSE;
+    #endif
+    //20100624, cs77.ha@lge.com, revB [END]
 
     //20100928, , enable PMU interrupt for RTC wakeup [START]
     Max8907SetupInterrupt(hDevice);

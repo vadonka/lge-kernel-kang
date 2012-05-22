@@ -224,12 +224,11 @@ NvOdmQueryPinMux(
     const NvU32 **pPinMuxConfigTable,
     NvU32 *pCount)
 {
-	//20101023  add tegra-10.9.3[start] 
+	//20101023  add tegra-10.9.3[start]
 	NvU32 CustomerOption = 0;
 	NvU32 Personality = 0;
 	NvU32 Ril = 0;
 	NvOdmServicesKeyListHandle hKeyList;
-	hKeyList = NvOdmServicesKeyListOpen();
 	if (hKeyList)
     {   
         CustomerOption =
