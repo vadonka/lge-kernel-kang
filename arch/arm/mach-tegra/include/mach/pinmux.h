@@ -148,7 +148,9 @@ typedef enum {
 	REG_DATA,
 } tegra_reg_t;
 
+#ifdef CONFIG_DEBUG_FS
 extern int gpio_dbgfs_mode;   // 0=normal, 1=sleep
+#endif
 
 #define NORMAL_MODE 		0
 #define SLEEP_MODE 			1
