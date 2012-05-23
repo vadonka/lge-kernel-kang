@@ -324,8 +324,8 @@ CONFIG_TEGRA_ODM_STAR=y
 CONFIG_MACH_STAR_REV_F=y
 # CONFIG_STAR_PMIC is not set
 # CONFIG_STAR_HIDDEN_RESET is not set
+# CONFIG_OVERCLOCK is not set
 # CONFIG_LPRINTK is not set
-# CONFIG_FAKE_SHMOO is not set
 
 #
 # LGE STAR device driver
