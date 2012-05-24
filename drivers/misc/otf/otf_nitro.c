@@ -23,9 +23,6 @@ static unsigned int onminkhznitro = 655000;
 static unsigned int ondelaynitro = 2000;
 static unsigned int offmaxkhznitro = 610000;
 static unsigned int offdelaynitro = 200;
-static unsigned int avpfreqnitro = 280000;
-static unsigned int gpufreqnitro = 366000;
-static unsigned int vdefreqnitro = 700000;
 
 /* Boot time value */
 unsigned int nitro = 0;
@@ -35,17 +32,11 @@ extern unsigned int onminkhz;
 extern unsigned int ondelay;
 extern unsigned int offmaxkhz;
 extern unsigned int offdelay;
-extern unsigned int avpfreq;
-extern unsigned int gpufreq;
-extern unsigned int vdefreq;
 
 static unsigned int oldonminkhz;
 static unsigned int oldondelay;
 static unsigned int oldoffmaxkhz;
 static unsigned int oldoffdelay;
-static unsigned int oldavpfreq;
-static unsigned int oldgpufreq;
-static unsigned int oldvdefreq;
 
 static ssize_t nitro_read(struct device * dev, struct device_attribute * attr, char * buf)
 {
@@ -84,18 +75,6 @@ static ssize_t nitro_write(struct device * dev, struct device_attribute * attr, 
 				offdelay = offdelaynitro;
 				NVRM_CPU1_OFF_PENDING_MS = offdelay;
 				pr_info("NITRO Enabled! CPU1_OFF_PENDING_MS threshold changed to %d\n", offdelay);
-
-				oldavpfreq = avpfreq;
-				avpfreq = avpfreqnitro;
-				pr_info("NITRO Enabled! AVPCONTROL threshold changed to %d\n", avpfreq);
-
-				oldgpufreq = gpufreq;
-				gpufreq = gpufreqnitro;
-				pr_info("NITRO Enabled! GPUCONTROL threshold changed to %d\n", gpufreq);
-
-				oldvdefreq = vdefreq;
-				vdefreq = vdefreqnitro;
-				pr_info("NITRO Enabled! VDECONTROL threshold changed to %d\n", vdefreq);
 			}
 			else
 			{
@@ -116,15 +95,6 @@ static ssize_t nitro_write(struct device * dev, struct device_attribute * attr, 
 				offdelay = oldoffdelay;
 				NVRM_CPU1_OFF_PENDING_MS = offdelay;
 				pr_info("CPU1_OFF_PENDING_MS threshold restored to %d\n", offdelay);
-
-				avpfreq = oldavpfreq;
-				pr_info("AVPCONTROL threshold restored to %d\n", avpfreq);
-
-				gpufreq = oldgpufreq;
-				pr_info("GPUCONTROL threshold restored to %d\n", gpufreq);
-
-				vdefreq = oldvdefreq;
-				pr_info("VDECONTROL threshold restored to %d\n", vdefreq);
 			}
 		}
 	}
