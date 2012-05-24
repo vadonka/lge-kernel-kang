@@ -14,95 +14,65 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 
-/* Static containers */
-static unsigned int MIN_AVPFREQ = 200000;
-static unsigned int MAX_AVPFREQ = 280000;
-static unsigned int DEF_AVPFREQ = 240000;
+/* Static containers
+ * avpfreq values are set in the init/otfinit.c
+ */
+extern unsigned int MIN_AVPFREQ;
+extern unsigned int MAX_AVPFREQ;
 
-/* Boot time value */
-unsigned int avpfreq = 240000;
+/* Boot time value taken from the kernel cmdline */
+extern unsigned int avpfreq;
 
-static ssize_t avpfreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t avpinfo_boot(struct device * dev, struct device_attribute * attr, char * buf)
 {
-	return sprintf(buf, "%d\n", avpfreq);
+	return sprintf(buf, "%u\n", avpfreq);
 }
 
-/** SYSFS */
-extern unsigned int nitro;
-static ssize_t avpfreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
-{
-	int dataavp;
-
-	if (nitro != 1)
-	{
-		if (sscanf(buf, "%d\n", &dataavp) == 1)
-		{
-			if (dataavp != avpfreq)
-			{
-				avpfreq = min(max(dataavp, MIN_AVPFREQ), MAX_AVPFREQ);
-				pr_info("AVPCONTROL threshold changed to %d\n", avpfreq);
-			}
-		}
-		else
-		{
-			pr_info("AVPCONTROL invalid input\n");
-		}
-		return size;
-	}
-}
-
-static ssize_t avpcontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t avpinfo_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_AVPFREQ);
 }
 
-static ssize_t avpcontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t avpinfo_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_AVPFREQ);
 }
 
-static ssize_t avpcontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
-{
-	return sprintf(buf, "%u\n", DEF_AVPFREQ);
-}
+static DEVICE_ATTR(avpfreq, S_IRUGO , avpinfo_boot, NULL);
+static DEVICE_ATTR(avpfreqmin, S_IRUGO , avpinfo_min, NULL);
+static DEVICE_ATTR(avpfreqmax, S_IRUGO , avpinfo_max, NULL);
 
-static DEVICE_ATTR(avpfreq, S_IRUGO | S_IWUGO, avpfreq_read, avpfreq_write);
-static DEVICE_ATTR(avpfreqmin, S_IRUGO , avpcontrol_min, NULL);
-static DEVICE_ATTR(avpfreqmax, S_IRUGO , avpcontrol_max, NULL);
-static DEVICE_ATTR(avpfreqdef, S_IRUGO , avpcontrol_def, NULL);
-
-static struct attribute *avpcontrol_attributes[] = {
+static struct attribute *avpinfo_attributes[] = {
 	&dev_attr_avpfreq.attr,
 	&dev_attr_avpfreqmin.attr,
 	&dev_attr_avpfreqmax.attr,
-	&dev_attr_avpfreqdef.attr,
 	NULL
 };
 
-static struct attribute_group avpcontrol_group = {
-	.attrs  = avpcontrol_attributes,
+static struct attribute_group avpinfo_group = {
+	.attrs  = avpinfo_attributes,
 };
 
-static struct miscdevice avpcontrol_device = {
+static struct miscdevice avpinfo_device = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = "avpcontrol",
+	.name = "avpinfo",
 };
 
-static int __init avpcontrol_init(void) {
+static int __init avpinfo_init(void) {
 	int ret;
-	pr_info("%s misc_register(%s)\n", __FUNCTION__, avpcontrol_device.name);
-	ret = misc_register(&avpcontrol_device);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, avpinfo_device.name);
+	ret = misc_register(&avpinfo_device);
 
 	if (ret) {
-		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, avpcontrol_device.name);
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, avpinfo_device.name);
 		return 1;
 	}
 
-	if (sysfs_create_group(&avpcontrol_device.this_device->kobj, &avpcontrol_group) < 0) {
+	if (sysfs_create_group(&avpinfo_device.this_device->kobj, &avpinfo_group) < 0) {
 		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
-		pr_err("Failed to create sysfs group for device (%s)!\n", avpcontrol_device.name);
+		pr_err("Failed to create sysfs group for device (%s)!\n", avpinfo_device.name);
 	}
 	return 0;
 }
 
-device_initcall(avpcontrol_init);
+device_initcall(avpinfo_init);

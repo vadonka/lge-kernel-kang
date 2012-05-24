@@ -14,95 +14,65 @@
 #include <linux/device.h>
 #include <linux/miscdevice.h>
 
-/* Static containers */
-static unsigned int MIN_VDEFREQ = 600000;
-static unsigned int MAX_VDEFREQ = 700000;
-static unsigned int DEF_VDEFREQ = 650000;
+/* Static containers
+ * vdefreq values are set in the init/otfinit.c
+ */
+extern unsigned int MIN_VDEFREQ;
+extern unsigned int MAX_VDEFREQ;
 
-/* Boot time value */
-unsigned int vdefreq = 650000;
+/* Boot time value taken from the kernel cmdline */
+extern unsigned int vdefreq;
 
-static ssize_t vdefreq_read(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t vdeinfo_boot(struct device * dev, struct device_attribute * attr, char * buf)
 {
-	return sprintf(buf, "%d\n", vdefreq);
+	return sprintf(buf, "%u\n", vdefreq);
 }
 
-/** SYSFS */
-extern unsigned int nitro;
-static ssize_t vdefreq_write(struct device * dev, struct device_attribute * attr, const char * buf, size_t size)
-{
-	int datavde;
-
-	if (nitro != 1)
-	{
-		if (sscanf(buf, "%d\n", &datavde) == 1)
-		{
-			if (datavde != vdefreq)
-			{
-				vdefreq = min(max(datavde, MIN_VDEFREQ), MAX_VDEFREQ);
-				pr_info("VDECONTROL threshold changed to %d\n", vdefreq);
-			}
-		}
-		else
-		{
-			pr_info("VDECONTROL invalid input\n");
-		}
-		return size;
-	}
-}
-
-static ssize_t vdecontrol_min(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t vdeinfo_min(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MIN_VDEFREQ);
 }
 
-static ssize_t vdecontrol_max(struct device * dev, struct device_attribute * attr, char * buf)
+static ssize_t vdeinfo_max(struct device * dev, struct device_attribute * attr, char * buf)
 {
 	return sprintf(buf, "%u\n", MAX_VDEFREQ);
 }
 
-static ssize_t vdecontrol_def(struct device * dev, struct device_attribute * attr, char * buf)
-{
-	return sprintf(buf, "%u\n", DEF_VDEFREQ);
-}
+static DEVICE_ATTR(vdefreq, S_IRUGO , vdeinfo_boot, NULL);
+static DEVICE_ATTR(vdefreqmin, S_IRUGO , vdeinfo_min, NULL);
+static DEVICE_ATTR(vdefreqmax, S_IRUGO , vdeinfo_max, NULL);
 
-static DEVICE_ATTR(vdefreq, S_IRUGO | S_IWUGO, vdefreq_read, vdefreq_write);
-static DEVICE_ATTR(vdefreqmin, S_IRUGO , vdecontrol_min, NULL);
-static DEVICE_ATTR(vdefreqmax, S_IRUGO , vdecontrol_max, NULL);
-static DEVICE_ATTR(vdefreqdef, S_IRUGO , vdecontrol_def, NULL);
-
-static struct attribute *vdecontrol_attributes[] = {
+static struct attribute *vdeinfo_attributes[] = {
 	&dev_attr_vdefreq.attr,
 	&dev_attr_vdefreqmin.attr,
 	&dev_attr_vdefreqmax.attr,
-	&dev_attr_vdefreqdef.attr,
 	NULL
 };
 
-static struct attribute_group vdecontrol_group = {
-	.attrs  = vdecontrol_attributes,
+static struct attribute_group vdeinfo_group = {
+	.attrs  = vdeinfo_attributes,
 };
 
-static struct miscdevice vdecontrol_device = {
+static struct miscdevice vdeinfo_device = {
 	.minor = MISC_DYNAMIC_MINOR,
-	.name = "vdecontrol",
+	.name = "vdeinfo",
 };
 
-static int __init vdecontrol_init(void) {
+static int __init vdeinfo_init(void) {
 	int ret;
-	pr_info("%s misc_register(%s)\n", __FUNCTION__, vdecontrol_device.name);
-	ret = misc_register(&vdecontrol_device);
+	pr_info("%s misc_register(%s)\n", __FUNCTION__, vdeinfo_device.name);
+	ret = misc_register(&vdeinfo_device);
 
 	if (ret) {
-		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, vdecontrol_device.name);
+		pr_err("%s misc_register(%s) fail\n", __FUNCTION__, vdeinfo_device.name);
 		return 1;
 	}
 
-	if (sysfs_create_group(&vdecontrol_device.this_device->kobj, &vdecontrol_group) < 0) {
+	if (sysfs_create_group(&vdeinfo_device.this_device->kobj, &vdeinfo_group) < 0) {
 		pr_err("%s sysfs_create_group fail\n", __FUNCTION__);
-		pr_err("Failed to create sysfs group for device (%s)!\n", vdecontrol_device.name);
+		pr_err("Failed to create sysfs group for device (%s)!\n", vdeinfo_device.name);
 	}
 	return 0;
 }
 
-device_initcall(vdecontrol_init);
+device_initcall(vdeinfo_init);
