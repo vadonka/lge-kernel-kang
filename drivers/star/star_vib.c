@@ -118,24 +118,6 @@ static int star_vib_set_power_rail( NvU32 vdd_id, NvBool is_enable )
 }
 // 20100903  Power control bug fix [END]
 
-#ifdef CONFIG_VIBRATOR_CONTROL
-void request_railcap(void)
-{
-    NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
-    NvOdmServicesPmuVddRailCapabilities vddrailcap;
-    NvU32 settletime;
-
-    if(h_pmu)
-    {
-        NvOdmServicesPmuGetCapabilities( h_pmu, g_vib->vdd_id, &vddrailcap );
-        NvOdmServicesPmuClose(h_pmu);
-        NvOdmServicesPmuSetVoltage(h_pmu, g_vib->vdd_id, vibratorcontrol_vibstrength(), &settletime);
-    }
-    return;
-}
-EXPORT_SYMBOL(request_railcap);
-#endif
-
 static void star_vib_vibrating( NvBool on )
 {
 //20101112 Call Vibrate Volume [START_LGE_LAB1]
@@ -156,6 +138,30 @@ static void star_vib_vibrating( NvBool on )
 	NvOdmGpioSetState( g_vib->h_vib_gpio, g_vib->h_vib_gpio_pin, on );
 #endif
 }
+
+#ifdef CONFIG_VIBRATOR_CONTROL
+void request_railcap(void)
+{
+    NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
+    NvOdmServicesPmuVddRailCapabilities vddrailcap;
+    NvU32 settletime;
+
+    if(h_pmu)
+    {
+		while ( atomic_read(&is_enable) == 1 )
+		    msleep(50);
+		    
+        NvOdmServicesPmuGetCapabilities( h_pmu, g_vib->vdd_id, &vddrailcap );
+        NvOdmServicesPmuSetVoltage(h_pmu, g_vib->vdd_id, vibratorcontrol_vibstrength(), &settletime);
+        NvOdmServicesPmuClose(h_pmu);
+        star_vib_vibrating( NV_TRUE );
+        msleep(150);
+        star_vib_vibrating( NV_FALSE );
+    }
+    return;
+}
+EXPORT_SYMBOL(request_railcap);
+#endif
 
 //20101112 all Vibrate Volume [START_LGE_LAB1]
 #ifdef STAR_COUNTRY_KR
