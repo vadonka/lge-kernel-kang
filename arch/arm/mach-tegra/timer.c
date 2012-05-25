@@ -251,7 +251,7 @@ static struct irqaction tegra_lp2wake_irq = {
 static void __init tegra_init_timer(void)
 {
 	unsigned long rate;
-	unsigned int m, n;
+	unsigned int m=0, n=0;
 	int ret;
 
 #ifdef CONFIG_HAVE_ARM_TWD
