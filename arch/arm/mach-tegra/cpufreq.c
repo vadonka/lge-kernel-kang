@@ -122,9 +122,9 @@ static void tegra_cpufreq_hotplug(NvRmPmRequest req)
 #ifdef CONFIG_OVERCLOCK
 static struct cpufreq_frequency_table freq_table[] = {
   { 0, 216000 },
-  { 1, 503000 },
-  { 2, 816000 },
-  { 3, 1000000 },
+  { 1, 456000 },
+  { 2, 760000 },
+  { 3, 912000 },
   { 4, 1100000 },
   { 5, 1216000 },
   { 6, 1408000 },
