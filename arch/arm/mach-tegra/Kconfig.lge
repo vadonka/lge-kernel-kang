@@ -18,84 +18,14 @@ config STAR_HIDDEN_RESET
 	depends on MACH_STAR
 	default n
 
+config OVERCLOCK
+	bool "SysFS controlled OverClock (c) Benee"
+	depends on MACH_STAR
+	default n
+
 menuconfig LPRINTK
         bool "LGE Debugging Message"
         depends on MACH_STAR && DEBUG_FS
-
-config FAKE_SHMOO
-	bool "Tegra2 Overclocking Enable"
-	depends on MACH_STAR
-	default y
-
-config CPU_REL_REQ
-	bool "Tegra2 Core and CPU Voltage Rel. Reqs."
-	depends on MACH_STAR
-	default y
-
-config BOOST_PERIPHERALS
-	bool "Tegra2 Overclocking Peripheral Enable"
-	depends on MACH_STAR
-	default y
-
-config MAX_AVP_OC_FREQ
-	int "AVP Overclock Frequency"
-	default 280000
-	depends on FAKE_SHMOO || BOOST_PERIPHERALS
-
-config MAX_GPU_OC_FREQ
-	int "3D GPU Overclock Frequency"
-	default 350000
-	depends on FAKE_SHMOO || BOOST_PERIPHERALS
-
-config MAX_DDR_OC_FREQ
-	int "Maximum DDR Overclock Frequency"
-	default 350000
-	depends on FAKE_SHMOO || BOOST_PERIPHERALS
-
-config DDR2_SDRAM_FREQ
-	int "DDR Overclock Frequency"
-	default 350000 if BOOST_PERIPHERALS
-	default 300000
-
-menuconfig SPICA_OTF
-	bool "On The Fly ToolKit (C) Spica"
-	default y
-
-if SPICA_OTF
-
-config OTF_AVP
-	bool "OTF AVP Frequency"
-	default y
-
-config OTF_GPU
-	bool "OTF GPU Frequency"
-	default y
-
-config OTF_VDE
-	bool "OTF VDE Frequency"
-	default y
-
-config OTF_DDR2MIN
-	bool "OTF DDR2 Min Frequency"
-	default y
-
-config OTF_LPDDR2
-	bool "OTF LPDDR2 Min Frequency"
-	default y
-
-config OTF_CPU1
-	bool "OTF CPU Second Core activation"
-	default y
-
-config OTF_MAXSCOFF
-	bool "OTF Screen Off Max Frequency"
-	default y
-
-config OTF_PSNIT
-	bool "OTF Extra: PowerSave & Nitro feature"
-	default y
-
-endif # SPICA_OTF
 
 if LPRINTK
 config  LPRINTK_ALL

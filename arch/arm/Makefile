@@ -15,7 +15,7 @@ ifeq ($(CONFIG_CPU_ENDIAN_BE8),y)
 LDFLAGS_vmlinux	+= --be8
 endif
 
-OBJCOPYFLAGS	:=-O binary -R .note -R .note.gnu.build-id -R .comment -S
+OBJCOPYFLAGS	:=-O binary -R .comment -S
 GZFLAGS		:=-9
 #KBUILD_CFLAGS	+=-pipe
 # Explicitly specifiy 32-bit ARM ISA since toolchain default can be -mthumb:
@@ -102,7 +102,7 @@ CFLAGS_ABI	+=-funwind-tables
 endif
 
 ifeq ($(CONFIG_THUMB2_KERNEL),y)
-AFLAGS_AUTOIT	:=$(call as-option,-Wa$(comma)-mimplicit-it=thumb,-Wa$(comma)-mauto-it)
+AFLAGS_AUTOIT	:=$(call as-option,-Wa$(comma)-mimplicit-it=always,-Wa$(comma)-mauto-it)
 AFLAGS_NOWARN	:=$(call as-option,-Wa$(comma)-mno-warn-deprecated,-Wa$(comma)-W)
 CFLAGS_THUMB2	:=-mthumb $(AFLAGS_AUTOIT) $(AFLAGS_NOWARN)
 AFLAGS_THUMB2	:=$(CFLAGS_THUMB2) -Wa$(comma)-mthumb
@@ -115,19 +115,6 @@ endif
 # Need -Uarm for gcc < 3.x
 KBUILD_CFLAGS	+=$(CFLAGS_ABI) $(CFLAGS_THUMB2) $(arch-y) $(tune-y) $(call cc-option,-mshort-load-bytes,$(call cc-option,-malignment-traps,)) -mhard-float -Uarm
 KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -include asm/unified.h -mhard-float
-KBUILD_CFLAGS	+= $(cc-option,-mfpu=vfpv3-d16)
-ifeq ($(call cc-option-yn,-mfloat-abi=hard),y)
-KBUILD_CFLAGS  += -mfloat-abi=hard
-else
-KBUILD_CFLAGS  += -mhard-float
-endif
-KBUILD_AFLAGS	+=$(CFLAGS_ABI) $(AFLAGS_THUMB2) $(arch-y) $(tune-y) -include asm/unified.h -mhard-float
-KBUILD_AFLAGS  += $(as-option,-mfpu=vfpv3-d16)
-ifeq ($(call as-option-yn,-mfloat-abi=hard),y)
-KBUILD_AFLAGS  += -mfloat-abi=hard
-else
-KBUILD_AFLAGS  += -mhard-float
-endif
 
 CHECKFLAGS	+= -D__arm__
 

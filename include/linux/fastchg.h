@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010 Google, Inc.
+ * Author: Chad Froebel <chadfroebel@gmail.com>
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -12,11 +12,10 @@
  *
  */
 
-#ifndef _INCLUDE_LINUX_PLATFORM_DATA_RAM_CONSOLE_H_
-#define _INCLUDE_LINUX_PLATFORM_DATA_RAM_CONSOLE_H_
 
-struct ram_console_platform_data {
-	const char *bootinfo;
-};
+#ifndef _LINUX_FASTCHG_H
+#define _LINUX_FASTCHG_H
 
-#endif /* _INCLUDE_LINUX_PLATFORM_DATA_RAM_CONSOLE_H_ */
+extern int force_charge_mode;
+
+#endif

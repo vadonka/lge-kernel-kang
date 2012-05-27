@@ -189,13 +189,8 @@ extern "C"
 
 // Defines minimum scaling limit for each supported SDRAM type
 
-#ifndef CONFIG_OTF_DDR2MIN
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
-#endif /* OTF_DDR2MIN */
-
-#ifndef CONFIG_OTF_LPDDR2
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
-#endif /* OTF_LPDDR2 */
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
@@ -246,13 +241,13 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
-#ifndef CONFIG_OTF_CPU1
+#ifndef CONFIG_OTF
 #define NVRM_CPU1_ON_MIN_KHZ (0)
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
-#endif /* OTF_CPU1 */
 
-#define NVRM_CPU1_ON_PENDING_MS (2000)
+#define NVRM_CPU1_ON_PENDING_MS (1500)
 #define NVRM_CPU1_OFF_PENDING_MS (1000)
+#endif /* OTF */
 
 /*
  * Defines AP20 Thermal policy parameters.
@@ -273,8 +268,8 @@ extern "C"
  * ODM should also set a critical threshold to trigger h/w shutdown
  * mechanism.
  */
-#define NVRM_DTT_DEGREES_HIGH           (90L)
-#define NVRM_DTT_DEGREES_LOW            (60L)
+#define NVRM_DTT_DEGREES_HIGH           (95L)
+#define NVRM_DTT_DEGREES_LOW            (65L)
 #define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
@@ -291,7 +286,6 @@ extern "C"
 // Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
 
-#ifdef CONFIG_CPU_REL_REQ
 // Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \
 ((((sku) == 23) || \
@@ -306,8 +300,6 @@ extern "C"
 ((sku) == 20) || \
 ((sku) == 27) || \
 ((sku) == 28)) ? 850 : 0)
-
-#endif
 
 /*****************************************************************************
  * Adjust EMC scaling algorithm parameters based on the SDRAM type selected by

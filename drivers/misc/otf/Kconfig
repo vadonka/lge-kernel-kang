@@ -1,0 +1,3 @@
+config OTF
+	bool "On The Fly ToolKit (C) Spica"
+	default y

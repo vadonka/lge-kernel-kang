@@ -22,7 +22,7 @@
 #include <linux/uaccess.h>
 #include <linux/io.h>
 #include "persistent_ram.h"
-#include "ram_console.h"
+#include <linux/platform_data/ram_console.h>
 
 static struct persistent_ram_zone *ram_console_zone;
 static const char *bootinfo;

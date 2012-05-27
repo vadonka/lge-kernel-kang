@@ -79,3 +79,5 @@ obj-$(CONFIG_STAR_FOTA)	+= star_fota.o
 #
 obj-$(CONFIG_STAR_BD_ADDRESS)	+= star_bd_address.o
 obj-$(CONFIG_STAR_VIBRATOR)	+= star_vib.o
+
+obj-$(CONFIG_FORCE_FAST_CHARGE)         += fastchg.o

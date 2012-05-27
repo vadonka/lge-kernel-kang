@@ -32,6 +32,8 @@
 #include <linux/switch.h>
 #endif
 
+#include <linux/fastchg.h>
+
 #include "mach/nvrm_linux.h"
 #include "nvodm_query_discovery.h"
 
@@ -854,7 +856,7 @@ void Set_MAX14526_Charger_Detect(NvU8 int_status_reg)
     // Read STATUS_REG (0x05)
     reg_value = Get_MAX14526_ADDR(STATUS_REG);
 
-    if (reg_value & CHPORT_M){
+    if (((reg_value & CHPORT_M) && force_charge_mode != 1) || force_charge_mode == 2){
         // High Current Host/Hub Detected
         printk("MUIC : %s:%d CHPORT \n",__func__,__LINE__);
         // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -1107,8 +1109,14 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
 {
     NvU8 reg_value;
 
+    // CHGDET=1?  :: HIGH CURRENT USB or TA?
+    if ((int_status_reg & CHGDET_M) || force_charge_mode == 1 || force_charge_mode == 2)
+    {
+        Set_MAX14526_Charger_Detect(int_status_reg);
+    }
+
     // IDNO=0100? 130Kohm :: CP UART MODE
-    if((int_status_reg & IDNO_M) == IDNO_0100) 
+   else if((int_status_reg & IDNO_M) == IDNO_0100) 
         Set_MAX14526_Factory_Mode_Detect(); 
 
 
@@ -1120,13 +1128,6 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
     // IDNO=0010? 910Kohm  :: CP USB MODE
     else if ((int_status_reg &IDNO_M )==IDNO_1010)  
         Set_MAX14526_CP_USB_Mode();
-
-
-    // CHGDET=1?  :: HIGH CURRENT USB or TA?
-    else if (int_status_reg & CHGDET_M)
-    {
-        Set_MAX14526_Charger_Detect(int_status_reg);
-    }
 
     // VBUS=1?  :: TA or AP USB?
     else if (int_status_reg & VBUS_M){

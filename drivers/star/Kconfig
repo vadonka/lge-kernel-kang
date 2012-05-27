@@ -157,6 +157,13 @@ config STAR_BD_ADDRESS
 	bool "BD Read / Write Driver"
 	default y
 	help
-	  LGE added: It supports Bluetooth address Read / Write functionality on user mode.	  
+	  LGE added: It supports Bluetooth address Read / Write functionality on user mode.
+
+config FORCE_FAST_CHARGE
+        bool "Force AC charge mode at will"
+        default y
+        help
+          A simple sysfs interface to force adapters that
+          are detected as USB to charge as AC.
 
 endmenu

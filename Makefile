@@ -365,23 +365,14 @@ GCCVERSION47	:= $(shell expr 4.7.0 \<= `$(CC) -dumpversion`)
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 
-ifeq ($(GCCVERSION47),1)
-MODFLAGS	= -DMODULE -O3 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -floop-optimize
-else
-MODFLAGS 	= -DMODULE -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
-endif
+MODFLAGS 	= -DMODULE -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
 
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
 
-ifeq ($(GCCVERSION47),1)
-CFLAGS_KERNEL	= -O3 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -floop-optimize
-else
-CFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
-endif
-
-AFLAGS_KERNEL	= $(CFLAGS_KERNEL)
+CFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
+AFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
 # 20100705, ,[LGE_START]
@@ -399,11 +390,10 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include \
 KBUILD_CPPFLAGS := -D__KERNEL__
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-		   -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -fno-common \
+		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-                   -fno-delete-null-pointer-checks -mtune=cortex-a9 -march=armv7-a -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
-
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL := $(AFLAGS_KERNEL)
 KBUILD_CFLAGS_KERNEL := $(CFLAGS_KERNEL)
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -596,7 +586,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
-KBUILD_CFLAGS	+= $(CFLAGS_KERNEL)
+KBUILD_CFLAGS	+= -O2
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
@@ -663,9 +653,6 @@ KBUILD_CFLAGS += $(call cc-disable-warning, pointer-sign)
 
 # disable invalid "can't wrap" optimizations for signed / pointers
 KBUILD_CFLAGS	+= $(call cc-option,-fno-strict-overflow)
-
-# revert to pre-gcc-4.4 behaviour of .eh_frame
-KBUILD_CFLAGS	+= $(call cc-option,-fno-dwarf2-cfi-asm)
 
 # conserve stack if available
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)

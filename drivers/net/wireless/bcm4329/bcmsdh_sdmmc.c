@@ -332,7 +332,7 @@ sdioh_interrupt_deregister(sdioh_info_t *sd)
 	sd->intr_handler_arg = NULL;
 #elif defined(HW_OOB)
 	sdioh_disable_func_intr();
-#endif /*  !defined(OOB_INTR_ONLY) */
+#endif /* !defined(OOB_INTR_ONLY) */
 	return SDIOH_API_RC_SUCCESS;
 }
 

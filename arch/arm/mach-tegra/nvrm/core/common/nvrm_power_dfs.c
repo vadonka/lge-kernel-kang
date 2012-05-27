@@ -50,179 +50,19 @@
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
 
-#ifdef CONFIG_FAKE_SHMOO
+/* OTF Start */
+#ifdef CONFIG_OTF
+#include "../../../../../../drivers/misc/otf/otf.h"
+#endif /* OTF End */
+
+#ifdef CONFIG_OVERCLOCK
 #include <linux/kernel.h>
 
-/*
- * TEGRA AP20 CPU OC/UV Hack by Cpasjuste @ https://github.com/Cpasjuste/android_kernel_lg_p990
- */
-
 extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
-extern int *FakeShmoo_UV_mV_Ptr; // Stored voltage table from cpufreq sysfs
 NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
+#endif /* OVERCLOCK END */
 
-#endif // CONFIG_FAKE_SHMOO
-
-/* Spica OTF Start */
-#ifdef CONFIG_SPICA_OTF
-#include <linux/spica.h>
-
-/* PowerSave and Nitro */
-#ifdef CONFIG_OTF_PSNIT
-#define PW_PROCFS_NAME "powersave"
-#define PW_PROCFS_SIZE 2
-#define NITRO_PROCFS_NAME "nitros"
-#define NITRO_PROCFS_SIZE 2
-
-static struct proc_dir_entry *PW_Proc_File;
-static char procfs_buffer_pw[PW_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_pw = 0;
-static struct proc_dir_entry *NITRO_Proc_File;
-static char procfs_buffer_nitro[NITRO_PROCFS_SIZE];
-static unsigned long procfs_buffer_size_nitro = 0;
-
-int pw_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-	int ret;
-	printk(KERN_INFO "pw_procfile_read (/proc/spica/%s) called\n", PW_PROCFS_NAME);
-
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_pw, procfs_buffer_size_pw);
-		ret = procfs_buffer_size_pw;
-	}
-
-	return ret;
-}
-
-int nitro_procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
-	int ret;
-	printk(KERN_INFO "nitro_procfile_read (/proc/spica/%s) called\n", NITRO_PROCFS_NAME);
-
-	if (offset > 0) {
-		ret = 0;
-	} else {
-		memcpy(buffer, procfs_buffer_nitro, procfs_buffer_size_nitro);
-		ret = procfs_buffer_size_nitro;
-	}
-
-	return ret;
-}
-
-int pw_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_pw;
-	temp_pw = 0;
-
-	if ( sscanf(buffer,"%d",&temp_pw) < 0 )
-		return procfs_buffer_size_pw;
-
-	if ( temp_pw < 0 || temp_pw > 6 )
-		return procfs_buffer_size_pw;
-
-	procfs_buffer_size_pw = count;
-
-	if (procfs_buffer_size_pw > PW_PROCFS_SIZE) {
-		procfs_buffer_size_pw = PW_PROCFS_SIZE;
-	}
-
-	if (copy_from_user(procfs_buffer_pw, buffer, procfs_buffer_size_pw)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_pw,"%u",&PWONOFF);
-	return procfs_buffer_size_pw;
-}
-
-int nitro_procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-	int temp_nitro;
-	temp_nitro = 0;
-
-	if ( sscanf(buffer,"%d",&temp_nitro) < 0 )
-		return procfs_buffer_size_nitro;
-
-	if ( temp_nitro < 0 || temp_nitro > 1 )
-		return procfs_buffer_size_nitro;
-
-	procfs_buffer_size_nitro = count;
-
-	if (procfs_buffer_size_nitro > NITRO_PROCFS_SIZE) {
-		procfs_buffer_size_nitro = NITRO_PROCFS_SIZE;
-	}
-
-	if (copy_from_user(procfs_buffer_nitro, buffer, procfs_buffer_size_nitro)) {
-		printk(KERN_INFO "buffer_size error\n");
-		return -EFAULT;
-	}
-
-	sscanf(procfs_buffer_nitro,"%u",&NITROONOFF);
-	return procfs_buffer_size_nitro;
-}
-
-static int __init init_pw_procsfs(void) {
-	PW_Proc_File = spica_add(PW_PROCFS_NAME);
-
-	if (PW_Proc_File == NULL) {
-		spica_remove(PW_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", PW_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		PW_Proc_File->read_proc		= pw_procfile_read;
-		PW_Proc_File->write_proc	= pw_procfile_write;
-		PW_Proc_File->mode		= S_IFREG | S_IRUGO;
-		PW_Proc_File->uid		= 0;
-		PW_Proc_File->gid		= 0;
-		PW_Proc_File->size		= 37;
-		sprintf(procfs_buffer_pw,"%d",PWONOFF);
-		procfs_buffer_size_pw		= strlen(procfs_buffer_pw);
-		printk(KERN_INFO "/proc/spica/%s created\n", PW_PROCFS_NAME);
-	}
-
-	return 0;
-}
-
-module_init(init_pw_procsfs);
-
-static int __init init_nitro_procsfs(void) {
-	NITRO_Proc_File = spica_add(NITRO_PROCFS_NAME);
-
-	if (NITRO_Proc_File == NULL) {
-		spica_remove(NITRO_PROCFS_NAME);
-		printk(KERN_ALERT "Error: Could not initialize /proc/spica/%s\n", NITRO_PROCFS_NAME);
-		return -ENOMEM;
-	} else {
-		NITRO_Proc_File->read_proc	= nitro_procfile_read;
-		NITRO_Proc_File->write_proc	= nitro_procfile_write;
-		NITRO_Proc_File->mode		= S_IFREG | S_IRUGO;
-		NITRO_Proc_File->uid		= 0;
-		NITRO_Proc_File->gid		= 0;
-		NITRO_Proc_File->size		= 37;
-		sprintf(procfs_buffer_nitro,"%d",NITROONOFF);
-		procfs_buffer_size_nitro	= strlen(procfs_buffer_nitro);
-		printk(KERN_INFO "/proc/spica/%s created\n", NITRO_PROCFS_NAME);
-}
-
-	return 0;
-}
-
-module_init(init_nitro_procsfs);
-
-static void __exit cleanup_pw_procsfs(void) {
-	spica_remove(PW_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", PW_PROCFS_NAME);
-}
-
-module_exit(cleanup_pw_procsfs);
-
-static void __exit cleanup_nitro_procsfs(void) {
-	spica_remove(NITRO_PROCFS_NAME);
-	printk(KERN_INFO "/proc/spica/%s removed\n", NITRO_PROCFS_NAME);
-}
-
-module_exit(cleanup_nitro_procsfs);
-
-#endif // OTF_PSNIT
-#endif // SPICA_OTF
+/*****************************************************************************/
 
 // Initial DFS configuration
 #define AP15_FPGA_FREQ (8330)
@@ -251,6 +91,8 @@ module_exit(cleanup_nitro_procsfs);
 
 // Allow PMUs with CPU voltage range above chip minimum
 #define NVRM_DVS_ACCEPT_PMU_HIGH_CPU_MIN (1)
+
+/*****************************************************************************/
 
 // TODO: Always Disable before check-in
 // Module debug: 0=disable, 1=enable
@@ -978,14 +820,11 @@ static void DfsParametersInit(NvRmDfs* pDfs)
         pDfs->LowCornerKHz.Domains[i] = pDfs->DfsParameters[i].MinKHz;
         pDfs->HighCornerKHz.Domains[i] = pDfs->DfsParameters[i].MaxKHz;
     }
-#ifdef CONFIG_FAKE_SHMOO
-    /*
-     * Set CPU Clock scaling range manually to
-     * avoid booting up out of specifications
-     * and to minimize the "sleep of death" bug
-     */
-    pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1015000;
-#endif
+
+#ifdef CONFIG_OVERCLOCK
+    pDfs->HighCornerKHz.Domains[NvRmDfsClockId_Cpu] = 1000000;
+#endif /* OVERCLOCK END */
+
     pDfs->CpuCornersShadow.MinKHz =
         pDfs->LowCornerKHz.Domains[NvRmDfsClockId_Cpu];
     pDfs->CpuCornersShadow.MaxKHz =
@@ -2020,10 +1859,6 @@ NvError NvRmPrivDfsInit(NvRmDeviceHandle hRmDeviceHandle)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
-#ifdef CONFIG_FAKE_SHMOO
-    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
-#endif
-
     NV_ASSERT(hRmDeviceHandle);
     DfsHintsPrintInit();
 
@@ -2239,6 +2074,10 @@ void NvRmPrivDfsResync(void)
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
 
+#ifdef CONFIG_OVERCLOCK
+    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
+#endif /* OVERCLOCK END */
+
     DfsClockFreqGet(pDfs->hRm, &DfsKHz);
 
     NvOsIntrMutexLock(pDfs->hIntrMutex);
@@ -2406,21 +2245,6 @@ DvsChangeCpuVoltage(
     NvRmDvs* pDvs,
     NvRmMilliVolts TargetMv)
 {
-#ifdef CONFIG_FAKE_SHMOO
-    // Voltage hack
-    int i = 0;
-    if( FakeShmoo_UV_mV_Ptr != NULL )
-    {
-        for(i=0; i <fake_CpuShmoo.ShmooVmaxIndex+1; i++)
-        {
-            if(fake_CpuShmoo.ShmooVoltages[i] == TargetMv)
-            {
-                TargetMv -= FakeShmoo_UV_mV_Ptr[i];
-                break;
-            }
-        }
-    }
-#endif // CONFIG_FAKE_SHMOO
     NV_ASSERT(TargetMv >= pDvs->MinCpuMv);
     NV_ASSERT(TargetMv <= pDvs->NominalCpuMv);
 
@@ -2428,9 +2252,6 @@ DvsChangeCpuVoltage(
     {
         NvRmPmuSetVoltage(hRm, pDvs->CpuRailAddress, TargetMv, NULL);
         pDvs->CurrentCpuMv = TargetMv;
-#ifdef CONFIG_FAKE_SHMOO
-        //printk( "*** fakeShmoo **** -> CurrentCpuMv : %i\n", TargetMv );
-#endif
     }
 }
 
@@ -2564,17 +2385,15 @@ void NvRmPrivDvsInit(void)
     }
     else if (pDfs->hRm->ChipId.Id == 0x20)
     {
-#ifdef CONFIG_CPU_REL_REQ
-        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv, NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
-#endif
+        pDvs->MinCoreMv = NV_MAX(pDvs->MinCoreMv,
+            NVRM_AP20_RELIABILITY_CORE_MV(pDfs->hRm->ChipId.SKU));
         NV_ASSERT(pDvs->MinCoreMv <= pDvs->NominalCoreMv);
         pDvs->LowCornerCoreMv = NV_MAX(NVRM_AP20_LOW_CORE_MV, pDvs->MinCoreMv);
         pDvs->LowCornerCoreMv =
             NV_MIN(pDvs->LowCornerCoreMv, pDvs->NominalCoreMv);
 
-#ifdef CONFIG_CPU_REL_REQ
-        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv, NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
-#endif
+        pDvs->MinCpuMv = NV_MAX(pDvs->MinCpuMv,
+            NVRM_AP20_RELIABILITY_CPU_MV(pDfs->hRm->ChipId.SKU));
         NV_ASSERT(pDvs->MinCpuMv <= pDvs->NominalCpuMv);
         pDvs->LowCornerCpuMv = NV_MAX(NVRM_AP20_LOW_CPU_MV, pDvs->MinCpuMv);
         pDvs->LowCornerCpuMv =
@@ -3882,6 +3701,92 @@ NvRmDfsSetLowVoltageThreshold(
     }
     NvRmPrivUnlockSharedPll();
 }
+
+#ifdef CONFIG_OVERCLOCK
+NvError
+NvRmDvsGetCpuVoltageThresholds(
+    NvRmDeviceHandle hRmDeviceHandle,
+    NvRmMilliVolts* LowMv,
+    NvRmMilliVolts* NominalMv)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
+
+        NvRmPrivLockSharedPll();
+        *LowMv = pDvs->MinCpuMv;
+        *NominalMv = pDvs->NominalCpuMv;
+        NvRmPrivUnlockSharedPll();
+
+        return NvSuccess;
+    }
+
+    return NvError_NotSupported;
+}
+
+NvError
+NvRmDvsSetCpuVoltageThresholds(
+    NvRmDeviceHandle hRmDeviceHandle,
+    NvRmMilliVolts LowMv,
+    NvRmMilliVolts NominalMv)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+    NvRmPmuVddRailCapabilities cap;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    if (NvRmPrivIsCpuRailDedicated(hRmDeviceHandle)) {
+        NvRmPmuGetCapabilities(hRmDeviceHandle, pDvs->CpuRailAddress, &cap);
+        if (cap.RmProtected == NV_TRUE)
+            return NvError_NotSupported;
+
+        if (NominalMv > cap.MaxMilliVolts)
+            NominalMv = cap.MaxMilliVolts;
+        else if (NominalMv < cap.MinMilliVolts)
+            NominalMv = cap.MinMilliVolts;
+
+        if (LowMv > cap.MaxMilliVolts)
+            LowMv = cap.MaxMilliVolts;
+        else if (LowMv < cap.MinMilliVolts)
+            LowMv = cap.MinMilliVolts;
+
+        if (LowMv > NominalMv)
+            LowMv = NominalMv;
+
+        NvRmPrivLockSharedPll();
+        pDvs->MinCpuMv = LowMv;
+        pDvs->LowCornerCpuMv = LowMv;
+        pDvs->NominalCpuMv = NominalMv;
+        pDvs->UpdateFlag = NV_TRUE;
+        NvRmPrivUnlockSharedPll();
+
+        return NvSuccess;
+    }
+
+    return NvError_NotSupported;
+}
+
+NvError
+NvRmDvsSetCpuVoltageThresholdsToLimits(NvRmDeviceHandle hRmDeviceHandle)
+{
+    return NvRmDvsSetCpuVoltageThresholds(hRmDeviceHandle, 0,
+                                                        NvRmVoltsUnspecified);
+}
+
+void
+NvRmDvsForceUpdate(NvRmDeviceHandle hRmDeviceHandle)
+{
+    NvRmDvs* pDvs = &s_Dfs.VoltageScaler;
+
+    NV_ASSERT(hRmDeviceHandle);
+
+    NvRmPrivLockSharedPll();
+    pDvs->UpdateFlag = NV_TRUE;
+    NvRmPrivUnlockSharedPll();
+}
+#endif /* OVERCLOCK END */
 
 /*****************************************************************************/
 // DTT PUBLIC INTERFACES

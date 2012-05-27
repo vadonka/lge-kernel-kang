@@ -1457,6 +1457,14 @@ Max8907OnOffConfigure(NvOdmPmuDeviceHandle hDevice)
     //data |= (MAX8907_SYSENSEL_RSTINEN_MASK  << MAX8907_SYSENSEL_RSTINEN_SHIFT);
     data |= (MAX8907_SYSENSEL_WKCHG_MASK    << MAX8907_SYSENSEL_WKCHG_SHIFT);
     data |= (MAX8907_SYSENSEL_WKSW_MASK     << MAX8907_SYSENSEL_WKSW_SHIFT);
+#if 0 // disable powerlongkey shutdown
+// LGE_CHANGE_S [  ] 2011-03-09 for H/W power off, not H/W reset , MAX8907C limitation{
+// Enable hard reset - power-off after ONKEY press for 5 seconds
+// (must be enabled for thermal auto-shutdown)
+		data |= (MAX8907_SYSENSEL_HRDSTEN_MASK <<
+				 MAX8907_SYSENSEL_HRDSTEN_SHIFT);
+// LGE_CHANGE_E [  ] 2011-03-09 }
+#endif
 #else
     if (!Max8907I2cRead8(hDevice, MAX8907_SYSENSEL, &data))
         return NV_FALSE;
@@ -2226,6 +2234,13 @@ Max8907Setup(NvOdmPmuDeviceHandle hDevice)
 
     //emmc : for voltage margin
     Max8907SetVoltage(hDevice, Max8907PmuSupply_LDO5, 3000, NULL);
+
+    //20100624, , revB [START]
+    #if defined(CONFIG_MACH_STAR_REV_B)
+    if (!Max8907I2cWrite8(hDevice, 0x9C, 0x1C))
+        return NV_FALSE;
+    #endif
+    //20100624, cs77.ha@lge.com, revB [END]
 
     //20100928, , enable PMU interrupt for RTC wakeup [START]
     Max8907SetupInterrupt(hDevice);

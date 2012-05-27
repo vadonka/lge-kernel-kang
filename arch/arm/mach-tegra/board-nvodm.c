@@ -146,7 +146,7 @@ static struct platform_device debug_uart = {
 		.platform_data = debug_uart_platform,
 	},
 };
-
+/* memory patch 2011.08.23 start */
 #define TEGRA_EMC_MRW          0x00e8
 static void __iomem *emc = IO_ADDRESS(TEGRA_EMC_BASE);
 static inline void emc_writel(u32 val, unsigned long addr)
@@ -157,19 +157,20 @@ static inline void emc_writel(u32 val, unsigned long addr)
 /* read LPDDR2 memory modes */
 void tegra_emc_write_mrw(unsigned long addr)
 {
-	emc_writel(0x90000, TEGRA_EMC_MRW);    
+	emc_writel(0x90000, TEGRA_EMC_MRW);
 	printk("Sending 0xB0 to TEGRA_EMC_MRW\n");
 	emc_writel(0x900B0, TEGRA_EMC_MRW);
 	printk("Sending 0xE0 to TEGRA_EMC_MRW\n");
 	emc_writel(0x900E0, TEGRA_EMC_MRW);
 	printk("Sending 0x90 to TEGRA_EMC_MRW\n");
 	emc_writel(0x90090, TEGRA_EMC_MRW);
-	/* Sending the test op code per Hynix FAE requested. 
+	/* Sending the test op code per Hynix FAE requested.
 	   0xBD - reducing self-refresh rate from 30 us to 20 us.
 	   */
 	printk("Sending 0xBD to TEGRA_EMC_MRW\n");
 	emc_writel(0x900BD, TEGRA_EMC_MRW);
 }
+/* memory patch 2011.08.23 end */
 
 #if defined (CONFIG_MACH_STAR)
 extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
@@ -1666,10 +1667,10 @@ static struct platform_device star_wm8994_pdevice =
 //20100701  crashdump [LGE_START]
 #if defined(CONFIG_ANDROID_RAM_CONSOLE)
 static struct resource ram_console_resource[] = {
-    {
-        .name = "ram_console",
-        .flags  = IORESOURCE_MEM,
-    }
+	{
+		.name = "ram_console",
+		.flags  = IORESOURCE_MEM,
+	}
 };
 
 static struct platform_device ram_console_device = {
@@ -2953,7 +2954,7 @@ static void star_power_off_prepare()
 		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 		tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 
-	}
+}
 
 struct notifier_block star_panic_nb = {
 	.notifier_call = star_panic_event,
@@ -3002,6 +3003,9 @@ void __init tegra_setup_nvodm(bool standard_i2c, bool standard_spi)
 		tegra_setup_i2c();
 	if (standard_spi)
 		tegra_setup_spi();
+/* memory patch 2011.08.23 start */
+	tegra_emc_write_mrw(9); /* set reflesh rate 20us */
+/* memory patch 2011.08.23 end */
 //20100613-1, , add spi slave [START]
 #if defined(CONFIG_SPI_SLAVE_TEGRA) 
 	tegra_setup_spi_slave();
@@ -3035,7 +3039,6 @@ void __init tegra_setup_nvodm(bool standard_i2c, bool standard_spi)
 #ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
 	star_init_android_virtualkeys();
 #endif
-	tegra_emc_write_mrw(9);
 	tegra_setup_w1();
 #if defined (CONFIG_MACH_STAR)
 	pm_power_off_prepare = star_power_off_prepare;
