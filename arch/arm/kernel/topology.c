@@ -45,7 +45,7 @@ struct cputopo_arm cpu_topology[NR_CPUS];
 
 const struct cpumask *cpu_coregroup_mask(unsigned int cpu)
 {
-	return &cpu_topology[cpu].core_sibling;
+	return &(cpu_topology[cpu].core_sibling);
 }
 
 /*
@@ -55,7 +55,7 @@ const struct cpumask *cpu_coregroup_mask(unsigned int cpu)
  */
 void store_cpu_topology(unsigned int cpuid)
 {
-	struct cputopo_arm *cpuid_topo = &cpu_topology[cpuid];
+	struct cputopo_arm *cpuid_topo = &(cpu_topology[cpuid]);
 	unsigned int mpidr;
 	unsigned int cpu;
 
@@ -74,19 +74,19 @@ void store_cpu_topology(unsigned int cpuid)
 
 		if (mpidr & MPIDR_MT_BITMASK) {
 			/* core performance interdependency */
-			cpuid_topo->thread_id = (mpidr >> MPIDR_LEVEL0_SHIFT)
-				& MPIDR_LEVEL0_MASK;
-			cpuid_topo->core_id = (mpidr >> MPIDR_LEVEL1_SHIFT)
-				& MPIDR_LEVEL1_MASK;
-			cpuid_topo->socket_id = (mpidr >> MPIDR_LEVEL2_SHIFT)
-				& MPIDR_LEVEL2_MASK;
+			cpuid_topo->thread_id = ((mpidr >> MPIDR_LEVEL0_SHIFT)
+				& MPIDR_LEVEL0_MASK);
+			cpuid_topo->core_id =  ((mpidr >> MPIDR_LEVEL1_SHIFT)
+				& MPIDR_LEVEL1_MASK);
+			cpuid_topo->socket_id = ((mpidr >> MPIDR_LEVEL2_SHIFT)
+				& MPIDR_LEVEL2_MASK);
 		} else {
 			/* largely independent cores */
 			cpuid_topo->thread_id = -1;
-			cpuid_topo->core_id = (mpidr >> MPIDR_LEVEL0_SHIFT)
-				& MPIDR_LEVEL0_MASK;
-			cpuid_topo->socket_id = (mpidr >> MPIDR_LEVEL1_SHIFT)
-				& MPIDR_LEVEL1_MASK;
+			cpuid_topo->core_id = ((mpidr >> MPIDR_LEVEL0_SHIFT)
+				& MPIDR_LEVEL0_MASK);
+			cpuid_topo->socket_id = ((mpidr >> MPIDR_LEVEL1_SHIFT)
+				& MPIDR_LEVEL1_MASK);
 		}
 	} else {
 		/*
@@ -94,6 +94,7 @@ void store_cpu_topology(unsigned int cpuid)
 		 * we are in multiprocessor format but uniprocessor system
 		 * or in the old uniprocessor format
 		 */
+
 		cpuid_topo->thread_id = -1;
 		cpuid_topo->core_id = 0;
 		cpuid_topo->socket_id = -1;
@@ -101,7 +102,7 @@ void store_cpu_topology(unsigned int cpuid)
 
 	/* update core and thread sibling masks */
 	for_each_possible_cpu(cpu) {
-		struct cputopo_arm *cpu_topo = &cpu_topology[cpu];
+		struct cputopo_arm *cpu_topo = &(cpu_topology[cpu]);
 
 		if (cpuid_topo->socket_id == cpu_topo->socket_id) {
 			cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
