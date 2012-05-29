@@ -86,6 +86,7 @@ static char *tegra_android_functions_rndis_adb[] = {
 static char *tegra_android_functions_accessory[] = { 
 	"accessory",
 };
+
 static char *tegra_android_functions_accessory_adb[] = { 
 	"accessory", 
 #ifdef CONFIG_USB_ANDROID_ADB
@@ -177,7 +178,6 @@ static struct android_usb_product tegra_android_products[] = {
 		.functions = tegra_android_functions_accessory_adb,
 	},
 #endif
-
 };
 
 static char *harmony_dev = "NVIDIA Harmony";
@@ -230,7 +230,7 @@ static struct usb_mass_storage_platform_data tegra_usb_fsg_platform = {
 #endif
 //20100710, change mass storage device information [END]
 	.nluns = 2,
-	/*.bulk_size = 16384,*/
+	//.bulk_size = 16384,
 };
 static struct platform_device tegra_usb_fsg_device = {
 	.name = "usb_mass_storage",

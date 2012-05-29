@@ -690,6 +690,7 @@ void tegra2_periph_reset_assert(struct clk *c)
 	}
 }
 
+
 static int tegra2_periph_clk_set_parent(struct clk *c, struct clk *p)
 {
 	u32 val;

@@ -1,3 +1,5 @@
+
+
 /*
  * drivers/star/star_bl.c
  *
@@ -15,6 +17,8 @@
  *
  *
  */
+
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/kernel.h>

@@ -28,7 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
+ */
+
+/**
  * @file
  * <b>NVIDIA APX ODM Kit:
  *         Implementation of the ODM Query API</b>
@@ -68,7 +70,9 @@ s_NvOdmQueryProjectNameSetting[] = {'O','D','M',' ','K','i','t',0};
 static const NvOdmDownloadTransport
 s_NvOdmQueryDownloadTransportSetting = NvOdmDownloadTransport_None;
 
-#if defined(CONFIG_MACH_STAR) /* Updated by nVidia, 2010.12.7 */
+
+
+#if defined(CONFIG_MACH_STAR)	//	Updated by nVidia, 2010.12.7
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -396,7 +400,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
         }
     }
 };
-#else /* old version */
+#else	// old version
 static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTable[] =
 {
     {
@@ -1426,6 +1430,7 @@ const NvOdmGpioWakeupSource *NvOdmQueryGetWakeupSources(NvU32 *pCount)
  */
 NvU32 NvOdmQueryMemSize(NvOdmMemoryType MemType)
 {
+    
     switch (MemType)
     {
         // NOTE:

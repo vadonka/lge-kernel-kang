@@ -220,13 +220,11 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
         }
     }
 
-    /*
-     * Fill in limits for modules with slectable clock sources and/or dividers
-     * as specified by the h/w table according to the h/w device ID
-     * (CPU and AVP are not in relocation table - need translate id explicitly)
-     * TODO: need separate subclock limits? (current implementation applies
-     * main clock limits to all subclocks)
-     */
+    // Fill in limits for modules with slectable clock sources and/or dividers
+    // as specified by the h/w table according to the h/w device ID
+    // (CPU and AVP are not in relocation table - need translate id explicitly)
+    // TODO: need separate subclock limits? (current implementation applies
+    // main clock limits to all subclocks)
     for (i = 0; i < pShmoo->ScaledLimitsListSize; i++)
     {
         NvRmModuleID id;
@@ -247,7 +245,6 @@ NvRmPrivClockLimitsInit(NvRmDeviceHandle hRmDevice)
             s_pClockScales[id] = pHwLimits[i].MaxKHzList;
         }
     }
-
     // Fill in CPU scaling data if SoC has dedicated CPU rail, and CPU clock
     // characterization data is separated from other modules on common core rail
     if (s_ChipFlavor.pCpuShmoo)

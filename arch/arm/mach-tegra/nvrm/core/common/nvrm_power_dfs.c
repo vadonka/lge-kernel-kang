@@ -28,7 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
+ */
+
+/**
  * @file
  * @brief <b>nVIDIA Driver Development Kit:
  *           Power Resource manager </b>

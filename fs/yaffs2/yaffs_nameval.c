@@ -168,10 +168,8 @@ int nval_list(const char *xb, int xb_size, char *buf, int bsize)
 	int filled = 0;
 
 	memcpy(&size, xb + pos, sizeof(int));
-	while (size > sizeof(int) &&
-		size <= xb_size &&
-		(pos + size) < xb_size &&
-		!filled) {
+	while (size > sizeof(int) && size <= xb_size && (pos + size) < xb_size
+	       && !filled) {
 		pos += sizeof(int);
 		size -= sizeof(int);
 		name_len = strnlen((YCHAR *) (xb + pos), size);

@@ -64,39 +64,6 @@ struct max8998_regulator_data {
 	struct regulator_init_data	*initdata;
 };
 
-enum cable_type_t {
-	CABLE_TYPE_NONE = 0,
-	CABLE_TYPE_USB,
-	CABLE_TYPE_AC,
-};
-
-/**
- * max8998_adc_table_data
- * @adc_value : max8998 adc value
- * @temperature : temperature(C) * 10
- */
-struct max8998_adc_table_data {
-	int adc_value;
-	int temperature;
-};
-struct max8998_charger_callbacks {
-	void (*set_cable)(struct max8998_charger_callbacks *ptr,
-		enum cable_type_t status);
-};
-
-/**
- * max8998_charger_data - charger data
- * @id: charger id
- * @initdata: charger init data (contraints, supplies, ...)
- * @adc_table: adc_table must be ascending adc value order
- */
-struct max8998_charger_data {
-	struct power_supply *psy_fuelgauge;
-	void (*register_callbacks)(struct max8998_charger_callbacks *ptr);
-	struct max8998_adc_table_data *adc_table;
-	int adc_array_size;
-};
-
 /**
  * struct max8998_board - packages regulator init data
  * @regulators: array of defined regulators
@@ -140,7 +107,6 @@ struct max8998_platform_data {
 	int				buck2_default_idx;
 	bool				wakeup;
 	bool				rtc_delay;
-	struct max8998_charger_data	*charger;
 };
 
 #endif /*  __LINUX_MFD_MAX8998_H */
