@@ -48,7 +48,7 @@
 #include <linux/err.h>
 #endif // CONFIG_MACH_STAR
 //20100528, , Write the description here in detail [END]
-#include <linux/delay.h>
+
 //20100428, , This define for Debug Message function [START]
 #include <mach/lprintk.h>
 
