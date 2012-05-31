@@ -28,19 +28,19 @@
  *   OFFDELAY time in a row
  */
 static unsigned int MIN_ONMINKHZ  = 216000;	/* Minimum ON_MIN_KHZ value     */
-static unsigned int MAX_ONMINKHZ  = 1000000;	/* Maximum ON_MIN_KHZ value     */
+static unsigned int MAX_ONMINKHZ  = 1100000;	/* Maximum ON_MIN_KHZ value     */
 static unsigned int DEF_ONMINKHZ  = 816000;	/* Default ON_MIN_KHZ value     */
 
 static unsigned int MIN_ONDELAY   = 200;	/* Minimum ON_PENDING_MS value  */
-static unsigned int MAX_ONDELAY   = 2500;	/* Maximum ON_PENDING_MS value  */
+static unsigned int MAX_ONDELAY   = 3000;	/* Maximum ON_PENDING_MS value  */
 static unsigned int DEF_ONDELAY   = 2000;	/* Default ON_PENDING_MS value  */
 
 static unsigned int MIN_OFFMAXKHZ = 216000;	/* Minimum OFF_MAX_KHZ value    */
-static unsigned int MAX_OFFMAXKHZ = 1000000;	/* Maximum OFF_MAX_KHZ value    */
+static unsigned int MAX_OFFMAXKHZ = 1100000;	/* Maximum OFF_MAX_KHZ value    */
 static unsigned int DEF_OFFMAXKHZ = 860000;	/* Default OFF_MAX_KHZ value    */
 
 static unsigned int MIN_OFFDELAY  = 200;	/* Mininum OFF_PENDING_MS value */
-static unsigned int MAX_OFFDELAY  = 2000;	/* Maximum OFF_PENDING_MS value */
+static unsigned int MAX_OFFDELAY  = 3000;	/* Maximum OFF_PENDING_MS value */
 static unsigned int DEF_OFFDELAY  = 1000;	/* Default OFF_PENDING_MS value */
 
 /** Static containers end */
