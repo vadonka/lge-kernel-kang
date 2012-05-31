@@ -6,17 +6,12 @@ config ZRAM
 	tristate "Compressed RAM block device support"
 	depends on BLOCK && SYSFS
 	select XVMALLOC
-	select SNAPPY_COMPRESS
-	select SNAPPY_DECOMPRESS
 	default n
 	help
 	  Creates virtual block devices called /dev/zramX (X = 0, 1, ...).
 	  Pages written to these disks are compressed and stored in memory
 	  itself. These disks allow very fast I/O and compression provides
 	  good amounts of memory savings.
-
-	  Snappy compresses a bit worse (around ~2%) but much (~2x) faster
-	  at least on x86-64.
 
 	  It has several use cases, for example: /tmp storage, use as swap
 	  disks and maybe many more.
@@ -31,3 +26,21 @@ config ZRAM_DEBUG
 	help
 	  This option adds additional debugging code to the compressed
 	  RAM block device driver.
+
+choice ZRAM_COMPRESS
+	prompt "compression method"
+	depends on ZRAM
+	default ZRAM_LZO
+	help
+	  Select the compression method used by zram.
+	  LZO is the default. Snappy compresses a bit worse (around ~2%) but
+	  much (~2x) faster, at least on x86-64.
+config ZRAM_LZO
+	bool "LZO compression"
+	select LZO_COMPRESS
+	select LZO_DECOMPRESS
+config ZRAM_SNAPPY
+	bool "Snappy compression"
+	depends on SNAPPY_COMPRESS
+	depends on SNAPPY_DECOMPRESS
+endchoice

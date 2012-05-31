@@ -160,13 +160,13 @@ int yaffs1_scan(struct yaffs_dev *dev)
 				}
 
 				endpos =
-				    (tags.chunk_id - 1) *
-				    dev->data_bytes_per_chunk +
+				    (tags.chunk_id -
+				     1) * dev->data_bytes_per_chunk +
 				    tags.n_bytes;
-				if (in &&
-				    in->variant_type ==
-				     YAFFS_OBJECT_TYPE_FILE &&
-				    in->variant.file_variant.scanned_size <
+				if (in
+				    && in->variant_type ==
+				    YAFFS_OBJECT_TYPE_FILE
+				    && in->variant.file_variant.scanned_size <
 				      endpos) {
 					in->variant.file_variant.scanned_size =
 					    endpos;
@@ -200,7 +200,8 @@ int yaffs1_scan(struct yaffs_dev *dev)
 					 */
 
 					yaffs_del_obj(in);
-					in = NULL;
+
+					in = 0;
 				}
 
 				in = yaffs_find_or_create_by_number(dev,
@@ -296,14 +297,12 @@ int yaffs1_scan(struct yaffs_dev *dev)
 						parent->variant_type =
 						    YAFFS_OBJECT_TYPE_DIRECTORY;
 						INIT_LIST_HEAD(&parent->
-							variant.dir_variant.
-							children);
-					} else if (!parent ||
-						parent->variant_type !=
+							       variant.dir_variant.children);
+					} else if (!parent
+						   || parent->variant_type !=
 						YAFFS_OBJECT_TYPE_DIRECTORY) {
-						/* Hoosterman, a problem....
-						 * We're trying to use a
-						 * non-directory as a directory
+						/* Hoosterman, another problem....
+						 * We're trying to use a non-directory as a directory
 						 */
 
 						yaffs_trace(YAFFS_TRACE_ERROR,
@@ -385,8 +384,10 @@ int yaffs1_scan(struct yaffs_dev *dev)
 		/* Now let's see if it was dirty */
 		if (bi->pages_in_use == 0 &&
 		    !bi->has_shrink_hdr &&
-		    bi->block_state == YAFFS_BLOCK_STATE_FULL)
+		    bi->block_state == YAFFS_BLOCK_STATE_FULL) {
 			yaffs_block_became_dirty(dev, blk);
+	}
+
 	}
 
 	/* Ok, we've done all the scanning.

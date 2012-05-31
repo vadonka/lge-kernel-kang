@@ -226,9 +226,9 @@ int yaffs_calc_checkpt_blocks_required(struct yaffs_dev *dev)
 		n_bytes += dev_blocks * sizeof(struct yaffs_block_info);
 		n_bytes += dev_blocks * dev->chunk_bit_stride;
 		n_bytes +=
-		    (sizeof(struct yaffs_checkpt_obj) + sizeof(u32)) *
-		    dev->n_obj;
-		n_bytes += (dev->tnode_size + sizeof(u32)) * dev->n_tnodes;
+		    (sizeof(struct yaffs_checkpt_obj) +
+		     sizeof(u32)) * (dev->n_obj);
+		n_bytes += (dev->tnode_size + sizeof(u32)) * (dev->n_tnodes);
 		n_bytes += sizeof(struct yaffs_checkpt_validity);
 		n_bytes += sizeof(u32);	/* checksum */
 
@@ -312,7 +312,9 @@ static int yaffs2_wr_checkpt_dev(struct yaffs_dev *dev)
 {
 	struct yaffs_checkpt_dev cp;
 	u32 n_bytes;
-	u32 n_blocks = dev->internal_end_block - dev->internal_start_block + 1;
+	u32 n_blocks =
+	    (dev->internal_end_block - dev->internal_start_block + 1);
+
 	int ok;
 
 	/* Write device runtime values */
@@ -372,6 +374,7 @@ static int yaffs2_rd_checkpt_dev(struct yaffs_dev *dev)
 static void yaffs2_obj_checkpt_obj(struct yaffs_checkpt_obj *cp,
 				   struct yaffs_obj *obj)
 {
+
 	cp->obj_id = obj->obj_id;
 	cp->parent_id = (obj->parent) ? obj->parent->obj_id : 0;
 	cp->hdr_chunk = obj->hdr_chunk;
@@ -391,9 +394,10 @@ static void yaffs2_obj_checkpt_obj(struct yaffs_checkpt_obj *cp,
 		cp->size_or_equiv_obj = obj->variant.hardlink_variant.equiv_id;
 }
 
-static int yaffs2_checkpt_obj_to_obj(struct yaffs_obj *obj,
+static int taffs2_checkpt_obj_to_obj(struct yaffs_obj *obj,
 				     struct yaffs_checkpt_obj *cp)
 {
+
 	struct yaffs_obj *parent;
 
 	if (obj->variant_type != cp->variant_type) {
@@ -629,7 +633,7 @@ static int yaffs2_rd_checkpt_objs(struct yaffs_dev *dev)
 			    yaffs_find_or_create_by_number(dev, cp.obj_id,
 							   cp.variant_type);
 			if (obj) {
-				ok = yaffs2_checkpt_obj_to_obj(obj, &cp);
+				ok = taffs2_checkpt_obj_to_obj(obj, &cp);
 				if (!ok)
 					break;
 				if (obj->variant_type == YAFFS_OBJECT_TYPE_FILE) {
@@ -854,11 +858,13 @@ int yaffs2_handle_hole(struct yaffs_obj *obj, loff_t new_size)
 	 */
 
 	loff_t old_file_size;
-	loff_t increase;
+	int increase;
 	int small_hole;
 	int result = YAFFS_OK;
 	struct yaffs_dev *dev = NULL;
+
 	u8 *local_buffer = NULL;
+
 	int small_increase_ok = 0;
 
 	if (!obj)
@@ -891,7 +897,7 @@ int yaffs2_handle_hole(struct yaffs_obj *obj, loff_t new_size)
 
 	if (local_buffer) {
 		/* fill hole with zero bytes */
-		loff_t pos = old_file_size;
+		int pos = old_file_size;
 		int this_write;
 		int written;
 		memset(local_buffer, 0, dev->data_bytes_per_chunk);
@@ -928,6 +934,7 @@ int yaffs2_handle_hole(struct yaffs_obj *obj, loff_t new_size)
 	}
 
 	return result;
+
 }
 
 struct yaffs_block_index {
@@ -941,7 +948,6 @@ static int yaffs2_ybicmp(const void *a, const void *b)
 	int bseq = ((struct yaffs_block_index *)b)->seq;
 	int ablock = ((struct yaffs_block_index *)a)->block;
 	int bblock = ((struct yaffs_block_index *)b)->block;
-
 	if (aseq == bseq)
 		return ablock - bblock;
 	else
@@ -1021,26 +1027,26 @@ int yaffs2_scan_backwards(struct yaffs_dev *dev)
 		bi->seq_number = seq_number;
 
 		if (bi->seq_number == YAFFS_SEQUENCE_CHECKPOINT_DATA)
-			bi->block_state = YAFFS_BLOCK_STATE_CHECKPOINT;
+			bi->block_state = state = YAFFS_BLOCK_STATE_CHECKPOINT;
 		if (bi->seq_number == YAFFS_SEQUENCE_BAD_BLOCK)
-			bi->block_state = YAFFS_BLOCK_STATE_DEAD;
+			bi->block_state = state = YAFFS_BLOCK_STATE_DEAD;
 
 		yaffs_trace(YAFFS_TRACE_SCAN_DEBUG,
 			"Block scanning block %d state %d seq %d",
-			blk, bi->block_state, seq_number);
+			blk, state, seq_number);
 
-		if (bi->block_state == YAFFS_BLOCK_STATE_CHECKPOINT) {
+		if (state == YAFFS_BLOCK_STATE_CHECKPOINT) {
 			dev->blocks_in_checkpt++;
 
-		} else if (bi->block_state == YAFFS_BLOCK_STATE_DEAD) {
+		} else if (state == YAFFS_BLOCK_STATE_DEAD) {
 			yaffs_trace(YAFFS_TRACE_BAD_BLOCKS,
 				"block %d is bad", blk);
-		} else if (bi->block_state == YAFFS_BLOCK_STATE_EMPTY) {
+		} else if (state == YAFFS_BLOCK_STATE_EMPTY) {
 			yaffs_trace(YAFFS_TRACE_SCAN_DEBUG, "Block empty ");
 			dev->n_erased_blocks++;
 			dev->n_free_chunks += dev->param.chunks_per_block;
-		} else if (bi->block_state ==
-				YAFFS_BLOCK_STATE_NEEDS_SCANNING) {
+		} else if (state == YAFFS_BLOCK_STATE_NEEDS_SCANNING) {
+
 			/* Determine the highest sequence number */
 			if (seq_number >= YAFFS_LOWEST_SEQUENCE_NUMBER &&
 			    seq_number < YAFFS_HIGHEST_SEQUENCE_NUMBER) {
@@ -1091,15 +1097,17 @@ int yaffs2_scan_backwards(struct yaffs_dev *dev)
 		blk = block_index[block_iter].block;
 
 		bi = yaffs_get_block_info(dev, blk);
+
+		state = bi->block_state;
+
 		deleted = 0;
 
 		/* For each chunk in each block that needs scanning.... */
 		found_chunks = 0;
 		for (c = dev->param.chunks_per_block - 1;
 		     !alloc_failed && c >= 0 &&
-		     (bi->block_state == YAFFS_BLOCK_STATE_NEEDS_SCANNING ||
-		      bi->block_state == YAFFS_BLOCK_STATE_ALLOCATING);
-		      c--) {
+		     (state == YAFFS_BLOCK_STATE_NEEDS_SCANNING ||
+		      state == YAFFS_BLOCK_STATE_ALLOCATING); c--) {
 			/* Scan backwards...
 			 * Read the tags and decide what to do
 			 */

@@ -114,7 +114,6 @@ static NvBool star_proxi_write_reg(ProximityDevice* proximity, NvU8 reg, NvU8 va
         return NV_FALSE;
     }
 
-
     return NV_TRUE;
 }
 
@@ -254,7 +253,6 @@ static NvU8 star_read_vo_bit(ProximityDevice *data)
 static void star_proxi_workqueue_func(struct work_struct *work)
 {
     atomic_set(&proxi_status, star_read_vo_bit(&s_proximity));
-
 	//20101126 Fixed the bug that proximity dose not work when target is booted firstly.[start]
     	input_report_abs(s_proximity.input_dev, ABS_DISTANCE, atomic_read(&proxi_status));
     	input_sync(s_proximity.input_dev);
@@ -328,6 +326,7 @@ static void star_proxi_interrupt_handler(void *arg)
 	else
 		star_proxi_write_reg(&s_proximity, 0x02, 0x20 );
 	
+
 	star_proxi_write_reg(&s_proximity, 0x06, 0x18 );
 
 	#if STAR_PROX_DEBUG
@@ -338,7 +337,6 @@ static void star_proxi_interrupt_handler(void *arg)
    	NvOdmGpioInterruptMask(s_proximity.proxi_out_intr, NV_FALSE);
     NvOdmGpioInterruptDone(s_proximity.proxi_out_intr);
 }
-
 static bool s_shutdown_mode = false;
 static void star_proxi_enable(ProximityDevice *data)
 {
@@ -352,6 +350,7 @@ static void star_proxi_enable(ProximityDevice *data)
 
 	s_proximity.MVO = 0;
 	
+
     if (data->use_int_mode)
         NvOdmGpioInterruptMask(data->proxi_out_intr, NV_FALSE);//Interrupt Enable(NV_FALSE) Procedure 2
     else

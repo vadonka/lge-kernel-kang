@@ -28,7 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
+ */
+
+/**
  * @file
  * @brief <b>nVIDIA Driver Development Kit:
  *           Power Resource manager </b>
@@ -49,18 +51,12 @@
 #include "ap15/ap15rm_clocks.h"
 #include "ap20/ap20rm_power_dfs.h"
 #include "ap20/ap20rm_clocks.h"
+#include <linux/kernel.h>
 
 /* OTF Start */
 #ifdef CONFIG_OTF
 #include "../../../../../../drivers/misc/otf/otf.h"
 #endif /* OTF End */
-
-#ifdef CONFIG_OVERCLOCK
-#include <linux/kernel.h>
-
-extern NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo
-NvRmDfs *fakeShmoo_Dfs; // Used to get temp from cpufreq
-#endif /* OVERCLOCK END */
 
 /*****************************************************************************/
 
@@ -2073,10 +2069,6 @@ void NvRmPrivDfsResync(void)
 {
     NvRmDfsFrequencies DfsKHz;
     NvRmDfs* pDfs = &s_Dfs;
-
-#ifdef CONFIG_OVERCLOCK
-    fakeShmoo_Dfs = &s_Dfs; // Crappy way to get temp ?!
-#endif /* OVERCLOCK END */
 
     DfsClockFreqGet(pDfs->hRm, &DfsKHz);
 

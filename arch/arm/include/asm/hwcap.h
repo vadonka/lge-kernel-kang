@@ -19,11 +19,6 @@
 #define HWCAP_NEON		4096
 #define HWCAP_VFPv3		8192
 #define HWCAP_VFPv3D16	16384
-#define HWCAP_TLS		32768
-#define HWCAP_VFPv4		65536
-#define HWCAP_IDIVA		131072
-#define HWCAP_IDIVT		262144
-#define HWCAP_IDIV		524288
 
 #if defined(__KERNEL__) && !defined(__ASSEMBLY__)
 /*

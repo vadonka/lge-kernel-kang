@@ -34,10 +34,17 @@
 
 #include "zram_drv.h"
 
+#if defined(CONFIG_ZRAM_LZO)
+#include <linux/lzo.h>
+#define WMSIZE		LZO1X_MEM_COMPRESS
+#define COMPRESS(s, sl, d, dl, wm)	\
+	lzo1x_1_compress(s, sl, d, dl, wm)
+#define DECOMPRESS(s, sl, d, dl)	\
+	lzo1x_decompress_safe(s, sl, d, dl)
+#elif defined(CONFIG_ZRAM_SNAPPY)
 #include "../snappy/csnappy.h" /* if built in drivers/staging */
 #define WMSIZE_ORDER	((PAGE_SHIFT > 14) ? (15) : (PAGE_SHIFT+1))
 #define WMSIZE		(1 << WMSIZE_ORDER)
-
 static int
 snappy_compress_(
 	const unsigned char *src,
@@ -63,6 +70,14 @@ snappy_decompress_(
 	*dst_len = (size_t)dst_len_;
 	return ret;
 }
+#define COMPRESS(s, sl, d, dl, wm)	\
+	snappy_compress_(s, sl, d, dl, wm)
+#define DECOMPRESS(s, sl, d, dl)	\
+	snappy_decompress_(s, sl, d, dl)
+#else
+#error either CONFIG_ZRAM_LZO or CONFIG_ZRAM_SNAPPY must be defined
+#endif
+
 
 /* Globals */
 static int zram_major;
@@ -280,8 +295,7 @@ static void zram_read(struct zram *zram, struct bio *bio)
 		cmem = kmap_atomic(zram->table[index].page, KM_USER1) +
 				zram->table[index].offset;
 
-		ret = snappy_decompress_(
-			cmem + sizeof(*zheader),
+		ret = DECOMPRESS(cmem + sizeof(*zheader),
 			xv_get_object_size(cmem) - sizeof(*zheader),
 			user_mem, &clen);
 
@@ -348,17 +362,10 @@ static void zram_write(struct zram *zram, struct bio *bio)
 			continue;
 		}
 
-		ret = snappy_compress_(user_mem, PAGE_SIZE, src, &clen,
+		ret = COMPRESS(user_mem, PAGE_SIZE, src, &clen,
 					zram->compress_workmem);
 
 		kunmap_atomic(user_mem, KM_USER0);
-
-		if (unlikely(ret)) {
-			mutex_unlock(&zram->lock);
-			pr_err("Compression failed! err=%d\n", ret);
-			zram_stat64_inc(zram, &zram->stats.failed_writes);
-			goto out;
-		}
 
 		/*
 		 * Page is incompressible. Store it as-is (uncompressed)

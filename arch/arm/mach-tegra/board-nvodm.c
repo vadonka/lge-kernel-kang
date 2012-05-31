@@ -146,7 +146,7 @@ static struct platform_device debug_uart = {
 		.platform_data = debug_uart_platform,
 	},
 };
-/* memory patch 2011.08.23 start */
+
 #define TEGRA_EMC_MRW          0x00e8
 static void __iomem *emc = IO_ADDRESS(TEGRA_EMC_BASE);
 static inline void emc_writel(u32 val, unsigned long addr)
@@ -170,7 +170,6 @@ void tegra_emc_write_mrw(unsigned long addr)
 	printk("Sending 0xBD to TEGRA_EMC_MRW\n");
 	emc_writel(0x900BD, TEGRA_EMC_MRW);
 }
-/* memory patch 2011.08.23 end */
 
 #if defined (CONFIG_MACH_STAR)
 extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
@@ -3003,9 +3002,6 @@ void __init tegra_setup_nvodm(bool standard_i2c, bool standard_spi)
 		tegra_setup_i2c();
 	if (standard_spi)
 		tegra_setup_spi();
-/* memory patch 2011.08.23 start */
-	tegra_emc_write_mrw(9); /* set reflesh rate 20us */
-/* memory patch 2011.08.23 end */
 //20100613-1, , add spi slave [START]
 #if defined(CONFIG_SPI_SLAVE_TEGRA) 
 	tegra_setup_spi_slave();
@@ -3039,6 +3035,7 @@ void __init tegra_setup_nvodm(bool standard_i2c, bool standard_spi)
 #ifdef CONFIG_TOUCHSCREEN_ANDROID_VIRTUALKEYS
 	star_init_android_virtualkeys();
 #endif
+	tegra_emc_write_mrw(9);
 	tegra_setup_w1();
 #if defined (CONFIG_MACH_STAR)
 	pm_power_off_prepare = star_power_off_prepare;

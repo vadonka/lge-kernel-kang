@@ -388,7 +388,7 @@ int yaffs_check_alloc_available(struct yaffs_dev *dev, int n_chunks)
 	checkpt_blocks = yaffs_calc_checkpt_blocks_required(dev);
 
 	reserved_chunks =
-	    (reserved_blocks + checkpt_blocks) * dev->param.chunks_per_block;
+	    ((reserved_blocks + checkpt_blocks) * dev->param.chunks_per_block);
 
 	return (dev->n_free_chunks > (reserved_chunks + n_chunks));
 }
@@ -486,8 +486,7 @@ static int yaffs_alloc_chunk(struct yaffs_dev *dev, int use_reserver,
 		return ret_val;
 	}
 
-	yaffs_trace(YAFFS_TRACE_ERROR,
-		"!!!!!!!!! Allocator out !!!!!!!!!!!!!!!!!");
+	yaffs_trace(YAFFS_TRACE_ERROR, "!!!!!!!!! Allocator out !!!!!!!!!!!!!!!!!" );
 
 	return -1;
 }
@@ -773,9 +772,9 @@ void yaffs_load_tnode_0(struct yaffs_dev *dev, struct yaffs_tnode *tn,
 
 	if (dev->tnode_width > (32 - bit_in_word)) {
 		bit_in_word = (32 - bit_in_word);
-		word_in_map++;
+		word_in_map++;;
 		mask =
-		    dev->tnode_mask >> bit_in_word;
+		    dev->tnode_mask >> ( /*dev->tnode_width - */ bit_in_word);
 		map[word_in_map] &= ~mask;
 		map[word_in_map] |= (mask & (val >> bit_in_word));
 	}
@@ -800,7 +799,7 @@ u32 yaffs_get_group_base(struct yaffs_dev *dev, struct yaffs_tnode *tn,
 
 	if (dev->tnode_width > (32 - bit_in_word)) {
 		bit_in_word = (32 - bit_in_word);
-		word_in_map++;
+		word_in_map++;;
 		val |= (map[word_in_map] << bit_in_word);
 	}
 
@@ -912,8 +911,7 @@ struct yaffs_tnode *yaffs_add_find_tnode_0(struct yaffs_dev *dev,
 				file_struct->top = tn;
 				file_struct->top_level++;
 			} else {
-				yaffs_trace(YAFFS_TRACE_ERROR,
-					"yaffs: no more tnodes");
+				yaffs_trace(YAFFS_TRACE_ERROR, "yaffs: no more tnodes");
 				return NULL;
 			}
 		}
@@ -942,7 +940,8 @@ struct yaffs_tnode *yaffs_add_find_tnode_0(struct yaffs_dev *dev,
 					/* If we already have one, then release it. */
 					if (tn->internal[x])
 						yaffs_free_tnode(dev,
-							tn->internal[x]);
+								 tn->
+								 internal[x]);
 					tn->internal[x] = passed_tn;
 
 				} else if (!tn->internal[x]) {
@@ -992,8 +991,7 @@ static int yaffs_find_chunk_in_group(struct yaffs_dev *dev, int the_chunk,
 			else {
 				yaffs_rd_chunk_tags_nand(dev, the_chunk, NULL,
 							 tags);
-				if (yaffs_tags_match(tags,
-							obj_id, inode_chunk)) {
+				if (yaffs_tags_match(tags, obj_id, inode_chunk)) {
 					/* found it; */
 					return the_chunk;
 				}
@@ -1012,6 +1010,7 @@ static int yaffs_find_chunk_in_file(struct yaffs_obj *in, int inode_chunk,
 	int the_chunk = -1;
 	struct yaffs_ext_tags local_tags;
 	int ret_val = -1;
+
 	struct yaffs_dev *dev = in->my_dev;
 
 	if (!tags) {
@@ -3629,7 +3628,7 @@ int yaffs_file_rd(struct yaffs_obj *in, u8 * buffer, loff_t offset, int n_bytes)
 }
 
 int yaffs_do_file_wr(struct yaffs_obj *in, const u8 *buffer, loff_t offset,
-		     int n_bytes, int write_through)
+		     int n_bytes, int write_trhrough)
 {
 
 	int chunk;
@@ -3734,7 +3733,7 @@ int yaffs_do_file_wr(struct yaffs_obj *in, const u8 *buffer, loff_t offset,
 					cache->locked = 0;
 					cache->n_bytes = n_writeback;
 
-					if (write_through) {
+					if (write_trhrough) {
 						chunk_written =
 						    yaffs_wr_data_obj
 						    (cache->object,
@@ -3800,10 +3799,10 @@ int yaffs_do_file_wr(struct yaffs_obj *in, const u8 *buffer, loff_t offset,
 }
 
 int yaffs_wr_file(struct yaffs_obj *in, const u8 *buffer, loff_t offset,
-		  int n_bytes, int write_through)
+		  int n_bytes, int write_trhrough)
 {
 	yaffs2_handle_hole(in, offset);
-	return yaffs_do_file_wr(in, buffer, offset, n_bytes, write_through);
+	return yaffs_do_file_wr(in, buffer, offset, n_bytes, write_trhrough);
 }
 
 /* ---------------------- File resizing stuff ------------------ */

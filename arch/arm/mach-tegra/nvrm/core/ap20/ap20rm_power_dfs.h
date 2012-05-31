@@ -28,7 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- *
+ */
+
+/** 
  * @file
  * @brief <b>nVIDIA Driver Development Kit:
  *           Power Resource manager </b>
@@ -47,11 +49,11 @@ extern "C"
 {
 #endif  /* __cplusplus */
 
-/*
- * Min KHz for CPU and AVP with regards to JTAG support - 1MHz * 8  = 8MHz
- * TODO: any other limitations on min KHz?
- * TODO: adjust boost parameters based on testing
- *
+// Min KHz for CPU and AVP with regards to JTAG support - 1MHz * 8  = 8MHz
+// TODO: any other limitations on min KHz?
+// TODO: adjust boost parameters based on testing
+
+/**
  * Default DFS algorithm parameters for CPU domain
  */
 #define NVRM_DFS_PARAM_CPU_AP20 \
@@ -73,7 +75,7 @@ extern "C"
     1,      /* Number of smaple intervals with NRT to trigger boost = 2 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  *  Default DFS algorithm parameters for AVP domain
  */
 #define NVRM_DFS_PARAM_AVP_AP20 \
@@ -95,7 +97,7 @@ extern "C"
     3,      /* Number of smaple intervals with NRT to trigger boost = 4 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  * Default DFS algorithm parameters for System clock domain
  */
 #define NVRM_DFS_PARAM_SYSTEM_AP20 \
@@ -117,7 +119,7 @@ extern "C"
     2,      /* Number of smaple intervals with NRT to trigger boost = 3 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  * Default DFS algorithm parameters for AHB clock domain
  */
 #define NVRM_DFS_PARAM_AHB_AP20 \
@@ -139,7 +141,7 @@ extern "C"
     0,      /* Number of smaple intervals with NRT to trigger boost = 1 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  * Default DFS algorithm parameters for APB clock domain
  */
 #define NVRM_DFS_PARAM_APB_AP20 \
@@ -161,7 +163,7 @@ extern "C"
     0,      /* Number of smaple intervals with NRT to trigger boost = 1 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  * Default DFS algorithm parameters for Video-pipe clock domain
  */
 #define NVRM_DFS_PARAM_VPIPE_AP20 \
@@ -183,12 +185,11 @@ extern "C"
     3,      /* Number of smaple intervals with NRT to trigger boost = 4 */ \
     1       /* NRT idle cycles threshold = 1 */ 
 
-/*
+/**
  * Default DFS algorithm parameters for EMC clock domain
  */
 
 // Defines minimum scaling limit for each supported SDRAM type
-
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
 
@@ -232,7 +233,7 @@ extern "C"
 
 #define NVRM_DFS_PARAM_EMC_AP20 NVRM_DFS_PARAM_EMC_AP20_LPDDR2
 
-/*
+/**
  * Defines CPU frequency threshold for slave CPU1 power management:
  * - CPU1 is turned Off when cpu clock is below ON_MIN for
  *   ON_PENDING time in a row
@@ -268,8 +269,8 @@ extern "C"
  * ODM should also set a critical threshold to trigger h/w shutdown
  * mechanism.
  */
-#define NVRM_DTT_DEGREES_HIGH           (95L)
-#define NVRM_DTT_DEGREES_LOW            (65L)
+#define NVRM_DTT_DEGREES_HIGH           (90L)
+#define NVRM_DTT_DEGREES_LOW            (60L)
 #define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
@@ -280,13 +281,13 @@ extern "C"
 #define NVRM_DTT_POLL_MS_FAST           (4000UL)
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
-// Default low corners for core and dedicated CPU voltages
+/// Default low corners for core and dedicated CPU voltages
 #define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
-// Core voltage in suspend
+/// Core voltage in suspend
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
 
-// Core and CPU voltage reliability requirements for some skus
+/// Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \
 ((((sku) == 23) || \
 ((sku) == 24) || \
@@ -301,7 +302,9 @@ extern "C"
 ((sku) == 27) || \
 ((sku) == 28)) ? 850 : 0)
 
-/*****************************************************************************
+/*****************************************************************************/
+
+/**
  * Adjust EMC scaling algorithm parameters based on the SDRAM type selected by
  * current EMC configuration.
  *
@@ -309,7 +312,7 @@ extern "C"
  */
 void NvRmPrivAp20EmcParametersAdjust(NvRmDfs* pDfs);
 
-/*
+/**
  * Initializes activity monitors within the DFS module. Only activity
  * monitors are affected. The rest of module's h/w is preserved.
  *
@@ -320,7 +323,7 @@ void NvRmPrivAp20EmcParametersAdjust(NvRmDfs* pDfs);
  */
 NvError NvRmPrivAp20EmcMonitorsInit(NvRmDfs* pDfs);
 
-/*
+/**
  * Deinitializes activity monitors within the DFS module. Only activity
  * monitors are affected. The rest of module's h/w is preserved.
  *
@@ -328,7 +331,7 @@ NvError NvRmPrivAp20EmcMonitorsInit(NvRmDfs* pDfs);
  */
 void NvRmPrivAp20EmcMonitorsDeinit(NvRmDfs* pDfs);
 
-/*
+/**
  * Starts activity monitors in the DFS module for the next sample interval.
  *
  * @param pDfs - A pointer to DFS structure.
@@ -341,7 +344,7 @@ NvRmPrivAp20EmcMonitorsStart(
     const NvRmDfsFrequencies* pDfsKHz,
     const NvU32 IntervalMs);
 
-/*
+/**
  * Reads idle count from activity monitors in the DFS module. The monitors are
  * stopped.
  *
@@ -357,7 +360,7 @@ NvRmPrivAp20EmcMonitorsRead(
     const NvRmDfsFrequencies* pDfsKHz,
     NvRmDfsIdleData* pIdleData);
 
-/*
+/**
  * Changes core and rtc voltages, keeping them in synch
  *
  * @param hRm The RM device handle.
@@ -371,7 +374,7 @@ NvRmPrivAp20DvsChangeCoreVoltage(
     NvRmDvs* pDvs,
     NvRmMilliVolts TargetMv);
 
-/*
+/**
  * Updates thermal policy according to current temperature.
  *
  * @param hRmDevice The RM device handle.
@@ -396,7 +399,7 @@ NvRmPrivStarDttPolicyUpdate(
 #endif
 //20101121 , HW power off in thermal limit [END]
 
-/*
+/**
  * Throttles DFS target clocks.
  *
  * @param hRmDevice The RM device handle.
@@ -417,7 +420,7 @@ NvRmPrivAp20DttClockUpdate(
     const NvRmDfsFrequencies* pCurrentKHz,
     NvRmDfsFrequencies* pDfsKHz);
 
-/*
+/**
  * Determines PM request to change CPU(s) power state.
  *
  * @param hRmDevice The RM device handle.

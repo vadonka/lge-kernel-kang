@@ -612,7 +612,6 @@ static int tegra_sdhci_suspend(struct device *dev)
 			/* reduce host controller clk and card clk to 100 KHz */
 			tegra_sdhci_set_clock(sdhost, clock);
 			sdhci_writew(sdhost, 0, SDHCI_CLOCK_CONTROL);
-
 			if (sdhost->max_clk > clock) {
 				div =  1 << (fls(sdhost->max_clk / clock) - 2);
 				if (div > 128)

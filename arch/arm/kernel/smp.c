@@ -272,6 +272,7 @@ static void __cpuinit smp_store_cpu_info(unsigned int cpuid)
 	cpu_info->loops_per_jiffy = loops_per_jiffy;
 
 	store_cpu_topology(cpuid);
+
 }
 
 /*

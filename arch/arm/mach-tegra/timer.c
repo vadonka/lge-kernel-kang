@@ -25,7 +25,6 @@
 #include <linux/clocksource.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <linux/cnt32_to_63.h>
 
 #include <asm/mach/time.h>
 #include <asm/mach/time.h>
@@ -251,7 +250,7 @@ static struct irqaction tegra_lp2wake_irq = {
 static void __init tegra_init_timer(void)
 {
 	unsigned long rate;
-	unsigned int m=0, n=0;
+	unsigned int m, n;
 	int ret;
 
 #ifdef CONFIG_HAVE_ARM_TWD
@@ -325,9 +324,3 @@ void tegra_timer_resume(void)
 	tegra_sched_clock_resume();
 }
 
-//20110213, , sched_clock mismatch issue after deepsleep [START]
-void tegra_lp0_sched_clock_clear()
-{
-    cnt32_to_63_clear(0);
-}
-//20110213, , sched_clock mismatch issue after deepsleep [END]

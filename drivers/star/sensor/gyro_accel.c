@@ -343,8 +343,7 @@ int lge_sensor_shoutdown_all(void)
 	lge_sensor_shutdown_proxi();
 	lge_sensor_shutdown_gyro();
 
-
-	msleep(1);
+	msleep(10);
 
 	// do power down 
 	lge_sensor_restart_gyro();
