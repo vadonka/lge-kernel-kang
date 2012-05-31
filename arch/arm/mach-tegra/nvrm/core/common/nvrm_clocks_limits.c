@@ -49,18 +49,18 @@
 #ifdef CONFIG_OVERCLOCK
 #include <linux/kernel.h>
 
-#define MAX_OVERCLOCK (1504000)
+#define MAX_OVERCLOCK (1552000)
 NvU32 ClockTableLength = 8; // Max voltage index in the voltage tab (size-1)
 
 NvU32 FakeShmooVoltages[] = {
     775,
     820,
     875,
-    950,
-    1050,
-    1150,
-    1250,
-    1325,
+    980,
+    1080,
+    1180,
+    1280,
+    1380,
 };
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
@@ -76,7 +76,7 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     1100000,
     1216000,
     1408000,
-    1504000,
+    1552000,
     }
 };
 
