@@ -112,16 +112,6 @@
 #define STAR_VOLT_UNIT 1
 #endif
 
-#if 0
-#define STAR_TEMPERATURE_CRITICAL_OVERHEAT	550
-#define STAR_TEMPERATURE_OVERHEAT		520
-#define STAR_TEMPERATURE_TO_USB_500	450
-#else
-#define STAR_TEMPERATURE_CRITICAL_OVERHEAT	460
-#define STAR_TEMPERATURE_OVERHEAT	450
-#define STAR_TEMPERATURE_TO_USB_500	400
-#endif
-
 typedef enum {
 	NvCharger_Type_Battery = 0,
 	NvCharger_Type_USB,
@@ -2219,7 +2209,7 @@ static void charger_control_with_battery_temp(void)
 		{
 			case POWER_SUPPLY_HEALTH_GOOD:
 			{
-				if (batt_dev->batt_temp >= STAR_TEMPERATURE_CRITICAL_OVERHEAT)
+				if (batt_dev->batt_temp >= 480)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2231,7 +2221,7 @@ static void charger_control_with_battery_temp(void)
 						batt_dev->charger_state_machine = CHARGER_STATE_SHUTDOWN;
 					}
 				}
-				else if (batt_dev->batt_temp >= STAR_TEMPERATURE_TO_USB_500)
+				else if ((batt_dev->batt_temp >= 400) && (batt_dev->batt_temp < 480))
 				{
 					// Change Charger Setting : Battery Overheat, USB_500 mode
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_OVERHEAT;
@@ -2269,7 +2259,7 @@ static void charger_control_with_battery_temp(void)
 
 			case POWER_SUPPLY_HEALTH_OVERHEAT:
 			{
-				if (batt_dev->batt_temp >= STAR_TEMPERATURE_CRITICAL_OVERHEAT)
+				if (batt_dev->batt_temp >= 480)
 				{
 					// Deactivate Charger : Battery Critical Overheat
 					batt_dev->batt_health = POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT;
@@ -2306,7 +2296,7 @@ static void charger_control_with_battery_temp(void)
 
 			case POWER_SUPPLY_HEALTH_CRITICAL_OVERHEAT:
 			{
-				if (batt_dev->batt_temp <= STAR_TEMPERATURE_OVERHEAT)
+				if (batt_dev->batt_temp <= 460)
 				{
 					if ( charging_ic->status != CHG_IC_DEACTIVE_MODE )
 					{
