@@ -20,8 +20,6 @@ EXPORT_SYMBOL(MAX_AVPFREQ);
 
 static int __init set_avpfreq(char *str)
 {
-	unsigned int i;
-
 	if ( simple_strtoul(str,NULL,0) < MIN_AVPFREQ || simple_strtoul(str,NULL,0) > MAX_AVPFREQ )
 	{
 		avpfreq = 240000; // Default value
@@ -46,8 +44,6 @@ EXPORT_SYMBOL(MAX_GPUFREQ);
 
 static int __init set_gpufreq(char *str)
 {
-	unsigned int i;
-
 	if ( simple_strtoul(str,NULL,0) < MIN_GPUFREQ || simple_strtoul(str,NULL,0) > MAX_GPUFREQ )
 	{
 		gpufreq = 333000; // Default value
@@ -72,8 +68,6 @@ EXPORT_SYMBOL(MAX_VDEFREQ);
 
 static int __init set_vdefreq(char *str)
 {
-	unsigned int i;
-
 	if ( simple_strtoul(str,NULL,0) < MIN_VDEFREQ || simple_strtoul(str,NULL,0) > MAX_VDEFREQ )
 	{
 		vdefreq = 650000; // Default value
