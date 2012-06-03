@@ -19,7 +19,7 @@ export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 export mthm=1
 # Compiler
 export cc=arm-linux-gnueabi-
-export cc=/home/android/android/android-toolchain-eabi-4.5/bin/arm-eabi-
+export cc=/home/android/android/android-toolchain-eabi_4.y/4.7.1/bin/arm-eabi-
 ######################################################
 
 # Check executables

@@ -1,8 +1,5 @@
 #!/bin/sh
 
-#export cc=arm-linux-gnueabi-
 export cc=/home/android/android/android-toolchain-eabi-4.7.0/bin/arm-eabi-
-export USE_CCACHE=1
-export CCACHE_DIR=~/android/ccache
 
 make ARCH=arm CROSS_COMPILE=$cc menuconfig 2> warn.log
