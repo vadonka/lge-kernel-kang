@@ -40,7 +40,7 @@ else
 	exit 1
 fi
 
-cc=/home/android/android/linaro-toolchain/$gccversion/bin/arm-eabi-
+cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
 
 # Check .config
 if [ ! -f .config ]; then
@@ -113,7 +113,7 @@ fi
 export starttime=`date +%s`
 make clean -j $mthd > /dev/null 2>&1
 clear
-cc=/home/android/android/linaro-toolchain/$gccversion/bin/arm-eabi-
+cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
 if [ "$USE_CCACHE" == "1" ]; then

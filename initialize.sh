@@ -2,6 +2,8 @@
 
 source variables
 
+cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
+
 if [ -e .config ]; then
 	rm -f .config
 fi
