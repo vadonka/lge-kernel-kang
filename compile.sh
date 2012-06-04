@@ -18,8 +18,6 @@ export kinstsrc=/home/android/android/kernel-installer/source
 export mthd=`grep 'processor' /proc/cpuinfo | wc -l`
 # Variable file
 source variables
-# CCache Dir if used
-export ccache_dir=/home/android/ccache
 ######################################################
 
 # Check executables
@@ -80,15 +78,6 @@ value=$2
 	sed -i "s/$config_oc_orig/$config_oc_enable/g" $kh/.config
 	overclock="1"
 	;;
-	"--ccache")
-	if [ -f /usr/bin/ccache ]; then
-		export USE_CCACHE=1
-		export CCACHE_DIR=$ccache_dir
-	else
-		echo "Warning! ccache binary not found, ccache is disabled"
-		export USE_CCACHE=0
-	fi
-	;;
 	esac
 	shift
 done
@@ -116,9 +105,6 @@ clear
 cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
-if [ "$USE_CCACHE" == "1" ]; then
-	echo "CCache is active!"
-fi
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
 echo "Kernel version string: $kver"
 export cdir=`date +%y%m%d%H%M`$kver-3.0.y
