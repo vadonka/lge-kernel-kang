@@ -246,13 +246,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-ifeq ($(USE_CCACHE),1)
-HOSTCC       = ccache gcc
-HOSTCXX      = ccache g++
-else
 HOSTCC       = gcc
 HOSTCXX      = g++
-endif
 
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
 HOSTCXXFLAGS = -O2
@@ -339,11 +334,7 @@ include $(srctree)/scripts/Kbuild.include
 
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
-ifeq ($(USE_CCACHE),1)
-CC		= ccache $(CROSS_COMPILE)gcc
-else
 CC		= $(CROSS_COMPILE)gcc
-endif
 CPP		= $(CC) -E
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
@@ -364,15 +355,12 @@ GCCVERSION47	:= $(shell expr 4.7.0 \<= `$(CC) -dumpversion`)
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-
-MODFLAGS 	= -DMODULE -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
-
+MODFLAGS	= -DMODULE -O2 -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-loop-optimizations
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-
-CFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
-AFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant -funsafe-loop-optimizations -fbranch-target-load-optimize2
+CFLAGS_KERNEL	= -O2 -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-loop-optimizations
+AFLAGS_KERNEL	= -O2 -mfloat-abi=hard -mfpu=vfpv3-d16 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a9 -march=armv7-a -ftree-vectorize -funswitch-loops -funsafe-loop-optimizations
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
 # 20100705, ,[LGE_START]
@@ -393,9 +381,13 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks
-KBUILD_AFLAGS_KERNEL := $(AFLAGS_KERNEL)
-KBUILD_CFLAGS_KERNEL := $(CFLAGS_KERNEL)
+		   -fno-delete-null-pointer-checks \
+		   -mtune=cortex-a9 \
+		   -ffast-math \
+		   -ftree-vectorize \
+		   -pipe
+KBUILD_AFLAGS_KERNEL :=
+KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := $(MODFLAGS)
 KBUILD_CFLAGS_MODULE  := $(MODFLAGS)
@@ -586,7 +578,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
-KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	+= -Ofast
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
