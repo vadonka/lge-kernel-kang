@@ -53,7 +53,7 @@
 #define NVODM_ENABLE_EMC_DVFS (1)
 
 //#define SDRAMKHZ (300000)
-#define SDRAMKHZ (333000)
+#define SDRAMKHZ (350000)
 
 static const NvU8
 s_NvOdmQueryDeviceNamePrefixValue[] = { 'T','e','g','r','a',0};
