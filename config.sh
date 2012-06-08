@@ -2,8 +2,6 @@
 
 source variables
 
-cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
-
 if [ ! -f .config ]; then
 	make ARCH=arm CROSS_COMPILE=$cc mrproper
 	make ARCH=arm CROSS_COMPILE=$cc $defconfig

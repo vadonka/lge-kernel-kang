@@ -1,6 +1,6 @@
 #!/bin/bash
-# ANYKERNEL compiler script by vadonka v1.2.5
-# Date: 2012.04.16
+# ANYKERNEL compiler script by vadonka v1.2.6
+# Date: 2012.06.18
 #
 # You need to define this below:
 ######################################################
@@ -8,8 +8,6 @@
 export kh=`pwd`
 # Compiled CWM zip files home directory
 export ch=/home/android/android/compiled
-# CM7 original lge kernel boot.img location
-export cm7b=/home/android/android/cm7orig_kernel
 # LOG file location
 export WARNLOG=`pwd`/warn.log
 # Kernel installer source
@@ -21,29 +19,9 @@ source variables
 ######################################################
 
 # Check executables
-if [ -f /usr/bin/zip ]; then
-	if [ -f /usr/bin/unzip ]; then
-		if [ -f /usr/bin/abootimg ]; then
-			echo "Required executables are found. OK!"
-		else
-			echo "ERROR: abootimg not found! Please install"
-			exit 1
-		fi
-	else
-		echo "ERROR: unzip not found! Please install"
-		exit 1
-	fi
-else
+if [ ! -f /usr/bin/zip ]; then
 	echo "ERROR: zip not found! Please install"
 	exit 1
-fi
-
-export cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
-
-# Check .config
-if [ ! -f .config ]; then
-    make ARCH=arm CROSS_COMPILE=$cc mrproper
-    make ARCH=arm CROSS_COMPILE=$cc $defconfig
 fi
 
 ## Check compiler options
@@ -56,16 +34,6 @@ while [ -n "$*" ]; do
 flag=$1
 value=$2
 	case "$flag" in
-	"--gcc")
-	if [ "$value" == "4.5.4" -o "$value" == "4.6.4" -o "$value" == "4.7.1" ]; then
-		gccversion=$value
-	else
-		echo "ERROR! Invalid GCC version!"
-		echo "Valid versions are: 4.5.4 or 4.6.4 or 4.7.1"
-		exit 0
-	fi
-	shift
-	;;
 	"--ds")
 	config_ds_orig=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 	config_ds_enable=`echo "CONFIG_USE_DS_BATTERY_DRIVER=y"`
@@ -81,6 +49,14 @@ value=$2
 	esac
 	shift
 done
+
+export starttime=`date +%s`
+
+# Check .config
+if [ ! -f .config ]; then
+    make ARCH=arm CROSS_COMPILE=$cc mrproper
+    make ARCH=arm CROSS_COMPILE=$cc $defconfig
+fi
 
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
@@ -99,10 +75,8 @@ else
 		sed -i "s/$cver/$nver/g" $kh/.config
 fi
 
-export starttime=`date +%s`
 make clean -j $mthd > /dev/null 2>&1
 clear
-export cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
 echo "Kernel home: $kh"
 echo "Cross Compiler: $cc"
 export kver=`echo $nver | awk 'BEGIN { FS = "=" } ; { print $2 }' | sed 's/"//g'`
@@ -114,27 +88,21 @@ make ARCH=arm CROSS_COMPILE=$cc clean -j $mthd > /dev/null 2>&1
 make ARCH=arm CROSS_COMPILE=$cc -j $mthd 2> $WARNLOG
 export endtime=`date +%s`
 
-if [ -e $kh/arch/arm/boot/zImage ]; then
+if [ -f $kh/arch/arm/boot/zImage ]; then
+	mkdir -p $ch/$cdir
+	cp -r $kinstsrc/* -d $ch/$cdir
 
-mkdir -p $ch/$cdir
-cp -r $kinstsrc/* -d $ch/$cdir
+	mkdir -p $ch/$cdir/system/lib/modules
+	for m in `find $kh -name '*.ko'`; do
+		cp $m $ch/$cdir/system/lib/modules/
+	done
 
-mkdir -p $ch/$cdir/system/lib/modules
-for m in `find $kh -name '*.ko'`; do
-    cp $m $ch/$cdir/system/lib/modules/
-done
-
-cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
-cd $ch/$cdir && zip -rq9 $ch/$cdir.zip .
-cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
-
+	cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
+	cd $ch/$cdir && zip -rq9 $ch/$cdir.zip .
+	cp $kh/arch/arm/boot/zImage $ch/$cdir/tmp
 fi
 
-if [ "$(($endtime-$starttime))" -lt "180" ]; then
-    echo "Building time: $(($endtime-$starttime)) seconds"
-else
-    echo "Building time: $(($endtime/60-$starttime/60)) minutes"
-fi
+echo "Building time: $(($endtime-$starttime)) seconds"
 
 # Disable the extra options by the default
 config_ds_new=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
