@@ -24,6 +24,12 @@ if [ ! -f /usr/bin/zip ]; then
 	exit 1
 fi
 
+# Check .config
+if [ ! -f .config ]; then
+    make ARCH=arm CROSS_COMPILE=$cc mrproper
+    make ARCH=arm CROSS_COMPILE=$cc $defconfig
+fi
+
 ## Check compiler options
 # set DS battery driver flag to zero by default
 dsbatt="0"
@@ -51,12 +57,6 @@ value=$2
 done
 
 export starttime=`date +%s`
-
-# Check .config
-if [ ! -f .config ]; then
-    make ARCH=arm CROSS_COMPILE=$cc mrproper
-    make ARCH=arm CROSS_COMPILE=$cc $defconfig
-fi
 
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
