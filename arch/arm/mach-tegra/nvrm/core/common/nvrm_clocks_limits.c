@@ -245,14 +245,14 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     32, // FakepScaledCpuLimits.MinKHz
     // Clock table
     {
-    216000,
-    324000,
-    503000,
-    800000,
-    1015000,
-    1100000,
-    1216000,
-    1408000
+	216000,
+	503000,
+	816000,
+	1015000,
+	1100000,
+	1216000,
+	1408000,
+	1552000,
     }
 };
 
@@ -276,14 +276,14 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     32, // FakepScaledCpuLimits.MinKHz
     // Clock table
     {
-    216000,
-    324000,
-    503000,
-    655000,
-    800000,
-    1015000,
-    1100000,
-    1216000
+	216000,
+	503000,
+	816000,
+	1015000,
+	1100000,
+	1216000,
+	1408000,
+	1552000,
     }
 };
 
