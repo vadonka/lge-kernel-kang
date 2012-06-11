@@ -63,6 +63,32 @@ static int disable_hotplug = 0;
 extern atomic_t hotplug_policy;
 #endif
 
+/* Frequency table index must be sequential starting at 0 and
+   frequencies must be ascending*/
+
+static struct cpufreq_frequency_table freq_table_1500[] = {
+	{ 0, 216000 },
+	{ 1, 503000 },
+	{ 2, 816000 },
+	{ 3, 1015000 },
+	{ 4, 1100000 },
+	{ 5, 1216000 },
+	{ 6, 1408000 },
+	{ 7, 1552000 },
+	{ 8, CPUFREQ_TABLE_END },
+};
+
+static struct cpufreq_frequency_table *freq_table;
+
+static unsigned int tegra_freq_table_get_freq(struct cpufreq_frequency_table *table, unsigned int freq)
+{
+	int index;
+	for (index = 0;  table[index].frequency != CPUFREQ_TABLE_END; index++)
+	  if (table[index].frequency >= freq)
+	    return table[index].frequency;
+    return index ? table[index-1].frequency : 0;
+}
+
 static void tegra_cpufreq_hotplug(NvRmPmRequest req)
 {
 	int rc = 0;
@@ -142,6 +168,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 {
 	unsigned long rate, last_rate;
 	NvRmPmRequest req = 0;
+	struct cpufreq_freqs freqs;
 
 	BUG_ON(!clk_cpu);
 
@@ -150,10 +177,9 @@ static int tegra_cpufreq_dfsd(void *arg)
 	last_rate = rate;
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
-	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[START]
-	//set_freezable_with_signal();
-	  set_freezable();
-	//Nvidia_patch_ for_ deviceLockup_and_audio_lost_issue[END]
+	set_freezable();
+	freqs.old = tegra_freq_table_get_freq(freq_table , last_rate / 1000);
+
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 
 		req = NvRmPrivPmThread();
@@ -162,9 +188,9 @@ static int tegra_cpufreq_dfsd(void *arg)
 			continue;
 
 		tegra_cpufreq_hotplug(req);
+		rate = clk_get_rate(clk_cpu);
 
 #ifdef CONFIG_USE_ARM_TWD_PRESCALER
-		rate = clk_get_rate(clk_cpu);
 		if (rate != last_rate) {
 			local_timer_rescale(rate / 1000);
 			smp_wmb();
@@ -172,6 +198,12 @@ static int tegra_cpufreq_dfsd(void *arg)
 			last_rate = rate;
 		}
 #endif
+		freqs.new = tegra_freq_table_get_freq(freq_table , rate / 1000);
+		if (freqs.new != freqs.old) {
+		   for_each_online_cpu(freqs.cpu)
+		     cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
+		   freqs.old = freqs.new;
+		}
 	}
 	pr_info("dvfs thead shutdown\n");
 
@@ -301,7 +333,13 @@ static int tegra_cpufreq_driver_init(struct cpufreq_policy *pol)
 
 	pol->cpuinfo.min_freq = usage.MinKHz;
 	pol->cpuinfo.max_freq = usage.MaxKHz;
+
+	freq_table = freq_table_1500;
+
 	pol->cpuinfo.transition_latency = 0;
+
+	cpufreq_frequency_table_cpuinfo(pol, freq_table);
+	cpufreq_frequency_table_get_attr(freq_table, pol->cpu);
 
 	return 0;
 }
