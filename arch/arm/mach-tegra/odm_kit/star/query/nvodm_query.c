@@ -52,9 +52,6 @@
 
 #define NVODM_ENABLE_EMC_DVFS (1)
 
-//#define SDRAMKHZ (300000)
-#define SDRAMKHZ (350000)
-
 static const NvU8
 s_NvOdmQueryDeviceNamePrefixValue[] = { 'T','e','g','r','a',0};
 
@@ -350,7 +347,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-              SDRAMKHZ,   /* SDRAM frquency */
+                300000,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
@@ -678,7 +675,7 @@ static const NvOdmSdramControllerConfigAdv s_NvOdmStarSmartphoneHynixEmcConfigTa
     },
     {
                   0x20,   /* Rev 2.0 */
-              SDRAMKHZ,   /* SDRAM frquency */
+                300000,   /* SDRAM frquency */
                   1200,   /* EMC core voltage */
                     46,   /* Number of EMC parameters below */
         {
