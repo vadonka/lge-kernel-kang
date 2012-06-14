@@ -141,12 +141,12 @@ static int  gyro_sleep_mode = 0;
 /* wkkim add to read compass */
 NvBool compassI2CSetRegs(NvU8 offset, NvU8* value, NvU32 len);
 NvBool compassI2CGetRegs(NvU8 offset, NvU8* value, NvU32 len);
-extern int AMI304_Reset_Init();
+extern int AMI304_Reset_Init(void);
 extern int AMI304_Init(int mode);
 extern int kxtf9_get_acceleration_data_passthrough(int *xyz_data);
 extern int tegra_accel_hw_init(void);
 extern int lge_sensor_shutdown_proxi(void);
-extern int lge_sensor_restart_proximity();
+extern int lge_sensor_restart_proximity(void);
 extern int tegra_compass_hw_init(void);
 
 void NvOdmResetI2C(NvOdmGyroAccelHandle );
@@ -325,7 +325,7 @@ int is_flip_enabled(void)
     return atomic_read(&flip_flag);
 }
 
-int lge_sensor_shoutdown_all(void)
+void lge_sensor_shoutdown_all(void)
 {
 
 	printk("[%s] reboot gen2 i2c sensors\n",__func__);
@@ -338,8 +338,7 @@ int lge_sensor_shoutdown_all(void)
 	lge_sensor_shutdown_proxi();
 	lge_sensor_shutdown_gyro();
 
-
-	msleep(1);
+	msleep(10);
 
 	// do power down 
 	lge_sensor_restart_gyro();
@@ -347,7 +346,7 @@ int lge_sensor_shoutdown_all(void)
 	lge_sensor_restart_compass();
 	lge_sensor_restart_proximity();
 
-	reboot	=	0;
+	//reboot = 0;
 }
 
 int lge_sensor_shutdown_gyro(void)
@@ -1715,7 +1714,7 @@ static int star_motion_ioctl(struct inode *inode, struct file *file, unsigned in
 			break;
 		case MOTION_IOCTL_REBOOT_SENSORS:
 			printk(".............MOTION_IOCTL_REBOOT_SENSORS................\n");
-
+			reboot = 0;
 			lge_sensor_shoutdown_all();
 			
 			break;
@@ -1763,7 +1762,7 @@ static int star_accel_ioctl(struct inode *inode, struct file *file,
 #define CTRL_REG3		0x1D
 #define PC1_OFF			0x00
 	u8 ctrl[2] = { CTRL_REG1, PC1_OFF };
-	int err;
+	int err = 0;
 	int tmp;
 	int xyz[3] = { 0 };
 	NvS32 x = 0, y = 0, z = 0;
@@ -2578,21 +2577,19 @@ void mpu3050_sleep_wake_up(void)
 }
 
 //jongik2.kim 20100910 i2c_fix [start]
-NvBool star_get_i2c_busy()
+NvBool star_get_i2c_busy(void)
 {
 	return i2c_busy_flag;
 }
 
-void star_set_i2c_busy()
+void star_set_i2c_busy(void)
 {
 	i2c_busy_flag = 1;
-	return 0;
 }
 
-void star_unset_i2c_busy()
+void star_unset_i2c_busy(void)
 {
 	i2c_busy_flag = 0;
-	return 0;
 }
 //jongik2.kim 20100910 i2c_fix [end]
 

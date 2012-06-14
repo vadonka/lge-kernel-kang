@@ -86,7 +86,7 @@ void motion_send_flip_detection(int value);
 
  int is_tap_enabled(void);
  int is_flip_enabled(void);
- int lge_sensor_shoutdown_all(void);
+ void lge_sensor_shoutdown_all(void);
  int lge_sensor_shutdown_gyro(void);
  int lge_sensor_restart_gyro(void);
 
