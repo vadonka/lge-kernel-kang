@@ -79,8 +79,8 @@ extern void NvRmPrivDvsRun(void);
 
 //Variables for AVP suspend operation
 extern NvRmDeviceHandle s_hRmGlobal;
-extern NvRmPrivLockSharedPll();
-extern NvRmPrivUnlockSharedPll();
+extern int NvRmPrivLockSharedPll(void);
+extern int NvRmPrivUnlockSharedPll(void);
 static NvRtHandle s_RtHandle = NULL;
 
 #define DEVICE_NAME "nvrm"
