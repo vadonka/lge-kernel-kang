@@ -1596,7 +1596,8 @@ Max8907WhiteLEDSwitch(
         CtlData = 0x04;
         if (!Max8907I2cWrite8(hDevice, MAX8907_ILED_CNTL, CtlData))
             return NV_FALSE;
-		msleep(400);
+
+	msleep_interruptible(400);
 		// LGE_UPDATE_E	VRTC level change --> FET ON --> SYS_RESET_N LOW --> TRF issue happens
 	
         CtlData = 0x00;
