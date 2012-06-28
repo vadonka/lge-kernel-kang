@@ -1528,7 +1528,7 @@ static int __init ventana_touch_init_atmel(void)
 	gpio_set_value(TEGRA_GPIO_PQ7, 0);
 	msleep(1);
 	gpio_set_value(TEGRA_GPIO_PQ7, 1);
-	msleep(100);
+	msleep_interruptible(100);
 
 	i2c_register_board_info(0, i2c_info, 1);
 
@@ -2406,7 +2406,7 @@ static NvBool sensor_poweron()
 
 	} while ( mvolt_ldo7 !=0 || mvolt_ldo8  != 0 );
 
-	msleep(3000);
+	msleep_interruptible(3000);
 	
         do {
 
