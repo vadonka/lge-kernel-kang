@@ -154,9 +154,9 @@ int mdm_reset(void)
 	//reset Communication Processor (GPIO_PV0: high -> 1000ms -> low -> 3000ms -> high)
     NvOdmGpioSetState( h_gpio, h_gpiopin, 0x1);
     NvOdmGpioConfig( h_gpio, h_gpiopin, NvOdmGpioPinMode_Output);
-    msleep(1000);
+    msleep_interruptible(1000);
     NvOdmGpioSetState( h_gpio, h_gpiopin, 0x0);
-    msleep(3000);
+    msleep_interruptible(3000);
     NvOdmGpioSetState( h_gpio, h_gpiopin, 0x1);
     NvOdmGpioGetState( h_gpio, h_gpiopin, &pin_val);
     printk("ifx_reset_high - [CP RESET]: pin %d\n", pin_val);         

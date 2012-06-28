@@ -700,7 +700,7 @@ int tegra_accel_hw_init(void)
 	star_accel_i2c_read_data(g_accel, CTRL_REG3, &val_shadow, 1);
 	val_shadow |= PC1_ON;
 	star_accel_i2c_write_data(g_accel, CTRL_REG3, &val_shadow, 1);
-	msleep(200);
+	msleep_interruptible(200);
 
 	//KXTF9_set_G_range(2)
 	star_accel_i2c_read_data(g_accel, CTRL_REG1, &val_shadow, 1);

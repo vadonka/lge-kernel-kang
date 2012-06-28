@@ -510,6 +510,13 @@ int cp_Image_download(void)
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW, 0x0);
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW, 0x0);
 
+    //reset Communication Processor (GPIO_PV0: high -> 1000ms -> low -> 3000ms -> high)
+    NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x1);
+    NvOdmGpioConfig(hCpEmergencgy, hMDMRest, NvOdmGpioPinMode_Output);
+    msleep_interruptible(1000);
+    NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x0);
+    msleep_interruptible(3000);
+    NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x1);
 
     //change USB path from AP to CP
     Set_MAX14526_CP_USB_Mode();
