@@ -1227,6 +1227,20 @@ typedef struct NvOsThreadRec *NvOsThreadHandle;
 void
 NvOsSleepMS(NvU32 msec);
 
+/** Unschedules the calling thread for at least the given
+ *      number of milliseconds. Sleep is interruptible.
+ *
+ *  Other threads may run during the sleep time.
+ *
+ *  @param msec The number of milliseconds to sleep.
+ * 
+ *  @return The remaining time in milliseconds of the 
+ * 		originally requested sleep period. Returns 0 if 
+ * 		the sleep wasn't interrupted.
+ */
+unsigned long
+NvOsSleepMS_interruptible(NvU32 msec);
+
 /** Stalls the calling thread for at least the given number of
  *  microseconds. The actual time waited might be longer; you cannot
  *  depend on this function for precise timing.
@@ -1237,6 +1251,32 @@ NvOsSleepMS(NvU32 msec);
  */
 void
 NvOsWaitUS(NvU32 usec);
+
+/** Suspends the calling thread for at least the given number of
+ *  microseconds. The actual time waited might be longer; you cannot
+ *  depend on this function for precise timing.
+ *
+ *  @note It is safe to use this function at ISR time.
+ *
+ *  @param usec The number of microseconds to wait.
+ */
+void 
+NvOsSleepUS(NvU32 usec);
+
+/** Suspends the calling thread for at least the given number of
+ *  microseconds. The actual time waited might be longer; you cannot
+ *  depend on this function for precise timing. Sleep is interruptible.
+ *
+ *  @note It is safe to use this function at ISR time.
+ *
+ *  @param usec The number of microseconds to wait.
+ * 
+ *  @return The remaining time in microseconds of the 
+ * 		originally requested sleep period. Returns 0 if 
+ * 		the sleep wasn't interrupted.
+ */
+unsigned long
+NvOsSleepUS_interruptible(NvU32 usec);
 
 /**
  * Allocates a new (intra-process) mutex.

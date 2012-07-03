@@ -768,7 +768,7 @@ NvDdkUsbPhyPowerDown(
         /* Wait till Vbus is turned off */
         do
         {
-            NvOsWaitUS(1000);
+            NvOsSleepUS_interruptible(1000);
             TimeOut -= 1000;
             e = hUsbPhy->Ioctl(hUsbPhy,
                     NvDdkUsbPhyIoctlType_VBusStatus,

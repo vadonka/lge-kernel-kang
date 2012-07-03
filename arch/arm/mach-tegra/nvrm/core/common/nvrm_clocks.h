@@ -43,7 +43,7 @@ extern "C"
 #endif  /* __cplusplus */
 
 #define NVRM_RESET_DELAY            (10)
-#define NVRM_CLOCK_CHANGE_DELAY     (2)
+#define NVRM_CLOCK_CHANGE_DELAY     (3)
 #define NVRM_VARIABLE_DIVIDER       ((NvU32)-1)
 
 // Fixed HDMI frequencies

@@ -1308,7 +1308,7 @@ void NvRmPrivAp20PllEControl(NvRmDeviceHandle hRmDevice, NvBool Enable)
     NV_REGW(hRmDevice, NvRmPrivModuleID_ClockAndReset, 0, offset, base);
 
     // use MIPI PLL delay for now - TODO: confirm or find PLLE specific
-    NvOsWaitUS(NVRM_PLL_MIPI_STABLE_DELAY_US);
+    NvOsSleepUS(NVRM_PLL_MIPI_STABLE_DELAY_US);
 }
 
 void

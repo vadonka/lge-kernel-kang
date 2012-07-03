@@ -675,9 +675,24 @@ void NvOsSleepMS(NvU32 msec)
     msleep( msec );
 }
 
+unsigned long NvOsSleepMS_interruptible(NvU32 msec)
+{
+    msleep_interruptible( msec );
+}
+
 void NvOsWaitUS(NvU32 usec)
 {
     udelay( usec );
+}
+
+void NvOsSleepUS(NvU32 usec)
+{
+    usleep( usec );
+}
+
+unsigned long NvOsSleepUS_interruptible(NvU32 usec)
+{
+    usleep_interruptible( usec );
 }
 
 typedef struct NvOsMutexRec

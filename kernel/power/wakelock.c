@@ -40,6 +40,9 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define WAKE_LOCK_AUTO_EXPIRE            (1U << 10)
 #define WAKE_LOCK_PREVENTING_SUSPEND     (1U << 11)
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+extern void star_watchdog_disable();
+
 static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
 static struct list_head active_wake_locks[WAKE_LOCK_TYPE_COUNT];
@@ -308,6 +311,10 @@ static void suspend(struct work_struct *work)
 		suspend_short_count = 0;
 	}
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+	printk("[LOG] star_watchdog_disable() called at suspend() \n");
+	star_watchdog_disable();
+
 	if (current_event_num == entry_event_num) {
 		if (debug_mask & DEBUG_SUSPEND)
 			pr_info("suspend: pm_suspend returned with no event\n");
@@ -340,6 +347,11 @@ static int power_suspend_late(struct device *dev)
 #ifdef CONFIG_WAKELOCK_STAT
 	wait_for_wakeup = !ret;
 #endif
+
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+	printk("[LOG] star_watchdog_disable() called at power_suspend_late() \n");
+	star_watchdog_disable();
+
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("power_suspend_late return %d\n", ret);
 	return ret;

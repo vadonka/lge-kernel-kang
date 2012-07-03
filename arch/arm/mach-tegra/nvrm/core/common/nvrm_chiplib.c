@@ -178,7 +178,7 @@ NvRmPrivChiplibClockthread( void *args )
          */
         if( bSleep )
         {
-            NvOsSleepMS( 50 );
+            NvOsSleepMS_interruptible( 50 );
         }
         else
         {

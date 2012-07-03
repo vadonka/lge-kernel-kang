@@ -365,7 +365,7 @@ static int mct_u232_set_modem_ctrl(struct usb_serial *serial,
 	dbg("set_modem_ctrl: state=0x%x ==> mcr=0x%x", control_state, mcr);
 
 	kfree(buf);
-	return rc;
+		return rc;
 } /* mct_u232_set_modem_ctrl */
 
 static int mct_u232_get_modem_stat(struct usb_serial *serial,

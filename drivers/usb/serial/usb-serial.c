@@ -674,7 +674,7 @@ static struct usb_serial_driver *search_serial_device(
 
 	/* Check if the usb id matches a known device */
 	list_for_each_entry(drv, &usb_serial_driver_list, driver_list) {
-		id = get_iface_id(drv, iface);
+			id = get_iface_id(drv, iface);
 		if (id)
 			return drv;
 	}

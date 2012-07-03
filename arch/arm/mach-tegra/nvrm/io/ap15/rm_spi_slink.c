@@ -1607,7 +1607,7 @@ static NvError CreateSpiSlinkChannelHandle(
             }
         }
         // Let chipselect to be stable for 1 ms before doing any transaction.
-        NvOsWaitUS(1000);
+        NvOsSleepUS(1000);
         // switch off clock and power to the slink module by default.
         Error = SetPowerControl(hRmSpiSlink, NV_FALSE);
     }
@@ -2320,7 +2320,7 @@ static NvError MasterModeReadWriteDma(
                 dsb();
                 outer_sync();
 //20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
-		  NvOsWaitUS(50);
+		  NvOsSleepUS(50);
 //20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
                 Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
 		SPI_DEBUG_PRINT("%s-%d\n", __FUNCTION__, __LINE__);
@@ -2581,7 +2581,7 @@ static NvError SlaveModeSpiStartReadWriteDma(
         dsb();
         outer_sync();
 //20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [START]
-	 NvOsWaitUS(50);
+	 NvOsSleepUS(50);
 //20101204-2, , NVIDIA's patch : 10us wait for completing dma buffer copy before StartDma() [END]
         Error = StartDma(hRmSpiSlink->hTxDma, &hRmSpiSlink->TxDmaReq);
         do

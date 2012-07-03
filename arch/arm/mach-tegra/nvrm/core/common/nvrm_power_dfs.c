@@ -2353,7 +2353,7 @@ void NvRmPrivDvsInit(void)
 
         if (pDvs->CurrentCoreMv > pDvs->NominalCoreMv)
         {
-            NvOsWaitUS(NVRM_CPU_TO_CORE_DOWN_US); // delay if core to go down
+            NvOsSleepUS(NVRM_CPU_TO_CORE_DOWN_US); // delay if core to go down
             DvsChangeCoreVoltage(pDfs->hRm, pDvs, pDvs->NominalCoreMv);
         }
         // No core scaling if CPU voltage is not preserved across LPx
@@ -2712,7 +2712,7 @@ void NvRmPrivDfsSuspend(NvOdmSocPowerState state)
             // settled - do it now
             if (v < pDvs->CurrentCoreMv)
             {
-                NvOsWaitUS(NVRM_CPU_TO_CORE_DOWN_US);
+                NvOsSleepUS(NVRM_CPU_TO_CORE_DOWN_US);
                 DvsChangeCoreVoltage(pDfs->hRm, pDvs, v);
             }
             NvOsDebugPrintf("DVFS set core at %dmV\n", pDvs->CurrentCoreMv);

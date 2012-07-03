@@ -117,7 +117,7 @@ static struct android_usb_function *get_function(const char *name)
 	list_for_each_entry(f, &_functions, list) {
 		if (!strcmp(name, f->name))
 			return f;
-	}
+}
 	return 0;
 }
 
@@ -143,7 +143,7 @@ static bool are_functions_registered(struct android_dev *dev)
 			continue;
 		else
 			return false;
-	}
+}
 
 	return true;
 }
@@ -163,7 +163,7 @@ static bool should_bind_functions(struct android_dev *dev)
 		return false;
 
 	return true;
-}
+	}
 
 static void bind_functions(struct android_dev *dev)
 {
@@ -178,7 +178,7 @@ static void bind_functions(struct android_dev *dev)
 			f->bind_config(dev->config);
 		else
 			printk(KERN_ERR "function %s not found in bind_functions\n", name);
-	}
+}
 
 	_are_functions_bound = true;
 }
@@ -194,7 +194,7 @@ static int android_bind_config(struct usb_configuration *c)
 		bind_functions(dev);
 
 	return 0;
-}
+	}
 
 static int android_setup_config(struct usb_configuration *c,
 		const struct usb_ctrlrequest *ctrl);
@@ -216,11 +216,11 @@ static int android_setup_config(struct usb_configuration *c,
 			ret = android_config_driver.interface[i]->setup(
 				android_config_driver.interface[i], ctrl);
 			if (ret >= 0)
-				return ret;
+			return ret;
 		}
 	}
 	return ret;
-}
+		}
 
 static int product_has_function(struct android_usb_product *p,
 		struct usb_function *f)
@@ -249,7 +249,7 @@ static int product_matches_functions(struct android_usb_product *p)
 	list_for_each_entry(f, &android_config_driver.functions, list) {
 		if (product_has_function(p, f) == !!f->disabled)
 			return 0;
-	}
+		}
 	return 1;
 }
 
@@ -263,7 +263,7 @@ static int get_vendor_id(struct android_dev *dev)
 		for (i = 0; i < count; i++, p++) {
 			if (p->vendor_id && product_matches_functions(p))
 				return p->vendor_id;
-		}
+	}
 	}
 	/* use default vendor ID */
 	return dev->vendor_id;
@@ -362,7 +362,7 @@ void android_register_function(struct android_usb_function *f)
 
 	if (dev && should_bind_functions(dev))
 		bind_functions(dev);
-}
+	}
 
 void update_dev_desc(struct android_dev *dev)
 {
@@ -403,7 +403,7 @@ void update_dev_desc(struct android_dev *dev)
 		}
 #endif
 	}
-}
+		}
 
 void android_enable_function(struct usb_function *f, int enable)
 {
@@ -454,7 +454,7 @@ void android_enable_function(struct usb_function *f, int enable)
 		}
 		usb_composite_force_reset(dev->cdev);
 	}
-}
+	}
 
 static int android_probe(struct platform_device *pdev)
 {
@@ -472,12 +472,12 @@ static int android_probe(struct platform_device *pdev)
 			dev->vendor_id = pdata->vendor_id;
 			device_desc.idVendor =
 				__constant_cpu_to_le16(pdata->vendor_id);
-		}
+}
 		if (pdata->product_id) {
 			dev->product_id = pdata->product_id;
 			device_desc.idProduct =
 				__constant_cpu_to_le16(pdata->product_id);
-		}
+	}
 		if (pdata->version)
 			dev->version = pdata->version;
 
@@ -488,7 +488,7 @@ static int android_probe(struct platform_device *pdev)
 					pdata->manufacturer_name;
 		if (pdata->serial_number)
 			strings_dev[STRING_SERIAL_IDX].s = pdata->serial_number;
-	}
+}
 
 	return usb_composite_probe(&android_usb_driver, android_bind);
 }

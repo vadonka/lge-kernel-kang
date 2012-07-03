@@ -143,7 +143,7 @@ NvRmPrivI2cOalPoll(
             /* Assume a best case transfer of 400KHz I2C clock and 2 byte transfer: 
              *  (i.e 1 address byte and 1 data byte )
              * It should complete in around 50 micro sec */
-            NvOsWaitUS(50);
+            NvOsSleepUS(50);
             status_register = I2C_REGR(c, I2C_STATUS);
             busy = NV_DRF_VAL(I2C, I2C_STATUS, BUSY, status_register);
             if (busy == 0)

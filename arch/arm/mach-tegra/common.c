@@ -45,6 +45,10 @@
 #define FUSE_SPARE_BIT_18_REG_OFFSET		0x248
 #define FUSE_SPARE_BIT_19_REG_OFFSET		0x24c
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+extern void write_cmd_reserved_buffer(unsigned char *buf, size_t len);
+int start_tegra_mach_restart = 0;
+
 //20110131, , Stop i2c comm during reset
 extern void NvRmPrivDvsStop(void);
 extern void write_cmd_reserved_buffer(unsigned char*, size_t);
@@ -92,8 +96,6 @@ int dma_needs_bounce(struct device *dev, dma_addr_t addr, size_t size)
 #endif
 
 #ifdef CONFIG_MACH_STAR
-void star_emergency_restart(const char *domain, int timeout)
-{
 
 #define TEGRA_TMR1_BASE			0x60005000
 #define TEGRA_CLK_RESET_BASE		0x60006000
@@ -111,6 +113,8 @@ void star_emergency_restart(const char *domain, int timeout)
 #define TIMER_PTV 0x00
 #define TIMER_EN	(1 << 31)
 #define TIMER_PERIODIC	(1 << 30)
+#define TIMER_PCR       0x4
+#define TIMER_PCR_INTR (1 << 30)
 
 #define WDT_EN		(1 << 5)
 #define WDT_SEL_TMR1	(0 << 4)
@@ -132,11 +136,28 @@ void star_emergency_restart(const char *domain, int timeout)
 #define tmr_readl(reg) \
 	__raw_readl((u32)tmr_reg_base + (reg))
 
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+int star_watchdog_enabled = 0;
+void star_watchdog_disable();
+void star_emergency_restart(const char *domain, int timeout)
+{
 
 	u32 ptv,src;
 	u32 val;
 	NvU8 rst_en_bit = WDT_SYS_RST;
+    unsigned char tmpbuf[32]= { NULL, };
 
+    if (star_watchdog_enabled)
+    {
+       printk("watchdog is already enabled. so disable first\n");
+	   star_watchdog_disable();
+    }
+
+	star_watchdog_enabled = 1;
+/*
+	if (is_star_suspend_debug())
+	    star_set_verbose_loglevel();
+*/
     if (domain)
 		switch (domain[0])
 		{
@@ -180,13 +201,51 @@ void star_emergency_restart(const char *domain, int timeout)
 
 	val = WDT_EN | WDT_SEL_TMR1 | rst_en_bit;
 	rst_writel(val, WDT_SOURCE);
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
+/*
+  * treat as panic
+  *     : w = warm boot for bootloader
+  *     : a = panic for hidden reboot
+  */
+   tmpbuf[0] = 'w';   tmpbuf[1] = 'a';
+    write_cmd_reserved_buffer(tmpbuf, 3);
 
 }
 
 EXPORT_SYMBOL_GPL(star_emergency_restart);
-#endif
 
-extern int pwky_shutdown;
+
+void star_watchdog_kick()
+{
+    printk("star_watchdog_kick\n");
+    tmr_writel(TIMER_PCR_INTR,TIMER_PCR);
+}
+
+EXPORT_SYMBOL_GPL(star_watchdog_kick);
+
+void star_watchdog_disable()
+{
+  unsigned char tmpbuf[32];
+  printk("star_watchdog_disable \n");
+
+  rst_writel(0,WDT_SOURCE);
+  tmr_writel(0,TIMER_PTV);
+  star_watchdog_enabled = 0;
+/*
+  if (is_star_suspend_debug())
+      star_restore_loglevel();
+*/
+
+ /* tag reset */
+  memset (tmpbuf, NULL, 3);
+  write_cmd_reserved_buffer(tmpbuf, 3);
+
+}
+
+EXPORT_SYMBOL_GPL(star_watchdog_disable);
+
+#endif
+//20110727 srinivas.mittapalli@lge.com	Patch applied from P990 froyo MR-03
 static void tegra_machine_restart(char mode, const char *cmd)
 {
 #if (CONFIG_MACH_STAR)
@@ -196,24 +255,20 @@ static void tegra_machine_restart(char mode, const char *cmd)
 	NvOdmServicesPmuHandle h_pmu = NvOdmServicesPmuOpen();
 
 	star_emergency_restart("sys",20);
-	printk("tegra_machine_restart\n");
 
-#if 0
-	if (pwky_shutdown)
+	start_tegra_mach_restart = 1;
+
+	NvRmPrivDvsStop();
+
+	if (h_pmu)
             {
-            if ( (cmd)&&(*cmd == 'm'))
-            {
-                printk ("cmd = %s \n",cmd);
+		NvOdmServicesPmuSetVoltage( h_pmu, Max8907PmuSupply_EXT_DCDC_8_CPU, 1050, NULL );
+            printk("Set VDD_CPU as 1050mV\n");
             }
             else
             {
-             printk("tegra_machine_restart: skip during shutdown mode!\n");
-	     pwky_shutdown = 0;
-	     return;
-            }
+		printk("setting  VDD_CPU failed\n");
 	}
-#endif
-	NvRmPrivDvsStop();
 
 	if (h_pmu)
 	{ 

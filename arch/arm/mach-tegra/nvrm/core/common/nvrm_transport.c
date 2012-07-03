@@ -872,7 +872,7 @@ NvRmTransportOpen(
 
     while (!s_Transport_Inited) {
         // This can happen, if this API is called before avp init.
-        NvOsSleepMS(500);
+        NvOsSleepMS_interruptible(500);
     }
     // Look and see if this port exists anywhere.
     if (pPortName == NULL)

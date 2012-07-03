@@ -286,7 +286,7 @@ static struct aat2870_ctl_tbl_t aat2870bl_alc_tbl[] = {
     {0x20,0x36},  /* ALS current setting 14.2mA */
     {0x21,0x37},  /* ALS current setting 14.6mA */
 #else
-	//Fajarep values from swiftextreme kernel
+    //Fajarep values from swiftextreme kernel
     {0x12,0x0A},  /* ALS current setting 2.64mA  - 0 lux */
     {0x13,0x0C},  /* ALS current setting 3.08mA  - 50 lux*/
     {0x14,0x0D},  /* ALS current setting 3.3mA   - 100 lux */

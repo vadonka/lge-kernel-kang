@@ -287,7 +287,7 @@ static int __init pci_tegra_setup(int nr, struct pci_sys_data *data)
 	reg  = NV_FLD_SET_DRF_NUM(AFI, PEX1_CTRL, PEX1_RST_L, 0, reg);
 	pci_tegra_afi_writel(reg, AFI_PEX1_CTRL_0);
 
-	msleep(100);
+	msleep_interruptible(100);
 
 	reg = pci_tegra_afi_readl(AFI_PEX0_CTRL_0);
 	reg  = NV_FLD_SET_DRF_NUM(AFI, PEX0_CTRL, PEX0_RST_L, 1, reg);
@@ -640,7 +640,7 @@ retry:
 		reg  = NV_FLD_SET_DRF_NUM(AFI, PEX0_CTRL, PEX0_RST_L, 1, reg);
 		pci_tegra_afi_writel(reg, offset);
 
-		msleep(100);
+		msleep_interruptible(100);
 
 		reg = pci_tegra_afi_readl(offset);
 		reg  = NV_FLD_SET_DRF_NUM(AFI, PEX0_CTRL, PEX0_RST_L, 0, reg);

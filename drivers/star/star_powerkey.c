@@ -97,6 +97,11 @@ static int key_wakeup_ISR = 0;
 static void __iomem *pmc_base = IO_ADDRESS(TEGRA_PMC_BASE);
 #endif
 
+//20110324, , LP1 powerkey skip issue [START]
+extern bool core_lock_on;
+static int LP1_key_wake = 0;
+//20110324, , LP1 powerkey skip issue [END]
+
 //20101129, , idle current issue [START]
 typedef struct TouchMakerRec
 {
@@ -147,7 +152,7 @@ static void powerkey_handle(struct work_struct *wq)
     // Clear power key wakeup pad bit.
     // Because powerkey interrupt might be called before powerkey_resume() is called.
     // In this case, clear bit not to call power key press at powerkey_resume() function.
-    if (key_wakeup_ISR == 0 )
+    if (key_wakeup_ISR == 0 || LP1_key_wake == 1)
     {
         if( reg & WAKEUP_POWERKEY_MASK){
             printk("[PWR_KEY] wakeup pad clear\n");
@@ -165,6 +170,9 @@ static void powerkey_handle(struct work_struct *wq)
             input_sync(s_powerkey.inputDev);
         }
         key_wakeup_ISR = 1;
+//20110324, , LP1 powerkey skip issue [START]
+        LP1_key_wake = 0;
+//20110324, , LP1 powerkey skip issue [END]
         return;
     }
 #endif
@@ -194,6 +202,11 @@ static void powerkey_interrupt_handler(void* arg)
         return;
     }
     printk("powerkey_interrupt_handler\n");
+//20110324, , LP1 powerkey skip issue [START]
+    if(core_lock_on && key_wakeup_ISR==0){
+        LP1_key_wake = 1;
+    }
+//20110324, , LP1 powerkey skip issue [END]
 #ifdef POWERKEY_DELAYED_WORKQUEUE
     schedule_delayed_work(&powerKeyDevice->work, msecs_to_jiffies(20));
     wake_lock_timeout(&s_powerkey.wlock, msecs_to_jiffies(50));
@@ -300,8 +313,8 @@ static ssize_t star_reset_show(struct device *dev,
 
     read_cmd_reserved_buffer(tmpbuf, 3);
     printk(" power key reserved_buffer = %c%c%c\n",tmpbuf[0],tmpbuf[1],tmpbuf[2]);
-
-    #define _COLDBOOT          0   
+  
+    #define _COLDBOOT          0
     #define _NORMAL_WARMBOOT   1
     #define _HIDDEN_RESET      2
 
@@ -309,12 +322,12 @@ static ssize_t star_reset_show(struct device *dev,
     {
       printk("star_powekey : hidden reset detected\n");
       tag = _HIDDEN_RESET;
-      ret = sprintf(buf,"%d\n",tag);
+    ret = sprintf(buf,"%d\n",tag);
       tmpbuf[1] = NULL; tmpbuf[2] = NULL;
       write_cmd_reserved_buffer(tmpbuf,3);
-      return ret;
-    }
-  
+    return ret;
+}
+
     if ('w' == tmpbuf[0])
     {
 	    switch (tmpbuf[1])

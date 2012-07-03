@@ -5,6 +5,8 @@
 #include "max8952_buck_i2c.h"
 #include "max8952_buck_reg.h"
 
+extern int start_tegra_mach_restart;
+
 // Function declaration
 NvBool Max8952I2cWrite8(
     NvOdmPmuDeviceHandle hDevice,
@@ -24,7 +26,14 @@ NvBool Max8952I2cWrite8(
     
         TransactionInfo.Address = MAX8952_SLAVE_ADDR;
         TransactionInfo.Buf = &WriteBuffer[0];
+#if defined(CONFIG_MACH_STAR)
+	if(start_tegra_mach_restart)
+			TransactionInfo.Flags = NVODM_I2C_IS_WRITE | NVODM_I2C_SOFTWARE_CONTROLLER;
+	else
         TransactionInfo.Flags = NVODM_I2C_IS_WRITE;
+#else
+	TransactionInfo.Flags = NVODM_I2C_IS_WRITE;
+#endif
         TransactionInfo.NumBytes = 2;
     
 #if defined(CONFIG_MACH_STAR)
