@@ -40,8 +40,10 @@ module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 #define WAKE_LOCK_AUTO_EXPIRE            (1U << 10)
 #define WAKE_LOCK_PREVENTING_SUSPEND     (1U << 11)
 
+#if 0
 //20110727 	Patch applied from P990 froyo MR-03
 extern void star_watchdog_disable();
+#endif
 
 static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
@@ -274,7 +276,9 @@ static void suspend(struct work_struct *work)
 	}
 
 	entry_event_num = current_event_num;
+#if 0
 	sys_sync();
+#endif
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("suspend: enter suspend\n");
 	ret = pm_suspend(requested_suspend_state);
@@ -288,10 +292,11 @@ static void suspend(struct work_struct *work)
 			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
 			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
 	}
+#if 0
 //20110727 	Patch applied from P990 froyo MR-03
 	printk("[LOG] star_watchdog_disable() called at suspend() \n");
 	star_watchdog_disable();
-	
+#endif	
 	if (current_event_num == entry_event_num) {
 		if (debug_mask & DEBUG_SUSPEND)
 			pr_info("suspend: pm_suspend returned with no event\n");
@@ -325,9 +330,11 @@ static int power_suspend_late(struct device *dev)
 	wait_for_wakeup = !ret;
 #endif
 
+#if 0
 //20110727 	Patch applied from P990 froyo MR-03
 	printk("[LOG] star_watchdog_disable() called at power_suspend_late() \n");
 	star_watchdog_disable();
+#endif
 
 	if (debug_mask & DEBUG_SUSPEND)
 		pr_info("power_suspend_late return %d\n", ret);
