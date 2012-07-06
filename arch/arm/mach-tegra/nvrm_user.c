@@ -644,7 +644,9 @@ int tegra_pm_notifier(struct notifier_block *nb,
         notify_daemon(STRING_PM_DISPLAY_OFF);
 #endif
         notify_daemon(STRING_PM_SUSPEND_PREPARE);
+	NvRmPrivLockSharedPll();
 	NvRmPrivDvsStop();
+	NvRmPrivUnlockSharedPll();
         break;
     case PM_POST_SUSPEND:
         notify_daemon(STRING_PM_POST_SUSPEND);
