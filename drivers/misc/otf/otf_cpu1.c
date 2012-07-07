@@ -41,7 +41,7 @@ static unsigned int DEF_OFFMAXKHZ = 860000;	/* Default OFF_MAX_KHZ value    */
 
 static unsigned int MIN_OFFDELAY  = 200;	/* Mininum OFF_PENDING_MS value */
 static unsigned int MAX_OFFDELAY  = 3000;	/* Maximum OFF_PENDING_MS value */
-static unsigned int DEF_OFFDELAY  = 1000;	/* Default OFF_PENDING_MS value */
+static unsigned int DEF_OFFDELAY  = 500;	/* Default OFF_PENDING_MS value */
 
 /** Static containers end */
 
@@ -55,7 +55,7 @@ unsigned int offdelay  = 1000;			/* OFF_PENDING_MS boot time value */
 unsigned int NVRM_CPU1_ON_MIN_KHZ     = 816000;	/* ON_MIN_KHZ                     */
 unsigned int NVRM_CPU1_ON_PENDING_MS  = 2000;	/* ON_PENDING_MS                  */
 unsigned int NVRM_CPU1_OFF_MAX_KHZ    = 860000;	/* OFF_MAX_KHZ                    */
-unsigned int NVRM_CPU1_OFF_PENDING_MS = 1000;	/* OFF_PENDING_MS                 */
+unsigned int NVRM_CPU1_OFF_PENDING_MS = 500;	/* OFF_PENDING_MS                 */
 /* Boot time values end */
 
 /** SYSFS */

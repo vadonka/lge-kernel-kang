@@ -246,11 +246,11 @@ extern "C"
 #define NVRM_CPU1_ON_MIN_KHZ (0)
 #define NVRM_CPU1_OFF_MAX_KHZ (0)
 
-#define NVRM_CPU1_ON_PENDING_MS (1500)
-#define NVRM_CPU1_OFF_PENDING_MS (1000)
+#define NVRM_CPU1_ON_PENDING_MS (2000)
+#define NVRM_CPU1_OFF_PENDING_MS (500)
 #endif /* OTF */
 
-/*
+/**
  * Defines AP20 Thermal policy parameters.
  *
  * Low and high thresholds specify 3 temperature ranges.
