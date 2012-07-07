@@ -48,19 +48,13 @@
 
 #include <nvrm_power.h>
 #include <nvrm_power_private.h>
-#include <linux/earlysuspend.h>
-
-#ifdef CONFIG_OVERCLOCK
 #include "nvrm/core/common/nvrm_clocks_limits_private.h"
-#include "nvrm/core/common/nvrm_power_dfs.h"
-#include "nvrm/core/common/nvrm_chipid.h"
-#endif /* OVERCLOCK END */
+#include "nvrm_diag.h"
+#include <linux/earlysuspend.h>
 
 #define KTHREAD_IRQ_PRIO (MAX_RT_PRIO>>1)
 
 #ifdef CONFIG_OVERCLOCK
-#define DEFAULT_CPU_NOMINAL_MV (1300)
-
 #define define_ro_attr(_name)            \
     static ssize_t show_##_name(struct cpufreq_policy *policy,  \
                 char *buf);  \
@@ -76,7 +70,6 @@
                 show_##_name, store_##_name)
 #endif /* OVERCLOCK END */
 
-
 static NvRmDeviceHandle rm_cpufreq = NULL;
 static struct task_struct *cpufreq_dfsd = NULL;
 static struct clk *clk_cpu = NULL;
@@ -88,6 +81,34 @@ static DEFINE_MUTEX(early_mutex);
 static int disable_hotplug = 0;
 extern atomic_t hotplug_policy;
 #endif
+
+#ifdef CONFIG_OVERCLOCK
+#include "cpufreq.h"
+/* Frequency table index must be sequential starting at 0 and
+   frequencies must be ascending*/
+static struct cpufreq_frequency_table freq_table_1500[] = {
+	{ 0, CPUSTEP1 },
+	{ 1, CPUSTEP2 },
+	{ 2, CPUSTEP3 },
+	{ 3, CPUSTEP4 },
+	{ 4, CPUSTEP5 },
+	{ 5, CPUSTEP6 },
+	{ 6, CPUSTEP7 },
+	{ 7, CPUSTEP8 },
+	{ 8, CPUFREQ_TABLE_END },
+};
+
+static struct cpufreq_frequency_table *freq_table;
+
+static unsigned int tegra_freq_table_get_freq(struct cpufreq_frequency_table *table, unsigned int freq)
+{
+	int index;
+	for (index = 0;  table[index].frequency != CPUFREQ_TABLE_END; index++)
+  if (table[index].frequency >= freq)
+	    return table[index].frequency;
+    return index ? table[index-1].frequency : 0;
+}
+#endif /* OVERCLOCK */
 
 static void tegra_cpufreq_hotplug(NvRmPmRequest req)
 {
@@ -123,224 +144,27 @@ static void tegra_cpufreq_hotplug(NvRmPmRequest req)
 }
 
 #ifdef CONFIG_OVERCLOCK
-static struct cpufreq_frequency_table freq_table[] = {
-  { 0, 216000 },
-  { 1, 456000 },
-  { 2, 760000 },
-  { 3, 912000 },
-  { 4, 1100000 },
-  { 5, 1216000 },
-  { 6, 1408000 },
-  { 7, 1504000 },
-  { 8, CPUFREQ_TABLE_END },
-};
-
-#define FT_SIZE ARRAY_SIZE(freq_table)
-
-static int enforce_freq_table_bounds(struct cpufreq_policy *policy)
-{
-    unsigned int max_freq, min_freq;
-    int ret;
-
-    max_freq = policy->max;
-    min_freq = policy->min;
-
-    cpufreq_verify_within_limits(policy,
-    freq_table[0].frequency, freq_table[FT_SIZE - 2].frequency);
-
-    ret = 0;
-    if (max_freq != policy->max || min_freq != policy->min)
-        ret = 1;
-
-    return ret;
-}
-
 extern NvRmCpuShmoo *ExposedCpuShmoo;
-static int voltage_deltas[NVRM_VOLTAGE_STEPS] = { 0 };
-
-define_ro_attr(cpu_temp);
-define_ro_attr(cpu_voltage);
-define_rw_attr(scaling_available_frequencies);
-define_ro_attr(cpu_volt_max);
-define_ro_attr(cpu_volt_min);
-define_ro_attr(frequency_voltage_table);
-define_rw_attr(scaling_step_freqs);
-define_rw_attr(scaling_step_volts);
-define_rw_attr(UV_mV_table);
-
-static struct freq_attr *tegra_cpufreq_attrs[] = {
-    &cpu_temp,
-    &cpu_voltage,
-    &scaling_available_frequencies,
-    &cpu_volt_max,
-    &cpu_volt_min,
-    &frequency_voltage_table,
-    &scaling_step_freqs,
-    &scaling_step_volts,
-    &UV_mV_table,
-    NULL,
-};
-
-static int tegra_set_policy(struct cpufreq_policy *pol);
 
 static ssize_t show_cpu_temp(struct cpufreq_policy *policy, char *buf)
 {
-    NvError e;
-    int temperature;
+	NvError e;
+	int temperature;
 
-    e = NvRmDiagGetTemperature(rm_cpufreq, NvRmTmonZoneId_Core,
-                                                            &temperature);
-    switch (e) {
-    case NvSuccess:
-            return scnprintf(buf, PAGE_SIZE, "%d\n", temperature);
-    case NvError_Busy:
-            return scnprintf(buf, PAGE_SIZE, "<unavailable>\n");
-    default:
-            return scnprintf(buf, PAGE_SIZE, "<unsupported>\n");
-    }
-}
-
-static ssize_t show_cpu_voltage(struct cpufreq_policy *policy, char *buf)
-{
-    unsigned int low, cur;
-
-    if (NvRmPrivIsCpuRailDedicated(rm_cpufreq) == NV_TRUE) {
-        NvRmDfsGetLowVoltageThreshold(rm_cpufreq,
-                    NvRmDfsVoltageRailId_Cpu, &low, &cur);
-    } else {
-        NvRmDfsGetLowVoltageThreshold(rm_cpufreq,
-                    NvRmDfsVoltageRailId_Core, &low, &cur);
-    }
-
-    return scnprintf(buf, PAGE_SIZE, "%u\n", cur);
+	e = NvRmDiagGetTemperature(rm_cpufreq, NvRmTmonZoneId_Core,
+														&temperature);
+	switch (e) {
+		case NvSuccess:
+				return scnprintf(buf, PAGE_SIZE, "%d\n", temperature);
+		case NvError_Busy:
+				return scnprintf(buf, PAGE_SIZE, "<unavailable>\n");
+		default:
+				return scnprintf(buf, PAGE_SIZE, "<unsupported>\n");
+	}
 }
 
 static ssize_t show_scaling_available_frequencies
-                (struct cpufreq_policy *policy, char *buf)
-{
-    int i;
-    ssize_t n, size;
-
-    size = 0;
-    for (i = 0; i < FT_SIZE - 1; i++) {
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%u ",
-        freq_table[i].frequency);
-        size += n;
-    }
-    n = scnprintf(buf + size, PAGE_SIZE - size, "\n");
-    size += n;
-
-    return size;
-}
-
-static ssize_t store_scaling_available_frequencies
-                (struct cpufreq_policy *policy, const char *buf, size_t count)
-{
-    int i;
-    ssize_t n, size;
-    unsigned int *freqs_in;
-    unsigned int f;
-
-    freqs_in = kmalloc(sizeof(unsigned int) * FT_SIZE, GFP_TEMPORARY);
-    if (freqs_in == NULL)
-        return -ENOMEM;
-
-    size = 0;
-    for (i = 0; i < FT_SIZE - 1; i++) {
-        if (size < count && buf[size] != '\n') {
-            if (sscanf(buf + size, "%u%n",
-                            freqs_in + i, &n) != 1) {
-                size = -EINVAL;
-                goto err_free;
-            }
-            size += n;
-            continue;
-        }
-    freqs_in[i] = freq_table[i].frequency;
-    }
-
-    freqs_in[FT_SIZE - 1] = CPUFREQ_TABLE_END;
-
-    f = min(ExposedCpuShmoo->pScaledCpuLimits->MaxKHzList
-                            [ExposedCpuShmoo->ShmooVmaxIndex],
-                                    policy->cpuinfo.max_freq);
-
-    if (freqs_in[0] < policy->cpuinfo.min_freq ||
-                            freqs_in[FT_SIZE - 2] > f) {
-        size = -EINVAL;
-        goto err_free;
-    }
-
-    for (i = 0; i < FT_SIZE - 2; i++) {
-        if (freqs_in[i] > freqs_in[i + 1]) {
-            size = -EINVAL;
-            goto err_free;
-        }
-    }
-
-    for (i = 0; i < FT_SIZE - 1; i++)
-        freq_table[i].frequency = freqs_in[i];
-
-    enforce_freq_table_bounds(policy);
-    tegra_set_policy(policy);
-    NvRmDvsForceUpdate(rm_cpufreq);
-    size = count;
-
-    err_free:
-    kfree(freqs_in);
-    return size;
-}
-
-static ssize_t show_cpu_volt_max(struct cpufreq_policy *policy, char *buf)
-{
-    unsigned int vmax, vmin;
-
-    NvRmDvsGetCpuVoltageThresholds(rm_cpufreq, &vmin, &vmax);
-
-    return scnprintf(buf, PAGE_SIZE, "%u\n", vmax);
-}
-
-static ssize_t show_cpu_volt_min(struct cpufreq_policy *policy, char *buf)
-{
-    unsigned int vmax, vmin;
-
-    NvRmDvsGetCpuVoltageThresholds(rm_cpufreq, &vmin, &vmax);
-
-    return scnprintf(buf, PAGE_SIZE, "%u\n", vmin);
-}
-
-static ssize_t show_frequency_voltage_table(struct cpufreq_policy *policy,
-                                                                char *buf)
-{
-    int i;
-    ssize_t n, size;
-
-    size = 0;
-    for (i = ExposedCpuShmoo->ShmooVmaxIndex; i >= 0; i--) {
-        if (size >= PAGE_SIZE) {
-            buf[PAGE_SIZE - 1] = '\n';
-            break;
-        }
-
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%u ",
-                ExposedCpuShmoo->pScaledCpuLimits->MaxKHzList[i]);
-        size += n;
-
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%u ",
-                            ExposedCpuShmoo->ShmooVoltages[i] +
-                                            voltage_deltas[i]);
-        size += n;
-
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%u\n",
-                            ExposedCpuShmoo->ShmooVoltages[i]);
-        size += n;
-    }
-
-    return size;
-}
-
-static ssize_t show_scaling_step_freqs(struct cpufreq_policy *policy,
-                                                            char *buf)
+			(struct cpufreq_policy *policy, char *buf)
 {
     int i;
     ssize_t n, size;
@@ -356,225 +180,7 @@ static ssize_t show_scaling_step_freqs(struct cpufreq_policy *policy,
 
     return size;
 }
-
-static ssize_t store_scaling_step_freqs(struct cpufreq_policy *policy,
-                                            const char *buf, size_t count)
-{
-    int i;
-    ssize_t n, size;
-    unsigned int *freqs_in, *freqs_out;
-
-    freqs_in = kmalloc(sizeof(unsigned int) *
-        (ExposedCpuShmoo->ShmooVmaxIndex + 1), GFP_TEMPORARY);
-    if (freqs_in == NULL)
-        return -ENOMEM;
-
-    freqs_out = (unsigned int *)
-        (ExposedCpuShmoo->pScaledCpuLimits->MaxKHzList);
-
-    size = 0;
-    for (i = 0; i <= ExposedCpuShmoo->ShmooVmaxIndex; i++) {
-        if (size < count && buf[size] != '\n') {
-            if (sscanf(buf + size, "%u%n",
-                        freqs_in + i, &n) != 1) {
-                size = -EINVAL;
-                goto err_free;
-            }
-            size += n;
-            continue;
-        }
-    freqs_in[i] = freqs_out[i];
-    }
-
-    if (freqs_in[0] < NvRmPrivDfsGetMinKHz(NvRmDfsClockId_Cpu) ||
-                        freqs_in[ExposedCpuShmoo->ShmooVmaxIndex] >
-                        NvRmPrivDfsGetMaxKHz(NvRmDfsClockId_Cpu)) {
-        size = -EINVAL;
-        goto err_free;
-    }
-
-    for (i = 0; i < ExposedCpuShmoo->ShmooVmaxIndex; i++) {
-        if (freqs_in[i] > freqs_in[i + 1]) {
-            size = -EINVAL;
-            goto err_free;
-        }
-    }
-
-    memcpy(freqs_out, freqs_in, sizeof(unsigned int) *
-                        (ExposedCpuShmoo->ShmooVmaxIndex + 1));
-
-    for (i = 0; i < FT_SIZE - 1; i++) {
-        if (freq_table[i].frequency >
-                freqs_in[ExposedCpuShmoo->ShmooVmaxIndex])
-            freq_table[i].frequency =
-                freqs_in[ExposedCpuShmoo->ShmooVmaxIndex];
-    }
-
-    enforce_freq_table_bounds(policy);
-    tegra_set_policy(policy);
-    NvRmDvsForceUpdate(rm_cpufreq);
-    size = count;
-
-    err_free:
-    kfree(freqs_in);
-    return size;
-}
-
-static ssize_t show_scaling_step_volts(struct cpufreq_policy *policy,
-                                                            char *buf)
-{
-    int i;
-    ssize_t n, size;
-
-    size = 0;
-    for (i = 0; i <= ExposedCpuShmoo->ShmooVmaxIndex; i++) {
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%u ",
-                            ExposedCpuShmoo->ShmooVoltages[i]);
-        size += n;
-    }
-    n = scnprintf(buf + size, PAGE_SIZE - size, "\n");
-    size += n;
-
-    return size;
-}
-
-static ssize_t store_scaling_step_volts(struct cpufreq_policy *policy,
-                                            const char *buf, size_t count)
-{
-    int i;
-    ssize_t n, size;
-    unsigned int v1, v2;
-    unsigned int *volts_in, *volts_out;
-
-    volts_in = kmalloc(sizeof(unsigned int) *
-            (ExposedCpuShmoo->ShmooVmaxIndex + 1), GFP_TEMPORARY);
-
-    if (volts_in == NULL)
-        return -ENOMEM;
-
-    volts_out = (unsigned int *)(ExposedCpuShmoo->ShmooVoltages);
-
-    size = 0;
-    for (i = 0; i <= ExposedCpuShmoo->ShmooVmaxIndex; i++) {
-        if (size < count && buf[size] != '\n') {
-            if (sscanf(buf + size, "%u%n",
-                       volts_in + i, &n) != 1) {
-                size = -EINVAL;
-                goto err_free;
-            }
-            size += n;
-
-            v1 = volts_in[i] % NVRM_CORE_RESOLUTION_MV;
-            if (v1)
-                volts_in[i] -= v1;
-
-            continue;
-        }
-
-    volts_in[i] = volts_out[i];
-    }
-
-    NvRmDvsGetCpuVoltageThresholds(rm_cpufreq, &v1, &v2);
-    if (volts_in[0] < v1 ||
-            volts_in[ExposedCpuShmoo->ShmooVmaxIndex] > v2) {
-        size = -EINVAL;
-        goto err_free;
-    }
-
-    for (i = 0; i <= ExposedCpuShmoo->ShmooVmaxIndex; i++)
-        voltage_deltas[i] += volts_out[i] - volts_in[i];
-
-    memcpy(volts_out, volts_in, sizeof(unsigned int) *
-                    (ExposedCpuShmoo->ShmooVmaxIndex + 1));
-
-    NvRmDvsForceUpdate(rm_cpufreq);
-    size = count;
-
-    err_free:
-    kfree(volts_in);
-    return size;
-}
-
-static ssize_t show_UV_mV_table(struct cpufreq_policy *policy, char *buf)
-{
-    int i;
-    ssize_t n, size;
-
-    size = 0;
-    for (i = ExposedCpuShmoo->ShmooVmaxIndex; i >= 0; i--) {
-        n = scnprintf(buf + size, PAGE_SIZE - size, "%d ",
-                                            voltage_deltas[i]);
-        size += n;
-    }
-
-    n = scnprintf(buf + size, PAGE_SIZE - size, "\n");
-    size += n;
-
-    return size;
-}
-
-static ssize_t store_UV_mV_table(struct cpufreq_policy *policy,
-                                    const char *buf, size_t count)
-{
-    int i;
-    ssize_t n, size;
-    int v;
-    int *deltas_in;
-    char *b;
-
-    deltas_in = kmalloc(sizeof(int) *
-        (ExposedCpuShmoo->ShmooVmaxIndex + 1), GFP_TEMPORARY);
-    if (deltas_in == NULL)
-        return -ENOMEM;
-
-    b = kmalloc(PAGE_SIZE, GFP_TEMPORARY);
-    if (b == NULL) {
-        size = -ENOMEM;
-        goto err_free_deltas;
-    }
-
-    size = 0;
-    for (i = ExposedCpuShmoo->ShmooVmaxIndex; i >= 0; i--) {
-        if (size < count && buf[size] != '\n') {
-            if (sscanf(buf + size, "%d%n",
-                        deltas_in + i, &n) != 1) {
-                size = -EINVAL;
-                goto err_free_all;
-            }
-            size += n;
-
-            v = deltas_in[i] % NVRM_CORE_RESOLUTION_MV;
-            if (v)
-                deltas_in[i] -= v;
-
-            continue;
-        }
-    deltas_in[i] = voltage_deltas[i];
-    }
-
-    size = 0;
-    for (i = 0; i <= ExposedCpuShmoo->ShmooVmaxIndex; i++) {
-        n = scnprintf(b + size, PAGE_SIZE - size, "%u ",
-            ExposedCpuShmoo->ShmooVoltages[i] +
-            voltage_deltas[i] - deltas_in[i]);
-        size += n;
-    }
-
-    i = store_scaling_step_volts(policy, b, size);
-    if (i == size)
-        size = count;
-    else
-        size = i;
-
-    err_free_all:
-    kfree(b);
-
-    err_free_deltas:
-    kfree(deltas_in);
-    return size;
-}
-
-#endif /* OVERCLOCK END */
+#endif
 
 #ifdef CONFIG_HOTPLUG_CPU
 static int tegra_cpufreq_pm_notifier(struct notifier_block *nfb,
@@ -605,10 +211,6 @@ static int dfs_reboot_notify(struct notifier_block *nb,
 	case SYS_RESTART:
 	case SYS_HALT:
 	case SYS_POWER_OFF:
-#ifdef CONFIG_OVERCLOCK
-                NvRmDvsSetCpuVoltageThresholds(rm_cpufreq, 0,
-                                        DEFAULT_CPU_NOMINAL_MV);
-#endif /* OVERCLOCK END */
 		/* Warm boot setting at max voltages works for any reboot */
 		NvRmPrivDfsSuspend(NvOdmSocPowerState_DeepSleep);
 		return NOTIFY_OK;
@@ -626,6 +228,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 {
 	unsigned long rate, last_rate;
 	NvRmPmRequest req = 0;
+	struct cpufreq_freqs freqs;
 
 	BUG_ON(!clk_cpu);
 
@@ -635,6 +238,7 @@ static int tegra_cpufreq_dfsd(void *arg)
 
 	NvRmDfsSetState(rm_cpufreq, NvRmDfsRunState_ClosedLoop);
 	set_freezable();
+	freqs.old = tegra_freq_table_get_freq(freq_table , last_rate / 1000);
 
 	while (!kthread_should_stop() && !(req & NvRmPmRequest_ExitFlag)) {
 
@@ -644,9 +248,9 @@ static int tegra_cpufreq_dfsd(void *arg)
 			continue;
 
 		tegra_cpufreq_hotplug(req);
+		rate = clk_get_rate(clk_cpu);
 
 #ifdef CONFIG_USE_ARM_TWD_PRESCALER
-		rate = clk_get_rate(clk_cpu);
 		if (rate != last_rate) {
 			local_timer_rescale(rate / 1000);
 			smp_wmb();
@@ -654,6 +258,12 @@ static int tegra_cpufreq_dfsd(void *arg)
 			last_rate = rate;
 		}
 #endif
+		freqs.new = tegra_freq_table_get_freq(freq_table , rate / 1000);
+		if (freqs.new != freqs.old) {
+		   for_each_online_cpu(freqs.cpu)
+		     cpufreq_notify_transition(&freqs, CPUFREQ_POSTCHANGE);
+		   freqs.old = freqs.new;
+		}
 	}
 	pr_info("dvfs thead shutdown\n");
 
@@ -662,12 +272,8 @@ static int tegra_cpufreq_dfsd(void *arg)
 
 static int tegra_verify_speed(struct cpufreq_policy *policy)
 {
-#ifdef CONFIG_OVERCLOCK
-	enforce_freq_table_bounds(policy);
-#else
 	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq,
 		policy->cpuinfo.max_freq);
-#endif /* OVERCLOCK END */
 	return 0;
 }
 
@@ -725,6 +331,15 @@ static void tegra_cpu_late_resume(struct early_suspend *h)
 	mutex_unlock(&early_mutex);
 }
 
+define_ro_attr(cpu_temp);
+define_ro_attr(scaling_available_frequencies);
+
+static struct freq_attr *tegra_cpufreq_attrs[] = {
+	&cpu_temp,
+	&scaling_available_frequencies,
+	NULL,
+};
+
 static struct early_suspend tegra_cpu_early_suspend_handler = {
 	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
 	.suspend = tegra_cpu_early_suspend,
@@ -746,10 +361,6 @@ static int tegra_cpufreq_init_once(void)
 		rc = -ENOSYS;
 		goto clean;
 	}
-
-#ifdef CONFIG_OVERCLOCK
-	NvRmDvsSetCpuVoltageThresholdsToLimits(rm_cpufreq);
-#endif /* OVERCLOCK END */
 
 	clk_cpu = clk_get_sys(NULL, "cpu");
 	if (IS_ERR(clk_cpu)) {
@@ -817,16 +428,16 @@ static int tegra_cpufreq_driver_init(struct cpufreq_policy *pol)
 
 	pol->cpuinfo.min_freq = usage.MinKHz;
 	pol->cpuinfo.max_freq = usage.MaxKHz;
+
+#ifdef CONFIG_OVERCLOCK
+	freq_table = freq_table_1500;
+#endif
+
 	pol->cpuinfo.transition_latency = 0;
 
 #ifdef CONFIG_OVERCLOCK
-	switch (NvRmPrivGetChipId(rm_cpufreq)->Id) {
-	case 0x20:
-		cpumask_copy(pol->cpus, cpu_possible_mask);
-		break;
-	default:
-	break;
-	}
+	cpufreq_frequency_table_cpuinfo(pol, freq_table);
+	cpufreq_frequency_table_get_attr(freq_table, pol->cpu);
 #endif /* OVERCLOCK END */
 
 	return 0;

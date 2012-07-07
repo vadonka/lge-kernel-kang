@@ -48,19 +48,20 @@
 
 #ifdef CONFIG_OVERCLOCK
 #include <linux/kernel.h>
-
-#define MAX_OVERCLOCK (1504000)
+#include "../../../cpufreq.h"
+#define MAX_OVERCLOCK (CPUMAX)
+NvRmCpuShmoo fake_CpuShmoo; // Pointer to fake CpuShmoo values
 NvU32 ClockTableLength = 8; // Max voltage index in the voltage tab (size-1)
 
 NvU32 FakeShmooVoltages[] = {
-    775,
-    820,
-    850,
-    950,
-    1050,
-    1150,
-    1250,
-    1325
+    CPUVOLT1,
+    CPUVOLT2,
+    CPUVOLT3,
+    CPUVOLT4,
+    CPUVOLT5,
+    CPUVOLT6,
+    CPUVOLT7,
+    CPUVOLT8
 };
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
@@ -69,14 +70,14 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     32, // FakepScaledCpuLimits.MinKHz
     // Clock table
     {
-    216000,
-    456000,
-    760000,
-    912000,
-    1100000,
-    1216000,
-    1408000,
-    1504000
+    CPUSTEP1,
+    CPUSTEP2,
+    CPUSTEP3,
+    CPUSTEP4,
+    CPUSTEP5,
+    CPUSTEP6,
+    CPUSTEP7,
+    CPUSTEP8
     }
 };
 

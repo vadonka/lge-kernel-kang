@@ -1,0 +1,24 @@
+#ifndef OC_H
+#define OC_H
+
+#define CPUSTEP1 216000
+#define CPUSTEP2 324000
+#define CPUSTEP3 456000
+#define CPUSTEP4 608000
+#define CPUSTEP5 816000
+#define CPUSTEP6 1000000
+#define CPUSTEP7 1100000
+#define CPUSTEP8 1216000
+
+#define CPUVOLT1 775
+#define CPUVOLT2 800
+#define CPUVOLT3 825
+#define CPUVOLT4 850
+#define CPUVOLT5 900
+#define CPUVOLT6 975
+#define CPUVOLT7 1050
+#define CPUVOLT8 1150
+
+#define CPUMAX (CPUSTEP8)
+
+#endif
