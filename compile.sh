@@ -36,6 +36,12 @@ dsbatt="0"
 # set the OC flag to zero by default
 overclock="0"
 ## Procedure begin
+config_stock=`grep "CONFIG_OCLEVEL_STOCK" $kh/.config`
+config_loc=`grep "CONFIG_OCLEVEL_LOC" $kh/.config`
+config_hoc=`grep "CONFIG_OCLEVEL_HOC" $kh/.config`
+sed -i "s/$config_stock/CONFIG_OCLEVEL_STOCK=y/g" $kh/.config
+sed -i "s/$config_loc/# CONFIG_OCLEVEL_LOC is not set/g" $kh/.config
+sed -i "s/$config_hoc/# CONFIG_OCLEVEL_HOC is not set/g" $kh/.config
 while [ -n "$*" ]; do
 flag=$1
 value=$2
@@ -46,11 +52,19 @@ value=$2
 	sed -i "s/$config_ds_orig/$config_ds_enable/g" $kh/.config
 	dsbatt="1"
 	;;
-	"--oc")
-	config_oc_orig=`grep "CONFIG_OVERCLOCK" $kh/.config`
-	config_oc_enable=`echo "CONFIG_OVERCLOCK=y"`
-	sed -i "s/$config_oc_orig/$config_oc_enable/g" $kh/.config
+	"--loc")
+	config_loc_enable=`echo "CONFIG_OCLEVEL_LOC=y"`
+	sed -i "s/$config_loc/$config_loc_enable/g" $kh/.config
+	sed -i "s/$config_stock/# CONFIG_OCLEVEL_STOCK is not set/g" $kh/.config
+	sed -i "s/$config_hoc/# CONFIG_OCLEVEL_HOC is not set/g" $kh/.config
 	overclock="1"
+	;;
+	"--hoc")
+	config_hoc_enable=`echo "CONFIG_OCLEVEL_HOC=y"`
+	sed -i "s/$config_hoc/$config_hoc_enable/g" $kh/.config
+	sed -i "s/$config_stock/# CONFIG_OCLEVEL_STOCK is not set/g" $kh/.config
+	sed -i "s/$config_loc/# CONFIG_OCLEVEL_LOC is not set/g" $kh/.config
+	overclock="2"
 	;;
 	esac
 	shift
@@ -62,7 +76,9 @@ export starttime=`date +%s`
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
 
 if [ "$overclock" == "1" ]; then
-	export ocver="OC"
+	export ocver="LOC"
+elif [ "$overclock" == "2" ]; then
+	export ocver="HOC"
 else
 	export ocver="STOCK"
 fi
@@ -104,8 +120,15 @@ fi
 
 echo "Building time: $(($endtime-$starttime)) seconds"
 
-# Disable the extra options by the default
+# Change the extra options by the default
 config_ds_new=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 sed -i "s/$config_ds_new/# CONFIG_USE_DS_BATTERY_DRIVER is not set/g" $kh/.config
-config_oc_new=`grep "CONFIG_OVERCLOCK" $kh/.config`
-sed -i "s/$config_oc_new/# CONFIG_OVERCLOCK is not set/g" $kh/.config
+
+config_stock=`grep "CONFIG_OCLEVEL_STOCK" $kh/.config`
+sed -i "s/$config_stock/CONFIG_OCLEVEL_STOCK=y/g" $kh/.config
+
+config_loc=`grep "CONFIG_OCLEVEL_LOC" $kh/.config`
+sed -i "s/$config_loc/# CONFIG_OCLEVEL_LOC is not set/g" $kh/.config
+
+config_hoc=`grep "CONFIG_OCLEVEL_HOC" $kh/.config`
+sed -i "s/$config_hoc/# CONFIG_OCLEVEL_HOC is not set/g" $kh/.config

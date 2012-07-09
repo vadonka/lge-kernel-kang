@@ -19,9 +19,22 @@ config STAR_HIDDEN_RESET
 	default n
 
 config OVERCLOCK
-	bool "SysFS controlled OverClock (c) Benee"
+	bool "OverClock"
 	depends on MACH_STAR
-	default n
+	default y
+
+choice
+	prompt "OC Level"
+	config OCLEVEL_STOCK
+	bool "Max CPU Speed is 1000Mhz"
+	depends on OVERCLOCK
+	config OCLEVEL_LOC
+	bool "Max CPU Speed is 1216Mhz"
+	depends on OVERCLOCK
+	config OCLEVEL_HOC
+	bool "Max CPU Speed is 1408Mhz"
+	depends on OVERCLOCK
+endchoice
 
 menuconfig LPRINTK
         bool "LGE Debugging Message"
