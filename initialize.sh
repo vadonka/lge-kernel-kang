@@ -1,13 +1,13 @@
 #!/bin/sh
 
-export cc=/home/android/android/android-toolchain-eabi_4.y/4.7.1/bin/arm-eabi-
+export cc=/home/android/android/linaro-toolchain/4.7.2/bin/arm-eabi-
 
 if [ -e .config ]; then
 	rm -f .config
 fi
 
 if [ -z $1 ]; then
-	export DEFCONFIG="vadonka_loc_lite_defconfig"
+	export DEFCONFIG="vadonka_defconfig"
 else
 	export DEFCONFIG="$1"
 fi

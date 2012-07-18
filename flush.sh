@@ -1,8 +1,6 @@
 #!/bin/sh
 
-export cc=/home/android/android/android-toolchain-eabi_4.y/4.7.1/bin/arm-eabi-
-export USE_CCACHE=1
-export CCACHE_DIR=~/android/ccache
+export cc=/home/android/android/linaro-toolchain/4.7.2/bin/arm-eabi-
 
 if [ -e .config ]; then
     cp .config config.orig
