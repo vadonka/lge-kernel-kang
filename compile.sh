@@ -41,43 +41,28 @@ fi
 
 # Read current kernel version
 export cver=`grep "^CONFIG_LOCALVERSION" $kh/.config`
-export nooc=`grep -c "# CONFIG_FAKE_SHMOO" $kh/.config`
-export loc=`grep -c "^CONFIG_STOCK_VOLTAGE" $kh/.config`
+export stock=`grep -c "^CONFIG_OCLEVEL_STOCK" $kh/.config`
+export loc=`grep -c "^CONFIG_OCLEVEL_LOC" $kh/.config`
+export hoc=`grep -c "^CONFIG_OCLEVEL_HOC" $kh/.config`
 export dsbatt=`grep -c "^CONFIG_USE_DS_BATTERY" $kh/.config`
-export litebatt=`grep -c "^CONFIG_USE_LITE_BATTERY" $kh/.config`
-export otf=`grep -c "^CONFIG_SPICA_OTF" $kh/.config`
 
-if [ "$nooc" == "0" ]; then
-	if [ "$loc" == "1" ]; then
-		export ocver="LOC"
-	else
-		export ocver="HOC"
-	fi
-else
+if [ "$stock" == "1" ]; then
 	export ocver="STOCK"
 fi
 
+if [ "$loc" == "1" ]; then
+	export ocver="LOC"
+fi
+
+if [ "$hoc" == "1" ]; then
+	export ocver="HOC"
+fi
+
 if [ "$dsbatt" == "0" ]; then
-	if [ "$litebatt" == "0" ]; then
-		if [ "$otf" == "0" ]; then
-			export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'"'`
-			sed -i "s/$cver/$nver/g" $kh/.config
-		else
-			export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_OTF"'`
-			sed -i "s/$cver/$nver/g" $kh/.config
-		fi
-	elif [ "$otf" == "0" ]; then
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_LITE"'`
-		sed -i "s/$cver/$nver/g" $kh/.config
-	else
-		export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_LITE_OTF"'`
-		sed -i "s/$cver/$nver/g" $kh/.config
-	fi
-elif [ "$otf" == "0" ]; then
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-CM7-ETaNa_'$ocver'"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 else
-	export nver=`echo 'CONFIG_LOCALVERSION="-ETaNa_'$ocver'_DS_OTF"'`
+	export nver=`echo 'CONFIG_LOCALVERSION="-CM7-ETaNa_'$ocver'_DS"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
 fi
 

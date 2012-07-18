@@ -13,6 +13,19 @@ config FAKE_SHMOO
 	depends on MACH_STAR
 	default y
 
+choice
+       prompt "OC Level"
+       config OCLEVEL_STOCK
+       bool "Stock: 1015Mhz"
+       depends on FAKE_SHMOO
+       config OCLEVEL_LOC
+       bool "LOC: 1216Mhz"
+       depends on FAKE_SHMOO
+       config OCLEVEL_HOC
+       bool "HOC: 1408Mhz"
+       depends on FAKE_SHMOO
+endchoice
+
 config STAR_PMIC
 	bool "star pmic test"
 	depends on MACH_STAR

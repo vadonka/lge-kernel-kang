@@ -82,17 +82,18 @@ NvRmCpuShmoo fake_CpuShmoo;
 // Total of 7 available spots for P999
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
-#define MAX_CPU_OC_FREQ (1552000)
+#define MAX_CPU_OC_FREQ (CPUMAX)
+#include "../../../cpufreq.h"
 
 NvU32 FakeShmooVoltages[] = {
-    790,
-    830,
-    880,
-    930,
-    1020,
-    1055,
-    1155,
-    1255
+    CPUVOLT1,
+    CPUVOLT2,
+    CPUVOLT3,
+    CPUVOLT4,
+    CPUVOLT5,
+    CPUVOLT6,
+    CPUVOLT7,
+    CPUVOLT8,
 };
 
 NvRmScaledClkLimits FakepScaledCpuLimits = {
@@ -101,14 +102,14 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     32, // FakepScaledCpuLimits.MinKHz
     // Clock table
     {
-	216000,
-	503000,
-	816000,
-	1015000,
-	1100000,
-	1216000,
-	1408000,
-	1552000,
+    CPUSTEP1,
+    CPUSTEP2,
+    CPUSTEP3,
+    CPUSTEP4,
+    CPUSTEP5,
+    CPUSTEP6,
+    CPUSTEP7,
+    CPUSTEP8,
     }
 };
 
