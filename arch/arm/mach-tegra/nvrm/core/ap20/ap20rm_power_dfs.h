@@ -190,25 +190,8 @@ extern "C"
  */
 
 // Defines minimum scaling limit for each supported SDRAM type
-//#define NVRM_CPU1_OFF_PENDING_MS (600)
-//#define NVRM_CPU1_ON_PENDING_MS (2500)
-#ifdef CONFIG_OTF_CPU1
-#include <linux/spica.h>
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#else
-#define NVRM_CPU1_ON_MIN_KHZ (655000)
-#define NVRM_CPU1_OFF_MAX_KHZ (610000)
-#define NVRM_CPU1_ON_PENDING_MS (2500)
-#define NVRM_CPU1_OFF_PENDING_MS (600)
-#endif // OTF_CPU1
-
-#ifndef CONFIG_OTF_DDR2MIN
 #define NVRM_AP20_DDR2_MIN_KHZ (50000)
-#endif // OTF_DDR2MIN
-
-#ifndef CONFIG_OTF_LPDDR2
 #define NVRM_AP20_LPDDR2_MIN_KHZ (18000)
-#endif //_OTF_LPDDR2
 
 #define NVRM_DFS_PARAM_EMC_AP20_DDR2 \
     NvRmFreqMaximum, /* Maximum domain frequency set to h/w limit */ \
@@ -259,16 +242,11 @@ extern "C"
  * If thresholds are set to 0, the values are derived at run time from the
  * characterization data
  */
+#define NVRM_CPU1_ON_MIN_KHZ (0)
+#define NVRM_CPU1_OFF_MAX_KHZ (0)
 
-//#ifdef CONFIG_SPICA_OTF
-//#include <linux/spica.h>
-//#define NVRM_CPU1_ON_PENDING_MS (2500)
-//#else
-//#define NVRM_CPU1_ON_MIN_KHZ (655000)
-//#define NVRM_CPU1_OFF_MAX_KHZ (610000)
-//#define NVRM_CPU1_ON_PENDING_MS (2500)
-//#define NVRM_CPU1_OFF_PENDING_MS (600)
-//#endif // SPICA_OTF
+#define NVRM_CPU1_ON_PENDING_MS (1500)
+#define NVRM_CPU1_OFF_PENDING_MS (1000)
 
 /**
  * Defines AP20 Thermal policy parameters.
@@ -289,9 +267,9 @@ extern "C"
  * ODM should also set a critical threshold to trigger h/w shutdown
  * mechanism.
  */
-#define NVRM_DTT_DEGREES_HIGH           (95L)
-#define NVRM_DTT_DEGREES_LOW            (65L)
-#define NVRM_DTT_DEGREES_HYSTERESIS     (8L)
+#define NVRM_DTT_DEGREES_HIGH           (90L)
+#define NVRM_DTT_DEGREES_LOW            (60L)
+#define NVRM_DTT_DEGREES_HYSTERESIS     (5L)
 
 #define NVRM_DTT_VOLTAGE_THROTTLE_MV    (NvRmVoltsMaximum)
 #define NVRM_DTT_CPU_DELTA_KHZ          (100000UL)
@@ -302,14 +280,10 @@ extern "C"
 #define NVRM_DTT_POLL_MS_SLOW           (8000UL)
 
 /// Default low corners for core and dedicated CPU voltages
-#ifndef CONFIG_OTF_AP20LC
 #define NVRM_AP20_LOW_CORE_MV (950)
 #define NVRM_AP20_LOW_CPU_MV (750)
-#endif
 /// Core voltage in suspend
-#ifndef CONFIG_OTF_SCMV
 #define NVRM_AP20_SUSPEND_CORE_MV (1000)
-#endif
 
 /// Core and CPU voltage reliability requirements for some skus
 #define NVRM_AP20_RELIABILITY_CORE_MV(sku) \
