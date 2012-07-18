@@ -3522,6 +3522,7 @@ static int __init nvmap_core_init(void)
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte;
+	unsigned int i;
 
 	nvmap_context.compact_kbytes_count = 0;
 	nvmap_context.compact_attempts_count = 0;
@@ -3568,6 +3569,7 @@ static int __init nvmap_core_init(void)
 		snprintf(tmp, sizeof(tmp), "generic-%u", i);
 		nvmap_add_carveout_heap(nvmap_carveout_cmd_base[i],
 			nvmap_carveout_cmd_size[i], tmp, 0x1);
+	}
 
 	return 0;
 }
