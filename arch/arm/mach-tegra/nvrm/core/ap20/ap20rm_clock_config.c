@@ -42,6 +42,8 @@
 #include "ap15/ap15rm_private.h"
 #include "nvodm_query.h"
 
+extern unsigned int vdefreq;
+
 // Enable CPU/EMC ratio policy
 #define NVRM_LIMIT_CPU_EMC_RATIO (1)
 
@@ -1212,12 +1214,14 @@ Ap20SystemClockSourceFind(
      */
     if (DomainKHz > (NvRmPrivGetClockSourceFreq(NvRmClockSource_PllP0) >> 1))
     {
-	C1KHz = M1KHz = DomainKHz;
+        C1KHz = M1KHz = DomainKHz;
         c = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
+                vdefreq,
+                //NvRmPrivGetClockSourceFreq(NvRmClockSource_PllC0),
                 MaxKHz, &C1KHz);
         m = NvRmPrivFindFreqMinAbove(NvRmClockDivider_Fractional_2,
-                NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
+                vdefreq,
+                //NvRmPrivGetClockSourceFreq(NvRmClockSource_PllM0),
                 MaxKHz, &M1KHz);
 
         SourceKHz = NV_MAX(NV_MAX(C1KHz, M1KHz), P2KHz);

@@ -13,21 +13,6 @@ config FAKE_SHMOO
 	depends on MACH_STAR
 	default y
 
-config BOOST_PERIPHERALS
-	bool "Tegra2 Overclocking Peripheral Enable"
-	depends on MACH_STAR
-	default y
-
-config MAX_AVP_OC_FREQ
-	int "AVP Overclock Frequency"
-	default 240000
-        depends on FAKE_SHMOO && BOOST_PERIPHERALS
-
-config MAX_3D_OC_FREQ
-	int "3D Overclock Frequency"
-	default 340000
-        depends on FAKE_SHMOO && BOOST_PERIPHERALS
-
 config STAR_PMIC
 	bool "star pmic test"
 	depends on MACH_STAR

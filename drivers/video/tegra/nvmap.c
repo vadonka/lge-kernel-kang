@@ -3522,7 +3522,6 @@ static int __init nvmap_core_init(void)
 	pgd_t *pgd;
 	pmd_t *pmd;
 	pte_t *pte;
-	unsigned int i, sz = 0;
 
 	nvmap_context.compact_kbytes_count = 0;
 	nvmap_context.compact_attempts_count = 0;
@@ -3569,10 +3568,6 @@ static int __init nvmap_core_init(void)
 		snprintf(tmp, sizeof(tmp), "generic-%u", i);
 		nvmap_add_carveout_heap(nvmap_carveout_cmd_base[i],
 			nvmap_carveout_cmd_size[i], tmp, 0x1);
-		sz += nvmap_carveout_cmd_size[i];
-	}
-	pr_info("%s: total carveout size=%d\n", __func__, sz);
-	nvmap_carveout_size = sz;
 
 	return 0;
 }
@@ -3591,6 +3586,7 @@ static int __init nvmap_heap_arg(char *options)
 	if (nvmap_carveout_cmds < ARRAY_SIZE(nvmap_carveout_cmd_size)) {
 		nvmap_carveout_cmd_base[nvmap_carveout_cmds] = start;
 		nvmap_carveout_cmd_size[nvmap_carveout_cmds] = size;
+		nvmap_carveout_size += size;
 		nvmap_carveout_cmds++;
 	}
 	return 0;

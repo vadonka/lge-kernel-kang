@@ -31,3 +31,4 @@ obj-$(CONFIG_WL127X_RFKILL)	+= wl127x-rfkill.o
 obj-$(CONFIG_APANIC)		+= apanic.o
 obj-$(CONFIG_TSPDRV)		+= tspdrv/
 obj-$(CONFIG_BLX)		+= blx.o
+obj-y				+= otf/
