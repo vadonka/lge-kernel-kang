@@ -82,9 +82,7 @@ NvRmCpuShmoo fake_CpuShmoo;
 // Total of 7 available spots for P999
 NvU32 FakeShmooVmaxIndex = NVRM_VOLTAGE_STEPS - 1;
 
-#ifndef CONFIG_STOCK_VOLTAGE
-
-#define MAX_CPU_OC_FREQ (1408000)
+#define MAX_CPU_OC_FREQ (1552000)
 
 NvU32 FakeShmooVoltages[] = {
     790,
@@ -114,38 +112,6 @@ NvRmScaledClkLimits FakepScaledCpuLimits = {
     }
 };
 
-#else // STOCK_VOLTAGE_VALUES
-#define MAX_CPU_OC_FREQ (1216000)
-
-NvU32 FakeShmooVoltages[] = {
-    790,
-    830,
-    880,
-    900,
-    930,
-    1020,
-    1055,
-    1155
-};
-
-NvRmScaledClkLimits FakepScaledCpuLimits = {
-    101, // FakepScaledCpuLimits.HwDeviceId
-    0, // FakepScaledCpuLimits.SubClockId
-    32, // FakepScaledCpuLimits.MinKHz
-    // Clock table
-    {
-	216000,
-	503000,
-	816000,
-	1015000,
-	1100000,
-	1216000,
-	1408000,
-	1552000,
-    }
-};
-
-#endif // STOCK_VOLTAGE
 #endif // CONFIG_FAKE_SHMOO
 
 #define NvRmPrivGetStepMV(hRmDevice, step) \

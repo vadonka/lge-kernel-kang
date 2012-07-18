@@ -28,19 +28,6 @@ config MAX_3D_OC_FREQ
 	default 340000
         depends on FAKE_SHMOO && BOOST_PERIPHERALS
 
-config DDR2_SDRAM_FREQ
-	int "DDR2 SDRAM Frequency"
-	default 300000
-
-config GPU_MEM_CARVEOUT_SZ
-	int "GPU Memory Carveout Size"
-	default 128
-
-config STOCK_VOLTAGE
-	bool "Stock voltage values"
-	depends on MACH_STAR
-	default y
-
 config STAR_PMIC
 	bool "star pmic test"
 	depends on MACH_STAR
