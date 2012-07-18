@@ -302,7 +302,7 @@ static const struct attribute_group star_pmic_group = {
     .attrs = star_pmic_attributes,
 };
 
-//20101110, , Function for Warm-boot [START]
+#if 1
 static ssize_t star_reset_show(struct device *dev, 
             struct device_attribute *attr, char *buf)
 {
@@ -323,16 +323,13 @@ static ssize_t star_reset_show(struct device *dev,
     return ret;
 }
 
-
-extern int wdt_test;
-
 static ssize_t star_reset_store(struct device *dev, 
             struct device_attribute *attr, char *buf, size_t count)
 {
 
-    unsigned char tmpbuf[3] = { NULL, };
+    unsigned char tmpbuf[2];
     tmpbuf[0] = 'w'; // index for warm-boot
-    write_cmd_reserved_buffer(tmpbuf,3);
+    write_cmd_reserved_buffer(tmpbuf,1);
     emergency_restart();
     return count;
 }
@@ -603,6 +600,7 @@ static int powerkey_remove(struct platform_device *pdev)
     
     NvOdmGpioReleasePinHandle(s_powerkey.gpioHandle, s_powerkey.pinHandle);
     NvOdmGpioClose(s_powerkey.gpioHandle);
+
 #ifdef POWERKEY_DELAYED_WORKQUEUE
     wake_lock_destroy(&s_powerkey.wlock);
 #endif

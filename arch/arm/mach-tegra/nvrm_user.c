@@ -72,8 +72,6 @@ static long nvrm_unlocked_ioctl(struct file *file,
     unsigned int cmd, unsigned long arg);
 static int nvrm_mmap(struct file *file, struct vm_area_struct *vma);
 extern void reset_cpu(unsigned int cpu, unsigned int reset);
-extern void NvRmPrivLockSharedPll(void);
-extern void NvRmPrivUnlockSharedPll(void);
 extern void NvRmPrivDvsStop(void);
 extern void NvRmPrivDvsRun(void);
 

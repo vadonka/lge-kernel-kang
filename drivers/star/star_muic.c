@@ -51,16 +51,16 @@ enum
     DISABLE = 0x0, 
     ENABLE  = 0x1
 };
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
 #endif
+#ifndef CONFIG_MACH_STAR_TMUS
 typedef enum
 {
     USIF_UART,
     USIF_IPC,
     USIF_NONE,
 } USIF_MODE_TYPE;
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
+
 typedef struct NvOdmServicesGpioRec
 {
     NvRmDeviceHandle hRmDev;
@@ -76,11 +76,13 @@ typedef struct MuicDeviceRec
     NvOdmGpioPinHandle h_INT_N_MUIC;
     NvOdmGpioPinHandle h_AP20_UART_SW;
     NvOdmGpioPinHandle h_IFX_UART_SW;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-    NvOdmGpioPinHandle h_USIF1_SW;
 #if defined(CONFIG_MACH_STAR)
+#ifdef CONFIG_MACH_STAR_REV_F
+    NvOdmGpioPinHandle h_USIF1_SW;
+#endif
     NvOdmGpioPinHandle h_USB_VBUS_EN;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#else
+    NvOdmGpioPinHandle h_USIF1_SW;    
 #endif
     NvOdmServicesGpioIntrHandle hGpioInterrupt;
     NvU32 DeviceAddr;    
@@ -432,12 +434,12 @@ static struct delayed_work muic_wq;
 static max14526_device_type boot_muic_state = DEVICE_NONE;
 //static NvBool send_key_muic_hook_pressed = NV_FALSE;
 //DP3T_MODE_TYPE  DP3T_mode = DP3T_NC;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
-void USIF_ctrl(USIF_MODE_TYPE mode);
-//#endif
-void DP3T_Switch_ctrl(DP3T_MODE_TYPE mode);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
+static void USIF_ctrl(USIF_MODE_TYPE mode);
+#endif
+static void DP3T_Switch_ctrl(DP3T_MODE_TYPE mode);
+
 static DEFINE_MUTEX(muic_mutex);
 static int muic_set_state(const char *val, struct kernel_param *kp);
 static int muic_get_state(char *buffer, struct kernel_param *kp);
@@ -481,34 +483,36 @@ max14526_device_type read_device_type (void)
 EXPORT_SYMBOL(read_device_type);
 
 #if defined(CONFIG_MACH_STAR)
-int cp_Image_download(void)
+int cp_emergency_download(void)
 {
-    NvOdmServicesGpioHandle hCprom;
-    NvOdmGpioPinHandle hIFX_Reset;
-    int ret;
-    hCprom = NvOdmGpioOpen();
-    if (!hCprom)
+    NvOdmServicesGpioHandle hCpEmergencgy;
+    NvOdmGpioPinHandle hTestGpio01;
+    NvOdmGpioPinHandle hMDMRest;
+
+    hCpEmergencgy = NvOdmGpioOpen();
+    if (!hCpEmergencgy)
     {
         lprintk(D_MUIC, "%s: NvOdmGpioOpen Error \n", __func__);
         goto error_open_gpio_fail;
     }
 
-    hIFX_Reset = NvOdmGpioAcquirePinHandle(hCprom, 'v' - 'a', 0);
-    if (!hIFX_Reset)
+    hTestGpio01 = NvOdmGpioAcquirePinHandle(hCpEmergencgy, 'h' - 'a', 1);
+    if (!hTestGpio01)
     {
         lprintk(D_MUIC, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto error_open_gpio_pin_acquire_fail;
     }
 
-    NvOdmGpioConfig(hCprom, hIFX_Reset, NvOdmGpioPinMode_Output);
+    hMDMRest = NvOdmGpioAcquirePinHandle(hCpEmergencgy, 'v' - 'a', 0);
+    if (!hMDMRest)
+    {
+        lprintk(D_MUIC, "%s:Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
+	    goto error_open_gpio_pin_acquire_fail;
+	}
 
-
-#if defined(CONFIG_MACH_STAR_REV_D) || defined(CONFIG_MACH_STAR_REV_E) || defined(CONFIG_MACH_STAR_REV_F)
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, DISABLE);
-#endif
-
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW, 0x0);
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW, 0x0);
+    //change TEST_GPIO state from high to low (GPIO_PH1)
+    NvOdmGpioSetState(hCpEmergencgy, hTestGpio01, 0x0);
+    NvOdmGpioConfig(hCpEmergencgy, hTestGpio01, NvOdmGpioPinMode_Output);
 
     //reset Communication Processor (GPIO_PV0: high -> 1000ms -> low -> 3000ms -> high)
     NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x1);
@@ -519,88 +523,18 @@ int cp_Image_download(void)
     NvOdmGpioSetState(hCpEmergencgy, hMDMRest, 0x1);
 
     //change USB path from AP to CP
-    Set_MAX14526_CP_USB_Mode();
+    Set_MAX14526_CP_USB_Mode_PortSetting();
 
-    NvOdmOsSleepMS(5000);
-
-    //change TEST_GPIO state from low to high (GPIO_PV0)
-    NvOdmGpioSetState(hCprom, hIFX_Reset, 0);
-    NvOdmGpioGetState(hCprom, hIFX_Reset, &ret);
-    lprintk(D_MUIC, "%s: hIFX_Reset is %d \n", __func__, ret);
-    NvOdmOsSleepMS(10);
-    NvOdmGpioSetState(hCprom, hIFX_Reset, 1);
-    NvOdmGpioGetState(hCprom, hIFX_Reset, &ret);    
-    lprintk(D_MUIC, "%s: hIFX_Reset is %d \n", __func__, ret);
-
-
+	NvOdmGpioReleasePinHandle(hCpEmergencgy, hMDMRest);
+	NvOdmGpioReleasePinHandle(hCpEmergencgy, hTestGpio01);
     return 0;
 
 error_open_gpio_pin_acquire_fail:
-    NvOdmGpioClose(hCprom);
+    NvOdmGpioClose(hCpEmergencgy);
 error_open_gpio_fail:
     return -ENOSYS;
 }
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//101106, , FOTA update [START]
-int fota_ebl_download(void)
-{
-    static NvOdmServicesGpioHandle hCprom = NULL;
-    static NvOdmGpioPinHandle hIFX_Reset = NULL;
-    int ret;
-
-    if(hCprom == NULL)
-    {
-	hCprom = NvOdmGpioOpen();
-	if (!hCprom)
-	{
-	    lprintk(D_MUIC, "%s: NvOdmGpioOpen Error \n", __func__);
-	    goto error_open_gpio_fail;
-	}
-    }
-    if(hIFX_Reset == NULL)
-    {
-	hIFX_Reset = NvOdmGpioAcquirePinHandle(hCprom, 'v' - 'a', 0);
-	if (!hIFX_Reset)
-    {
-        lprintk(D_MUIC, "%s:Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
-        goto error_open_gpio_pin_acquire_fail;
-    }
-    }
-    NvOdmGpioConfig(hCprom, hIFX_Reset, NvOdmGpioPinMode_Output);
-
-#if defined(CONFIG_MACH_STAR_REV_D) || defined(CONFIG_MACH_STAR_REV_E)
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, DISABLE);
-#endif
-
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW, 0x0);
-    NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW, 0x0);
- 
-    //change USB path from AP to CP
-    //Set_MAX14526_CP_USB_Mode();
-
-    NvOdmOsSleepMS(5000);
-
-    //change TEST_GPIO state from low to high (GPIO_PV0)
-    NvOdmGpioSetState(hCprom, hIFX_Reset, 0);
-    NvOdmGpioGetState(hCprom, hIFX_Reset, &ret);
-    lprintk(D_MUIC, "%s: hIFX_Reset is %d \n", __func__, ret);
-    NvOdmOsSleepMS(10);
-    NvOdmGpioSetState(hCprom, hIFX_Reset, 1);
-    NvOdmGpioGetState(hCprom, hIFX_Reset, &ret);    
-    lprintk(D_MUIC, "%s: hIFX_Reset is %d \n", __func__, ret);
-
-    return 0;
-
-error_open_gpio_pin_acquire_fail:
-    NvOdmGpioClose(hCprom);
-error_open_gpio_fail:
-    return -ENOSYS;
-}
-//101106, , FOTA update [END]
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
-
-
 
 static ssize_t muic_proc_read (struct file *filp, char *buf, size_t len, loff_t *offset)
 {
@@ -635,12 +569,10 @@ static ssize_t muic_proc_write (struct file *filp, const char *buf, size_t len, 
     printk("-->>MUIC : %s %c 0x%x 0x%x \n",__func__, cmd, reg, val);
 
     switch(cmd){
-//#if defined(CONFIG_MACH_STAR)
+#if defined(CONFIG_MACH_STAR)
         case '3':
             /* CP_Image Download mode*/
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]			
-            cp_Image_download();
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]			
+            cp_emergency_download();
             break;
 
         case '4':
@@ -652,7 +584,7 @@ static ssize_t muic_proc_write (struct file *filp, const char *buf, size_t len, 
             /* CP USB VBUS ENABLE*/
             NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, ENABLE);
             break;
-//#endif
+#endif
             /* AP_UART mode*/
         case '6':
             Set_MAX14526_Develop_Mode_Detect();
@@ -670,27 +602,14 @@ static ssize_t muic_proc_write (struct file *filp, const char *buf, size_t len, 
 
             /* CP_USB mode*/
         case '9':
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-            Set_MAX14526_CP_USB_Mode();
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]			
+            Set_MAX14526_CP_USB_Mode_PortSetting();
             break;
 
         case 'w':
             err = MUIC_Reg_Write(&s_hMuicHandle, (NvU8)reg, (NvU8)val);
             lprintk(D_MUIC, "%s: MUIC Write Reg. = 0x%X, Value 0x%X\n", __func__,  reg, val);
             break;
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-		// 2011 0205 for at cmd [start]
-		case 'y':
-            NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, DISABLE);
-			printk("AP <==> CP uart connection\n");
-			break;
-		case 'x':
-            NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, ENABLE);
-			printk("AP =\\= CP uart disconnection\n");
-			break;
-		// 2011 0205 for at cmd [end]
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+
         default :
             printk(KERN_INFO "[MUIC] LGE: Star MUIC invalid command\n");
             printk(KERN_INFO "[MUIC] 6: AP_UART, 7: CP_UART, 8: AP_USB, 9: CP_USB\n");
@@ -825,11 +744,9 @@ int max14526_muic_init(TYPE_RESET reset)
     ret=  MUIC_Reg_Write(&s_hMuicHandle, CTRL2_REG, INT_EN_M);
    
     DP3T_Switch_ctrl(DP3T_NC);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]	
-//#if !defined(CONFIG_MACH_STAR)
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_IPC);
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
     //20100526, , Charging IC Reset [START]
 #if defined(CONFIG_STAR_BATTERY_CHARGER)
     if ( !reset )
@@ -939,8 +856,8 @@ static NvBool MUIC_Reg_Read (Muic_Device* hMuicHandle, NvU8 reg, NvU8 *val)
     return NV_FALSE;
 #endif
 }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
 void USIF_ctrl(USIF_MODE_TYPE mode)
 {
     if(mode == USIF_UART)
@@ -958,8 +875,8 @@ void USIF_ctrl(USIF_MODE_TYPE mode)
         lprintk(D_MUIC, "%s: USIF Switch is USIF_NONE\n", __func__);
     }
 }
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
+
 void DP3T_Switch_ctrl(DP3T_MODE_TYPE mode)
 {
     if(mode == DP3T_S1_AP) {
@@ -1072,11 +989,10 @@ void Set_MAX14526_Charger_Detect(NvU8 int_status_reg)
 void Set_MAX14526_Factory_Mode_Detect(void)
 {
     printk("-->> MUIC : %s\n",__func__);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_UART);
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
     DP3T_Switch_ctrl(DP3T_S2_CP_SW);
 
     // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -1098,11 +1014,10 @@ void Set_MAX14526_Factory_Mode_Detect(void)
 void Set_MAX14526_Develop_Mode_Detect(void)
 {
     printk("-->> MUIC : %s\n",__func__);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_IPC);
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
     DP3T_Switch_ctrl(DP3T_S1_AP);
 
     // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -1125,11 +1040,10 @@ void Set_MAX14526_Develop_Mode_Detect(void)
 void Set_MAX14526_Usb_Mode_Detect(void)
 {
     printk("-->> MUIC : %s \n",__func__);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_IPC); 
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
     DP3T_Switch_ctrl(DP3T_NC);
 
     // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -1151,11 +1065,10 @@ void Set_MAX14526_Usb_Mode_Detect(void)
 void Set_MAX14526_CP_USB_Mode(void){
 
     printk("-->> MUIC : %s \n",__func__);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-//#if !defined(CONFIG_MACH_STAR)
+
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_IPC);
-//#endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#endif
     DP3T_Switch_ctrl(DP3T_S3_CP_USB);
 
     // Enable 200K, Charger Pump, and ADC (0x01=0x13)
@@ -1178,7 +1091,7 @@ void Set_MAX14526_CP_USB_Mode_PortSetting(void){
 
     printk("-->> MUIC : %s \n",__func__);
 
-#if !defined(CONFIG_MACH_STAR)
+#if !defined(CONFIG_MACH_STAR_TMUS)
     USIF_ctrl(USIF_IPC);
 #endif
     DP3T_Switch_ctrl(DP3T_S3_CP_USB);
@@ -1294,15 +1207,7 @@ void Set_MAX14526_Device_None_Detect(NvU8 int_status_reg)
 
     // IDNO=0010? 56Kohm  :: CP USB MODE
     else if ((int_status_reg &IDNO_M )==IDNO_0010)  
-        // LGE_CHANGE [] 2010-12-31, 
-        // [LGE_AP20] temporarily use the LT 56K ohm UART as AP UART
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]		
-#if 1 /* original code */
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
         Set_MAX14526_CP_USB_Mode();
-#else
-        Set_MAX14526_Develop_Mode_Detect();
-#endif
 
 
     // IDNO=0010? 910Kohm  :: CP USB MODE
@@ -1486,7 +1391,7 @@ void MAX14526_Device_Detection(void)
 
 static void muic_wq_func(struct work_struct *muic_wq)
 {
-//    if (star_shutdown) return;
+    if (star_shutdown) return;
     MAX14526_Device_Detection();
 }
 
@@ -1508,9 +1413,11 @@ static int __init muic_probe(struct platform_device *pdev)
 #else	
     NvU32 I2cInstance = 0;
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+#if defined(CONFIG_MACH_STAR_REV_D) || defined(CONFIG_MACH_STAR_REV_E) || defined(CONFIG_MACH_STAR_REV_F)
     NvU32 pin[5], port[5];
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+#else
+    NvU32 pin[4], port[4];
+#endif
     const NvOdmPeripheralConnectivity *pConnectivity = NULL;
 
     printk(KERN_INFO "muic_probe\n");
@@ -1564,15 +1471,22 @@ static int __init muic_probe(struct platform_device *pdev)
         lprintk(D_MUIC, "%s:Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto err_open_gpio_pin_acquire_fail;
     }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+
+#if defined(CONFIG_MACH_STAR_TMUS)
+    s_hMuicHandle.h_USB_VBUS_EN = NvOdmGpioAcquirePinHandle(s_hMuicHandle.hGpio, port[3], pin[3]);
+    if (!s_hMuicHandle.h_USB_VBUS_EN)
+    {
+        lprintk(D_MUIC, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
+        goto err_open_gpio_pin_acquire_fail;
+    }
+#else
     s_hMuicHandle.h_USIF1_SW = NvOdmGpioAcquirePinHandle(s_hMuicHandle.hGpio, port[3], pin[3]);
     if (!s_hMuicHandle.h_USIF1_SW)
     {
         lprintk(D_MUIC, "%s: Couldn't NvOdmGpioAcquirePinHandle  pin \n", __func__);
         goto err_open_gpio_pin_acquire_fail;
     }
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]	
-#if defined(CONFIG_MACH_STAR)
+
     s_hMuicHandle.h_USB_VBUS_EN = NvOdmGpioAcquirePinHandle(s_hMuicHandle.hGpio, port[4], pin[4]);
     if (!s_hMuicHandle.h_USB_VBUS_EN)
     {
@@ -1584,12 +1498,15 @@ static int __init muic_probe(struct platform_device *pdev)
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC, NvOdmGpioPinMode_InputData);
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW, NvOdmGpioPinMode_Output);
     NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW, NvOdmGpioPinMode_Output);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, NvOdmGpioPinMode_Output);
 #if defined(CONFIG_MACH_STAR)
-    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, NvOdmGpioPinMode_Output);
+#ifdef CONFIG_MACH_STAR_REV_F
+    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, NvOdmGpioPinMode_Output);
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [End]
+    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN, NvOdmGpioPinMode_Output);
+#else
+    NvOdmGpioConfig(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW, NvOdmGpioPinMode_Output);
+#endif
+
 
 #ifdef _MUIC_GPIO_I2C_
     ret_val = MUIC_Gpio_i2c_init(&s_hMuicHandle);
@@ -1665,12 +1582,15 @@ err_open_i2c_handle:
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+#ifdef CONFIG_MACH_STAR_REV_F
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
+#endif
 #if defined(CONFIG_MACH_STAR)
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
+#else
+    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+
 err_open_gpio_pin_acquire_fail:
     NvOdmGpioClose(s_hMuicHandle.hGpio);
 err_open_gpio_fail:
@@ -1686,12 +1606,15 @@ static int muic_remove(struct platform_device *pdev)
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_INT_N_MUIC);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_AP20_UART_SW);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
-    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
 #if defined(CONFIG_MACH_STAR)
-    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
+#ifdef CONFIG_MACH_STAR_REV_F
+    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
 #endif
-//LGSI_BSP_CHANGE Merge from Froyo [][lgp990_gb]18042011 [Start]
+    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
+#else
+    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
+#endif
+
     NvOdmGpioClose(s_hMuicHandle.hGpio);
 #ifndef _MUIC_GPIO_I2C_
     NvOdmI2cClose(s_hMuicHandle.hOdmI2c);
@@ -1710,7 +1633,7 @@ static int muic_remove(struct platform_device *pdev)
 static void muic_shutdown(struct platform_device *pdev)
 {
     printk("muic_shutdown\n");
-//    star_shutdown = 1;
+    star_shutdown = 1;
 #if 0	
 	if (&muic_wq)
 	{
@@ -1743,6 +1666,9 @@ static void muic_shutdown(struct platform_device *pdev)
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW , 0x0);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_IFX_UART_SW);
 #if defined(CONFIG_MACH_STAR)
+#ifdef CONFIG_MACH_STAR_REV_F
+    NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USIF1_SW);
+#endif
     NvOdmGpioSetState(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN , 0x0);
     NvOdmGpioReleasePinHandle(s_hMuicHandle.hGpio, s_hMuicHandle.h_USB_VBUS_EN);
 #else
