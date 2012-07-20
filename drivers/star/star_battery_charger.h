@@ -114,7 +114,7 @@ static NvBool determine_capacity_for_demo(void);
 4113 , \
 4127 , \
 4145 , \
-4190 }
+4150 }
 
 #define BAT_CV_TA_TABLE { 3358, \
 3411, \
@@ -216,7 +216,7 @@ static NvBool determine_capacity_for_demo(void);
 4144, \
 4146, \
 4148, \
-4190 }
+4150 }
 
 #define BAT_CV_USB_TABLE { 3350, \
 3405, \
@@ -318,6 +318,6 @@ static NvBool determine_capacity_for_demo(void);
 4141, \
 4144, \
 4147, \
-4190 }
+4150 }
 
 #endif // INCLUDED_STAR_LGE_BATTERY_HEADER
