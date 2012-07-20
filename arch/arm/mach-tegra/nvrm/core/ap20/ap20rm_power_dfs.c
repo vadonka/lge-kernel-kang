@@ -30,6 +30,8 @@
  *
  */
 
+#include <linux/module.h>
+#include <linux/init.h>
 #include "ap20rm_power_dfs.h"
 #include "nvassert.h"
 #include "nvrm_drf.h"
@@ -415,7 +417,11 @@ NvRmPrivAp20GetPmRequest(
 {
     // Assume initial slave CPU1 On request
     static NvRmPmRequest s_LastPmRequest = (NvRmPmRequest_CpuOnFlag | 0x1);
-    static NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
+
+    //static NvRmFreqKHz s_Cpu1OnMinKHz = 0, s_Cpu1OffMaxKHz = 0;
+    NvRmFreqKHz s_Cpu1OnMinKHz = 0;
+    NvRmFreqKHz s_Cpu1OffMaxKHz = 0;
+
     static NvU32 s_Cpu1OnPendingCnt = 0, s_Cpu1OffPendingCnt = 0;
 
     NvU32 t;
@@ -434,12 +440,15 @@ NvRmPrivAp20GetPmRequest(
     {
         NvRmFreqKHz MaxKHz =
             NvRmPrivGetSocClockLimits(NvRmModuleID_Cpu)->MaxKHz;
-
+/*
         s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ ?
                          NVRM_CPU1_ON_MIN_KHZ : (MaxKHz / 3);
         s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ ?
-                          NVRM_CPU1_OFF_MAX_KHZ : (2 * MaxKHz / 3);
+                          NVRM_CPU1_OFF_MAX_KHZ : (5 * MaxKHz / 8);
         NV_ASSERT(s_Cpu1OnMinKHz < s_Cpu1OffMaxKHz);
+*/
+        s_Cpu1OnMinKHz = NVRM_CPU1_ON_MIN_KHZ;
+        s_Cpu1OffMaxKHz = NVRM_CPU1_OFF_MAX_KHZ;
     }
 
     // Timestamp
