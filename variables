@@ -1,0 +1,10 @@
+# GCC version: 4.5.4, 4.6.4, 4.7.2
+
+export gccversion=4.7.2
+export gccstring=arm-eabi
+
+#export cc=arm-linux-gnueabi-
+export cc=/home/android/android/linaro-toolchain/$gccversion/bin/$gccstring-
+
+# Defconfig
+export defconfig=vadonka_defconfig

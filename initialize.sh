@@ -1,19 +1,17 @@
-#!/bin/sh
+#!/bin/bash
 
-export cc=/home/android/android/linaro-toolchain/4.7.2/bin/arm-eabi-
+source variables
 
 if [ -e .config ]; then
 	rm -f .config
 fi
 
-if [ -z $1 ]; then
-	export DEFCONFIG="vadonka_defconfig"
-else
-	export DEFCONFIG="$1"
+if [ ! -z $1 ]; then
+	export defconfig="$1"
 fi
 
 make clean
 make CROSS_COMPILE=$cc clean
 make ARCH=arm CROSS_COMPILE=$cc clean
 make ARCH=arm CROSS_COMPILE=$cc mrproper
-make ARCH=arm CROSS_COMPILE=$cc $DEFCONFIG
+make ARCH=arm CROSS_COMPILE=$cc $defconfig
