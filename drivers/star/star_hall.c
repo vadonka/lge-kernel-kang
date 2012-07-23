@@ -17,7 +17,7 @@
 
 #include <linux/switch.h>
 
-#define HALL_DEBUG 1
+#define HALL_DEBUG 0
 
 typedef struct star_hall_device_data
 {
