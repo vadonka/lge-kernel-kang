@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.32.59
-# Fri Jul 20 08:58:01 2012
+# Mon Jul 23 12:19:24 2012
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -58,8 +58,6 @@ CONFIG_SWAP=y
 CONFIG_TREE_RCU=y
 # CONFIG_TREE_PREEMPT_RCU is not set
 # CONFIG_TINY_RCU is not set
-# CONFIG_JRCU is not set
-# CONFIG_PREEMPT_COUNT_CPU is not set
 # CONFIG_RCU_TRACE is not set
 CONFIG_RCU_FANOUT=32
 # CONFIG_RCU_FANOUT_EXACT is not set
