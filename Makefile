@@ -336,12 +336,12 @@ GCCVERSION47	:= $(shell expr 4.7.0 \<= `$(CC) -dumpversion`)
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 
-MODFLAGS	= -DMODULE -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
+MODFLAGS	= -DMODULE -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=softfp -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
-AFLAGS_KERNEL	= -O2 -mtune=cortex-a9 -march=armv7-a -mthumb-interwork -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
+CFLAGS_KERNEL	= -O3 -funroll-loops -falign-loops=8 -fgcse-sm -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-tree-vectorize -mcpu=cortex-a8 -marm
+AFLAGS_KERNEL	= -O3 -funroll-loops -falign-loops=8 -fgcse-sm -mfloat-abi=softfp -mfpu=vfpv3-d16 -fno-tree-vectorize -mcpu=cortex-a8 -marm
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
 # 20100705, ,[LGE_START]
@@ -359,11 +359,10 @@ LINUXINCLUDE    := -Iinclude \
 KBUILD_CPPFLAGS := -D__KERNEL__
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
-		   -fno-strict-aliasing -finline-functions -finline-limit=300 -fomit-frame-pointer -fgcse-after-reload -fno-common \
+		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks -mtune=cortex-a9 -march=armv7-a -mfloat-abi=hard -mfpu=vfpv3-d16 -ftree-vectorize -ffast-math -freciprocal-math -funsafe-math-optimizations -fsingle-precision-constant
-
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
@@ -541,7 +540,7 @@ all: vmlinux
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
 else
-KBUILD_CFLAGS	+= -O2
+KBUILD_CFLAGS	+= -O3
 endif
 
 include $(srctree)/arch/$(SRCARCH)/Makefile

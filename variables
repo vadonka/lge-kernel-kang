@@ -1,6 +1,6 @@
 # GCC version: 4.5.4, 4.6.4, 4.7.2
 
-export gccversion=4.7.2
+export gccversion=4.5.4
 export gccstring=arm-eabi
 
 #export cc=arm-linux-gnueabi-
