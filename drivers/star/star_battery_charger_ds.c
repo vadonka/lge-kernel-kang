@@ -2530,22 +2530,9 @@ static void star_battery_id_poll_work(struct work_struct *work)
 /* Used to avoid waking userspace with the same values */
 static int prev_reported_val = 0;
 
-// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
-
-static int power_supply_change_notification_disabled = 0;
-
-// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
-
 static void star_battery_data_onetime_update(NvU8 update_option)
 {
 	//LDB("[bat_poll] OneTime_Update(%d)", update_option);
-
-// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
-	if (power_supply_change_notification_disabled) {
-		printk(KERN_INFO "[CHARGER] power supply change notification disabled\n");
-		return;
-	}
-// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
 
 	switch ((OneTime_Update)update_option)
 	{
@@ -2593,24 +2580,6 @@ static void star_battery_data_onetime_update(NvU8 update_option)
 	}
 	star_debug_show_battery_status();
 }
-	
-// LGE_CHANGE_S  2011-09-02, disable power notification during FOTA upgrade
-
-void disable_power_supply_change_notification(void)
-{
-	printk(KERN_INFO "[CHARGER] disabling power supply change notification\n");
-	power_supply_change_notification_disabled = 1;
-}
-EXPORT_SYMBOL(disable_power_supply_change_notification);
-
-void enable_power_supply_change_notification(void)
-{
-	printk(KERN_INFO "[CHARGER] enabling power supply change notification\n");
-	power_supply_change_notification_disabled = 0;
-}
-EXPORT_SYMBOL(enable_power_supply_change_notification);
-
-// LGE_CHANGE_E  2011-09-02, disable power notification during FOTA upgrade
 	
 /*
 static void star_battery_charge_done_work(struct work_struct *work)
