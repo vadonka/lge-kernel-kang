@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.32.59
-# Mon Jul 23 13:31:46 2012
+# Wed Jul 25 22:42:25 2012
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -283,6 +283,8 @@ CONFIG_OCLEVEL_STOCK=y
 #
 # LGE STAR device driver
 #
+CONFIG_USE_STOCK_BATTERY_DRIVER=y
+# CONFIG_USE_LITE_BATTERY_DRIVER is not set
 # CONFIG_USE_DS_BATTERY_DRIVER is not set
 CONFIG_STAR_BATTERY_CHARGER=y
 CONFIG_STAR_BATTERY_UNIT_UV=y

@@ -10,12 +10,17 @@ obj-y				+= lg_panel_gpio_set.o
 #20101119, , Camera Flash fast init
 obj-y				+= tegra_user_gpio.o
 #20101119, , Camera Flash fast init
-#obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
+
+ifeq ($(CONFIG_USE_STOCK_BATTERY_DRIVER),y)
+obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
+endif
+
+ifeq ($(CONFIG_USE_LITE_BATTERY_DRIVER),y)
+obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger_lite.o
+endif
 
 ifeq ($(CONFIG_USE_DS_BATTERY_DRIVER),y)
 obj-$(CONFIG_STAR_BATTERY_CHARGER) += star_battery_charger_ds.o
-else
-obj-$(CONFIG_STAR_BATTERY_CHARGER)	+= star_battery_charger.o
 endif
 
 obj-$(CONFIG_STAR_MUIC_TI)	+= star_muic_TI.o

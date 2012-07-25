@@ -31,14 +31,18 @@ if [ ! -f .config ]; then
 fi
 
 ## Check compiler options
-# set DS battery driver flag to zero by default
+# set DS/LITE battery driver flag to zero by default
 dsbatt="0"
+litebatt="0"
 # set the OC flag to zero by default
 overclock="0"
 ## Procedure begin
 config_stock=`grep "CONFIG_OCLEVEL_STOCK" $kh/.config`
 config_loc=`grep "CONFIG_OCLEVEL_LOC" $kh/.config`
 config_hoc=`grep "CONFIG_OCLEVEL_HOC" $kh/.config`
+config_stock_orig=`grep "CONFIG_USE_STOCK_BATTERY_DRIVER" $kh/.config`
+config_ds_orig=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
+config_lite_orig=`grep "CONFIG_USE_LITE_BATTERY_DRIVER" $kh/.config`
 sed -i "s/$config_stock/CONFIG_OCLEVEL_STOCK=y/g" $kh/.config
 sed -i "s/$config_loc/# CONFIG_OCLEVEL_LOC is not set/g" $kh/.config
 sed -i "s/$config_hoc/# CONFIG_OCLEVEL_HOC is not set/g" $kh/.config
@@ -47,10 +51,18 @@ flag=$1
 value=$2
 	case "$flag" in
 	"--ds")
-	config_ds_orig=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 	config_ds_enable=`echo "CONFIG_USE_DS_BATTERY_DRIVER=y"`
 	sed -i "s/$config_ds_orig/$config_ds_enable/g" $kh/.config
+	sed -i "s/$config_stock_orig/# CONFIG_USE_STOCK_BATTERY_DRIVER is not set/g" $kh/.config
+	sed -i "s/$config_lite_orig/# CONFIG_USE_LITE_BATTERY_DRIVER is not set/g" $kh/.config
 	dsbatt="1"
+	;;
+	"--lite")
+	config_lite_enable=`echo "CONFIG_USE_LITE_BATTERY_DRIVER=y"`
+	sed -i "s/$config_lite_orig/$config_lite_enable/g" $kh/.config
+	sed -i "s/$config_stock_orig/# CONFIG_USE_STOCK_BATTERY_DRIVER is not set/g" $kh/.config
+	sed -i "s/$config_ds_orig/# CONFIG_USE_DS_BATTERY_DRIVER is not set/g" $kh/.config
+	litebatt="1"
 	;;
 	"--loc")
 	config_loc_enable=`echo "CONFIG_OCLEVEL_LOC=y"`
@@ -83,12 +95,18 @@ else
 	export ocver="STOCK"
 fi
 
-if [ "$dsbatt" == "0" ]; then
+if [ "$dsbatt" == "0" -a "$litebatt" == "0" ]; then
 	export nver=`echo 'CONFIG_LOCALVERSION="-CM7-ETaNa_'$ocver'"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
-else
+elif [ "$dsbatt" == "1" -a "$litebatt" == "0" ]; then
 	export nver=`echo 'CONFIG_LOCALVERSION="-CM7-ETaNa_'$ocver'_DS"'`
 	sed -i "s/$cver/$nver/g" $kh/.config
+elif [ "$dsbatt" == "0" -a "$litebatt" == "1" ]; then
+	export nver=`echo 'CONFIG_LOCALVERSION="-CM7-ETaNa_'$ocver'_LITE"'`
+	sed -i "s/$cver/$nver/g" $kh/.config
+else
+	echo "You cant use the DS and the LITE battery driver at the same time!"
+	exit 0
 fi
 
 make clean -j $mthd > /dev/null 2>&1
@@ -121,8 +139,14 @@ fi
 echo "Building time: $(($endtime-$starttime)) seconds"
 
 # Change the extra options by the default
+config_stock_new=`grep "CONFIG_USE_STOCK_BATTERY_DRIVER" $kh/.config`
+sed -i "s/$config_stock_new/CONFIG_USE_STOCK_BATTERY_DRIVER=y/g" $kh/.config
+
 config_ds_new=`grep "CONFIG_USE_DS_BATTERY_DRIVER" $kh/.config`
 sed -i "s/$config_ds_new/# CONFIG_USE_DS_BATTERY_DRIVER is not set/g" $kh/.config
+
+config_lite_new=`grep "CONFIG_USE_LITE_BATTERY_DRIVER" $kh/.config`
+sed -i "s/$config_lite_new/# CONFIG_USE_LITE_BATTERY_DRIVER is not set/g" $kh/.config
 
 config_stock=`grep "CONFIG_OCLEVEL_STOCK" $kh/.config`
 sed -i "s/$config_stock/CONFIG_OCLEVEL_STOCK=y/g" $kh/.config
